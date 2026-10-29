@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   ScrollView,
   Animated,
   TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -24,6 +26,7 @@ import {
   convertMealCost,
 } from '../../services/preferencesStore';
 import { MamaDialogueService } from '../../services/mamaDialogueService';
+import { apiClient } from '../../services/api/client';
 
 import {
   SavedMealCard,
@@ -52,7 +55,7 @@ interface BaseMealEntry {
   vibe?: string;
 }
 
-const MASTER_SAVED_CATALOG: BaseMealEntry[] = [
+const DEFAULT_SAVED_MEALS: BaseMealEntry[] = [
   {
     id: 'save-1',
     title: 'Lemon chickpea & couscous bowl',
@@ -161,6 +164,73 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
     { label: string; onPress: () => void } | undefined
   >(undefined);
 
+  // Real data from API with default fallback
+  const [apiMeals, setApiMeals] = useState<BaseMealEntry[]>(DEFAULT_SAVED_MEALS);
+  const [loadingMeals, setLoadingMeals] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadMeals = async () => {
+      try {
+        const meals = await apiClient<any[]>('/api/saved-meals');
+        if (!isMounted) return;
+        if (Array.isArray(meals) && meals.length > 0) {
+          const mapped: BaseMealEntry[] = meals.map((m) => ({
+            id: m.id || m.mealId,
+            title: m.title,
+            type: m.type === 'eating_out' ? 'eating_out' : 'home',
+            cookTimeOrDistance: m.cookTime || '15 MIN',
+            baseCostUsd: typeof m.costNumeric === 'number' ? m.costNumeric : 2.5,
+            imageUrl: m.imageUrl || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+            targetScreen: m.type === 'eating_out' ? 'EatingOutMealDetails' : 'AtHomeMealDetails',
+            steps: m.recipeSteps,
+            ingredients: Array.isArray(m.ingredients) ? m.ingredients : undefined,
+            spotName: m.spotName,
+            vibe: m.vibe,
+          }));
+          setApiMeals(mapped);
+        }
+      } catch {
+        // Fallback remains active
+      } finally {
+        if (isMounted) setLoadingMeals(false);
+      }
+    };
+
+    loadMeals();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const meals = await apiClient<any[]>('/api/saved-meals');
+      if (Array.isArray(meals) && meals.length > 0) {
+        const mapped: BaseMealEntry[] = meals.map((m) => ({
+          id: m.id || m.mealId,
+          title: m.title,
+          type: m.type === 'eating_out' ? 'eating_out' : 'home',
+          cookTimeOrDistance: m.cookTime || '15 MIN',
+          baseCostUsd: typeof m.costNumeric === 'number' ? m.costNumeric : 2.5,
+          imageUrl: m.imageUrl || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+          targetScreen: m.type === 'eating_out' ? 'EatingOutMealDetails' : 'AtHomeMealDetails',
+          steps: m.recipeSteps,
+          ingredients: Array.isArray(m.ingredients) ? m.ingredients : undefined,
+          spotName: m.spotName,
+          vibe: m.vibe,
+        }));
+        setApiMeals(mapped);
+      }
+    } catch {
+      // Keep active list on network error
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
   // Mama voice interaction
   const [mamaQuote, setMamaQuote] = useState<string>(
     "Look at your collection! Every meal here was chosen by you."
@@ -217,13 +287,13 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
     setMamaPose(interactive.pose);
   };
 
-  // Build active saved meals list localized with currency
+  // Build active saved meals list from API (real data) with currency localization
   const activeEntries = useMemo(() => {
-    return MASTER_SAVED_CATALOG.filter((item) => !removedIds.includes(item.id));
-  }, [removedIds]);
+    return apiMeals.filter((item) => !removedIds.includes(item.id));
+  }, [apiMeals, removedIds]);
 
   const savedMeals: SavedMealItem[] = useMemo(() => {
-    return activeEntries.map((item) => {
+    return activeEntries.map((item: BaseMealEntry) => {
       const localCost = convertMealCost(
         item.baseCostUsd,
         kitchenPass.currencyCode,
@@ -241,7 +311,7 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
         typeLabel,
         cost: `${localCost} est. / ${item.type === 'home' ? 'serving' : 'meal'}`,
         imageUrl: item.imageUrl,
-        targetScreen: item.targetScreen,
+        targetScreen: item.targetScreen || (item.type === 'home' ? 'AtHomeMealDetails' : 'EatingOutMealDetails'),
       };
     });
   }, [activeEntries, kitchenPass.currencyCode, kitchenPass.currencySymbol]);
@@ -349,6 +419,14 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       >
         <Animated.View
           style={[
@@ -404,6 +482,12 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
             onSelectFilter={setSelectedFilter}
             counts={counts}
           />
+
+          {loadingMeals && (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          )}
 
           {/* Section 4: Saved Meals Grid */}
           <View style={styles.savedMealsContainer}>
@@ -649,6 +733,11 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     width: '100%',
+  },
+  loadingWrap: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

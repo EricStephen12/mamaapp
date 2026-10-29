@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../db/prisma.js';
+import { authRateLimiter } from '../middleware/rateLimiter.js';
 
 export const authRouter = Router();
 
@@ -12,11 +13,15 @@ function makeToken(userId: string) {
   return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
 }
 
+function sanitizeEmail(email: string) {
+  return email.toLowerCase().trim();
+}
+
 /**
  * POST /api/auth/signup
  * Body: { name, email, password }
  */
-authRouter.post('/signup', async (req: Request, res: Response) => {
+authRouter.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
   try {
     const { name, email, password } = req.body as {
       name?: string;
@@ -28,12 +33,17 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Email and password are required.' });
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: 'Please enter a valid email address.' });
+      return;
+    }
     if (password.length < 6) {
       res.status(400).json({ error: 'Password must be at least 6 characters.' });
       return;
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const cleanEmail = sanitizeEmail(email);
+    const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (existing) {
       res.status(409).json({ error: 'An account with this email already exists.' });
       return;
@@ -42,8 +52,8 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
       data: {
-        email,
-        name: name || "Mama's Child",
+        email: cleanEmail,
+        name: (name?.trim()) || "Mama's Child",
         passwordHash,
       },
     });
@@ -63,7 +73,7 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
  * POST /api/auth/signin
  * Body: { email, password }
  */
-authRouter.post('/signin', async (req: Request, res: Response) => {
+authRouter.post('/signin', authRateLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body as { email?: string; password?: string };
 
@@ -72,14 +82,15 @@ authRouter.post('/signin', async (req: Request, res: Response) => {
       return;
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !user.passwordHash) {
-      res.status(401).json({ error: 'Invalid email or password.' });
-      return;
-    }
+    const cleanEmail = sanitizeEmail(email);
+    const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
+    // Constant-time compare to prevent timing attacks
+    const dummyHash = '$2a$12$invalidhashfortimingprotection00000000000000000000000000';
+    const hashToCheck = user?.passwordHash || dummyHash;
+    const valid = await bcrypt.compare(password, hashToCheck);
+
+    if (!user || !user.passwordHash || !valid) {
       res.status(401).json({ error: 'Invalid email or password.' });
       return;
     }
@@ -97,9 +108,8 @@ authRouter.post('/signin', async (req: Request, res: Response) => {
 
 /**
  * POST /api/auth/forgot-password
- * Body: { email }
+ * Always returns the same response to prevent email enumeration
  */
-authRouter.post('/forgot-password', async (req: Request, res: Response) => {
-  // Always respond the same way to prevent email enumeration
+authRouter.post('/forgot-password', authRateLimiter, async (_req: Request, res: Response) => {
   res.json({ message: 'If that email exists, a reset link has been sent.' });
 });
