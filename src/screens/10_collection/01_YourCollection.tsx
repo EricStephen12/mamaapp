@@ -165,9 +165,9 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
     { label: string; onPress: () => void } | undefined
   >(undefined);
 
-  // Real data from API with default fallback
-  const [apiMeals, setApiMeals] = useState<BaseMealEntry[]>(DEFAULT_SAVED_MEALS);
-  const [loadingMeals, setLoadingMeals] = useState(false);
+  // Real data from Neon DB — starts empty, populated from API
+  const [apiMeals, setApiMeals] = useState<BaseMealEntry[]>([]);
+  const [loadingMeals, setLoadingMeals] = useState(true); // true until first API response
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -176,24 +176,26 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
       try {
         const meals = await apiClient<any[]>('/api/saved-meals');
         if (!isMounted) return;
-        if (Array.isArray(meals) && meals.length > 0) {
-          const mapped: BaseMealEntry[] = meals.map((m) => ({
-            id: m.id || m.mealId,
-            title: m.title,
-            type: m.type === 'eating_out' ? 'eating_out' : 'home',
-            cookTimeOrDistance: m.cookTime || '15 MIN',
-            baseCostUsd: typeof m.costNumeric === 'number' ? m.costNumeric : 2.5,
-            imageUrl: m.imageUrl || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
-            targetScreen: m.type === 'eating_out' ? 'EatingOutMealDetails' : 'AtHomeMealDetails',
-            steps: m.recipeSteps,
-            ingredients: Array.isArray(m.ingredients) ? m.ingredients : undefined,
-            spotName: m.spotName,
-            vibe: m.vibe,
-          }));
-          setApiMeals(mapped);
-        }
+        // Always replace with real DB data — even if empty, never show mocks
+        const mapped: BaseMealEntry[] = Array.isArray(meals)
+          ? meals.map((m) => ({
+              id: m.id || m.mealId,
+              title: m.title,
+              type: m.type === 'eating_out' ? 'eating_out' : 'home',
+              cookTimeOrDistance: m.cookTime || '15 MIN',
+              baseCostUsd: typeof m.costNumeric === 'number' ? m.costNumeric : 2.5,
+              imageUrl: m.imageUrl || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+              targetScreen: m.type === 'eating_out' ? 'EatingOutMealDetails' : 'AtHomeMealDetails',
+              steps: m.recipeSteps,
+              ingredients: Array.isArray(m.ingredients) ? m.ingredients : undefined,
+              spotName: m.spotName,
+              vibe: m.vibe,
+            }))
+          : [];
+        setApiMeals(mapped);
       } catch {
-        // Fallback remains active
+        // Network failure — leave empty, user can pull-to-refresh
+        setApiMeals([]);
       } finally {
         if (isMounted) setLoadingMeals(false);
       }
@@ -481,50 +483,56 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
             </View>
           </TouchableOpacity>
 
-          {/* Section 3: Collection Filter Chips */}
-          <CollectionFilters
-            selectedFilter={selectedFilter}
-            onSelectFilter={setSelectedFilter}
-            counts={counts}
-          />
-
-          {loadingMeals && (
+          {loadingMeals ? (
             <View style={styles.loadingWrap}>
               <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={{ marginTop: 8, fontSize: 12, color: colors.text.muted }}>Loading your collection…</Text>
             </View>
-          )}
-
-          {/* Section 4: Saved Meals Grid */}
-          <View style={styles.savedMealsContainer}>
-            {mealPairs.length > 0 ? (
-              mealPairs.map((pair, rowIndex) => (
-                <View key={`row-${rowIndex}`} style={styles.mealRow}>
-                  {pair.map((meal) => (
-                    <SavedMealCard
-                      key={meal.id}
-                      item={meal}
-                      onPress={() => handleOpenMeal(meal)}
-                      onUnsave={() => handleUnsave(meal)}
-                    />
-                  ))}
-                  {/* Empty placeholder spacer if uneven row */}
-                  {pair.length === 1 && <View style={styles.spacer} />}
-                </View>
-              ))
-            ) : (
-              <View style={styles.emptyState}>
-                <Ionicons
-                  name="bookmark-outline"
-                  size={36}
-                  color={colors.text.secondary}
+          ) : (
+            <>
+              {/* Section 3: Collection Filter Chips — only show when we have meals */}
+              {apiMeals.length > 0 && (
+                <CollectionFilters
+                  selectedFilter={selectedFilter}
+                  onSelectFilter={setSelectedFilter}
+                  counts={counts}
                 />
-                <Text style={styles.emptyTitle}>No meals saved in this filter</Text>
-                <Text style={styles.emptySubtitle}>
-                  Explore meals and tap save to keep them handy for later.
-                </Text>
+              )}
+
+              {/* Section 4: Saved Meals Grid */}
+              <View style={styles.savedMealsContainer}>
+                {mealPairs.length > 0 ? (
+                  mealPairs.map((pair, rowIndex) => (
+                    <View key={`row-${rowIndex}`} style={styles.mealRow}>
+                      {pair.map((meal) => (
+                        <SavedMealCard
+                          key={meal.id}
+                          item={meal}
+                          onPress={() => handleOpenMeal(meal)}
+                          onUnsave={() => handleUnsave(meal)}
+                        />
+                      ))}
+                      {pair.length === 1 && <View style={styles.spacer} />}
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="bookmark-outline" size={36} color={colors.text.secondary} />
+                    <Text style={styles.emptyTitle}>
+                      {apiMeals.length === 0
+                        ? 'Your collection is empty'
+                        : 'No meals in this filter'}
+                    </Text>
+                    <Text style={styles.emptySubtitle}>
+                      {apiMeals.length === 0
+                        ? 'Swipe right on meals in Discover or Daily Edit to save them here.'
+                        : 'Try switching filters to see your other saved meals.'}
+                    </Text>
+                  </View>
+                )}
               </View>
-            )}
-          </View>
+            </>
+          )}
 
           <View style={styles.divider} />
 

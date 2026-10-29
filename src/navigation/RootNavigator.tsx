@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from './types';
+import { preferencesStore } from '../services/preferencesStore';
+import { userPreferencesService } from '../services/api/userPreferencesService';
 
 // Group 01 - Onboarding
 import { MamaKitchenSplash } from '../screens/01_onboarding';
@@ -38,6 +40,14 @@ import { YourCollection } from '../screens/10_collection';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator: React.FC = () => {
+  // Hydrate preferencesStore from Neon DB on every app launch
+  useEffect(() => {
+    userPreferencesService.fetchFromDb().then((saved) => {
+      if (saved) {
+        preferencesStore.updateKitchenPass(saved as any);
+      }
+    }).catch(() => {});
+  }, []);
   return (
     <Stack.Navigator
       initialRouteName="MamaKitchenSplash"

@@ -32,6 +32,7 @@ import { MamaDialogueService } from '../../services/mamaDialogueService';
 import { AiMamaService } from '../../services/aiMamaService';
 import { decisionsService } from '../../services/api/decisionsService';
 import { savedMealsService } from '../../services/api/savedMealsService';
+import { apiClient } from '../../services/api/client';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
@@ -70,6 +71,10 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
     preferencesStore.getKitchenPass()
   );
 
+  // API-generated deck from backend (null = loading/fallback to local catalog)
+  const [apiDeck, setApiDeck] = useState<DeckItem[] | null>(null);
+  const [apiDeckLoading, setApiDeckLoading] = useState(true);
+
   // Current automatic time of day
   const [mealPeriod] = useState<MealPeriod>(getAutoMealPeriod);
   const [deckIndex, setDeckIndex] = useState(0);
@@ -98,6 +103,77 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
       Animated.timing(contentFade, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.timing(contentY, { toValue: 0, duration: 400, useNativeDriver: true }),
     ]).start();
+
+    // Load AI-curated daily edit from backend
+    const loadApiDeck = async () => {
+      try {
+        const pass = preferencesStore.getKitchenPass();
+        const result = await apiClient<any>('/api/daily-edit', {
+          method: 'POST',
+          body: JSON.stringify({
+            pantryItems: ['Eggs', 'Tomatoes', 'Rice', 'Onions'],
+            kitchenPass: {
+              cuisineAnchor: pass.cuisineAnchor,
+              timeLimitMinutes: pass.timeLimitMinutes,
+              stapleBase: pass.stapleBase,
+              spiceLevel: pass.spiceLevel,
+              dietaryRestrictions: pass.dietaryRestrictions,
+            },
+          }),
+        });
+
+        if (result && result.makeNowMeal) {
+          const costNum = typeof result.makeNowMeal.estimatedCost === 'number'
+            ? result.makeNowMeal.estimatedCost
+            : 2.2;
+          const survNum = typeof result.survivalMode?.estimatedCost === 'number'
+            ? result.survivalMode.estimatedCost
+            : 1.4;
+
+          const deck: DeckItem[] = [];
+
+          deck.push({
+            id: 'api-make-now',
+            type: 'standard',
+            title: result.makeNowMeal.title || 'Tonight\'s Curated Meal',
+            subtitle: result.makeNowMeal.subtitle || result.makeNowMeal.mamaVoiceLine || '',
+            cookTimeOrDistance: `${result.makeNowMeal.cookTimeMinutes || 15} min`,
+            gearOrVibe: result.makeNowMeal.gear || '1 Pan',
+            estCost: convertMealCost(costNum, pass.currencyCode, pass.currencySymbol),
+            costNumeric: costNum,
+            image: result.makeNowMeal.imageUrl ||
+              'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80',
+            mamaQuote: result.makeNowMeal.mamaVoiceLine || 'Hot skillet comfort tonight!',
+            mamaPose: 'cooking',
+          });
+
+          if (result.survivalMode) {
+            deck.push({
+              id: 'api-survival',
+              type: 'survival',
+              title: result.survivalMode.title || 'Survival Mode',
+              subtitle: result.survivalMode.subtitle || result.survivalMode.mamaVoiceLine || '',
+              cookTimeOrDistance: `${result.survivalMode.cookTimeMinutes || 5} min`,
+              gearOrVibe: result.survivalMode.gear || '1 Pan',
+              estCost: convertMealCost(survNum, pass.currencyCode, pass.currencySymbol),
+              costNumeric: survNum,
+              image: result.survivalMode.imageUrl ||
+                'https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=800&q=80',
+              mamaQuote: result.survivalMode.mamaVoiceLine || 'Zero effort. In 4 minutes you\'re eating.',
+              mamaPose: 'writing',
+            });
+          }
+
+          setApiDeck(deck);
+        }
+      } catch {
+        // API unavailable — local catalog fallback is already in place
+      } finally {
+        setApiDeckLoading(false);
+      }
+    };
+
+    loadApiDeck();
     return unsub;
   }, []);
 
@@ -120,8 +196,13 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
     }
   }, [mealPeriod]);
 
-  // Build the 3-Card Deck with localized currency prices
+  // Build 3-card deck: prefer live API deck, fall back to local catalog
   const mealDeck: DeckItem[] = useMemo(() => {
+    // Use API deck when loaded and available
+    if (!apiDeckLoading && apiDeck && apiDeck.length > 0) {
+      return apiDeck;
+    }
+    // Local catalog fallback
     const periodCatalog = MEAL_CATALOG[mealPeriod];
     const cuisineGroup =
       periodCatalog[kitchenPass.cuisineAnchor] || periodCatalog.default;
