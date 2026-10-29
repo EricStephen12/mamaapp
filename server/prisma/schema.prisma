@@ -1,0 +1,85 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              String         @id @default(cuid())
+  email           String?        @unique
+  name            String         @default("Mama's Child")
+  country         String         @default("NG")
+  countryName     String         @default("Nigeria")
+  currencyCode    String         @default("NGN")
+  currencySymbol  String         @default("₦")
+  weeklyBudget    Float          @default(35000)
+  spentThisWeek   Float          @default(0)
+  remainingDays   Int            @default(7)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  tasteProfile    TasteProfile?
+  pantryItems     PantryItem[]
+  savedMeals      SavedMeal[]
+  mealDecisions   MealDecision[]
+}
+
+model TasteProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cuisineAnchor      String   @default("african_caribbean")
+  cuisineLabel       String   @default("African & Caribbean Comfort")
+  cookingGear        String   @default("one_pan")
+  cookingGearLabel   String   @default("1 Pan & Burner (Zero Extra Dishes)")
+  timeLimitMinutes   Int      @default(12)
+  timeLimitLabel     String   @default("Under 15 mins (Tired Evening)")
+  stapleBase         String   @default("rice")
+  stapleBaseLabel    String   @default("Rice & Grains")
+  spiceLevel         String   @default("warm")
+  dietaryRestrictions String[] @default([])
+  updatedAt          DateTime @updatedAt
+}
+
+model PantryItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  category  String   @default("pantryStaples") // freshProduce, proteins, pantryStaples, seasonings
+  quantity  String?
+  addedAt   DateTime @default(now())
+}
+
+model SavedMeal {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealId      String
+  title       String
+  type        String   @default("home") // home, eating_out
+  cookTime    String   @default("15 min")
+  cost        String
+  costNumeric Float    @default(2.5)
+  imageUrl    String
+  recipeSteps String[] @default([])
+  ingredients Json?
+  spotName    String?
+  vibe        String?
+  savedAt     DateTime @default(now())
+}
+
+model MealDecision {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dishId     String
+  dishTitle  String
+  action     String   // cooked, passed
+  mealCost   Float    @default(0)
+  passReason String?
+  createdAt  DateTime @default(now())
+}
