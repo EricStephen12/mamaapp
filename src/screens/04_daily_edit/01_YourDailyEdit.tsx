@@ -30,6 +30,8 @@ import { CountryCurrencyModal } from '../../components/common/CountryCurrencyMod
 import { MEAL_CATALOG, MealPeriod } from './mealCatalog';
 import { MamaDialogueService } from '../../services/mamaDialogueService';
 import { AiMamaService } from '../../services/aiMamaService';
+import { decisionsService } from '../../services/api/decisionsService';
+import { savedMealsService } from '../../services/api/savedMealsService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
@@ -245,6 +247,17 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
         preferencesStore.recordMealDecision(activeItem.id, 'cooked', activeItem.costNumeric);
         const cookSpeech = MamaDialogueService.getCookReaction();
         setToastMessage(`Mama: "${cookSpeech}"`);
+        // Log to DB + save to collection
+        decisionsService.log(activeItem.id, activeItem.title, 'cooked', activeItem.costNumeric);
+        savedMealsService.saveMeal({
+          mealId: activeItem.id,
+          title: activeItem.title,
+          type: activeItem.type === 'takeout' ? 'eating_out' : 'home',
+          cookTime: activeItem.cookTimeOrDistance,
+          cost: activeItem.estCost,
+          costNumeric: activeItem.costNumeric,
+          imageUrl: activeItem.image,
+        });
 
         if (activeItem.type === 'takeout') {
           navigation.navigate('EatingOutMealDetails', {
@@ -275,6 +288,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
         const passSpeech = MamaDialogueService.getPassReaction();
         setMamaQuote(passSpeech);
         setMamaPose('writing');
+        decisionsService.log(activeItem.id, activeItem.title, 'passed', activeItem.costNumeric);
 
         setDeckIndex((prev) => (prev + 1) % mealDeck.length);
         position.setValue({ x: 0, y: 0 });

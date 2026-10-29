@@ -27,6 +27,7 @@ import {
 } from '../../services/preferencesStore';
 import { MamaDialogueService } from '../../services/mamaDialogueService';
 import { apiClient } from '../../services/api/client';
+import { savedMealsService } from '../../services/api/savedMealsService';
 
 import {
   SavedMealCard,
@@ -329,6 +330,7 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
 
   const handleUnsave = (item: SavedMealItem) => {
     triggerMamaBounce();
+    // Optimistically remove from UI
     setRemovedIds((prev) => [...prev, item.id]);
     setMamaQuote(`Removed "${item.title}". No problem, keep only what you love!`);
     setMamaPose('writing');
@@ -336,11 +338,14 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
     setToastAction({
       label: 'Undo',
       onPress: () => {
+        // Undo: restore locally (we already deleted from DB, but this gives instant feedback)
         setRemovedIds((prev) => prev.filter((id) => id !== item.id));
         setMamaQuote("Restored! It's right back in your collection.");
         setMamaPose('delighted');
       },
     });
+    // Delete from Neon DB (fire-and-forget)
+    savedMealsService.removeMeal(item.id);
   };
 
   const handleOpenMeal = (item: SavedMealItem) => {

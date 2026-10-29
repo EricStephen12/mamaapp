@@ -24,6 +24,8 @@ import { MamaDialogueService } from '../../services/mamaDialogueService';
 import { MamaCharacter, MamaPose } from '../../components/common/MamaCharacter';
 import { CountryCurrencyModal } from '../../components/common/CountryCurrencyModal';
 import { AiMamaService } from '../../services/aiMamaService';
+import { savedMealsService } from '../../services/api/savedMealsService';
+import { decisionsService } from '../../services/api/decisionsService';
 
 import { MealFilters, MealFilterType } from './components/MealFilters';
 import {
@@ -431,6 +433,8 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
 
     if (activeRawItem) {
       preferencesStore.recordMealDecision(activeRawItem.id, 'passed', activeRawItem.baseCostUsd);
+      // Log to Neon DB (fire-and-forget)
+      decisionsService.log(activeRawItem.id, activeRawItem.title, 'passed', activeRawItem.baseCostUsd);
     }
 
     transitionCard('left');
@@ -444,6 +448,22 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
 
     if (activeRawItem) {
       preferencesStore.recordMealDecision(activeRawItem.id, 'cooked', activeRawItem.baseCostUsd);
+      // Log decision to Neon DB
+      decisionsService.log(activeRawItem.id, activeRawItem.title, 'cooked', activeRawItem.baseCostUsd);
+      // Save meal to Neon DB so it appears in the Collection screen
+      savedMealsService.saveMeal({
+        mealId: activeRawItem.id,
+        title: activeRawItem.title,
+        type: activeRawItem.categoryType,
+        cookTime: activeRawItem.cookTimeOrDistance,
+        cost: currentItem?.cost || '$2.50',
+        costNumeric: activeRawItem.baseCostUsd,
+        imageUrl: activeRawItem.imageUrl,
+        recipeSteps: activeRawItem.steps,
+        ingredients: activeRawItem.ingredients,
+        spotName: activeRawItem.spotName,
+        vibe: activeRawItem.reason,
+      });
     }
 
     transitionCard('right', () => {

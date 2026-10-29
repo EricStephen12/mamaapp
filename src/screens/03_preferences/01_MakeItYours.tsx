@@ -19,6 +19,7 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { MamaCharacter, MamaPose } from '../../components/common/MamaCharacter';
 import { preferencesStore } from '../../services/preferencesStore';
+import { userPreferencesService } from '../../services/api/userPreferencesService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MakeItYours'>;
 
@@ -455,6 +456,9 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
       spiceLabel: rawSpice?.startsWith('custom:') ? rawSpice.replace('custom:', '') : (spiceChoice?.label || 'A Warm Kick'),
       hasCompletedOnboarding: true,
     });
+
+    // Sync Kitchen Pass to Neon DB (fire-and-forget — never blocks UI)
+    userPreferencesService.syncToDb(preferencesStore.getKitchenPass());
 
     setIsCompleted(true);
   };

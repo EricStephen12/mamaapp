@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { MamaCharacter } from '../../components/common/MamaCharacter';
+import { pantryService } from '../../services/api/pantryService';
+import { DetectedItemData } from './components/DetectedIngredientItem';
 
 import { DetectedIngredientsSection } from './components/DetectedIngredientsSection';
 import { UncertaintyGuidanceCard } from './components/UncertaintyGuidanceCard';
@@ -27,6 +29,9 @@ export const ConfirmYourPantry: React.FC<Props> = ({ navigation }) => {
   const contentFade = useRef(new Animated.Value(0)).current;
   const contentY = useRef(new Animated.Value(20)).current;
   const confirmScale = useRef(new Animated.Value(1)).current;
+
+  // Track confirmed pantry items so we can sync to Neon DB on confirm
+  const [confirmedItems, setConfirmedItems] = useState<DetectedItemData[]>([]);
 
   useEffect(() => {
     Animated.parallel([
@@ -44,6 +49,12 @@ export const ConfirmYourPantry: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleConfirm = () => {
+    // Sync confirmed pantry items to Neon DB (fire-and-forget — never blocks navigation)
+    if (confirmedItems.length > 0) {
+      pantryService.syncItems(
+        confirmedItems.map((i) => ({ name: i.name, quantity: i.quantity, category: 'pantryStaples' }))
+      );
+    }
     navigation.navigate('AlreadyInYourKitchen');
   };
 
@@ -101,6 +112,7 @@ export const ConfirmYourPantry: React.FC<Props> = ({ navigation }) => {
           {/* Section 2: Detected Ingredients List */}
           <DetectedIngredientsSection
             onRetakePhoto={() => navigation.navigate('WhatsInYourKitchen')}
+            onItemsChange={(items) => setConfirmedItems(items)}
           />
 
           {/* Section 3: Uncertainty Guidance Card */}

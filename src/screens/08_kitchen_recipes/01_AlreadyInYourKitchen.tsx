@@ -28,6 +28,8 @@ import { preferencesStore, convertMealCost } from '../../services/preferencesSto
 import { CountryCurrencyModal } from '../../components/common/CountryCurrencyModal';
 import { MamaDialogueService } from '../../services/mamaDialogueService';
 import { AiMamaService } from '../../services/aiMamaService';
+import { savedMealsService } from '../../services/api/savedMealsService';
+import { decisionsService } from '../../services/api/decisionsService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AlreadyInYourKitchen'>;
 
@@ -152,19 +154,34 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation }) => {
 
           {/* Section 4: Make Now Meal Card */}
           <MakeNowMealCard
-            onChooseToCook={() =>
+            onChooseToCook={() => {
+              const mealId = 'pantry-make-now-1';
+              const mealTitle = 'Tomato & Sizzled Egg Rice Bowl';
+              const costNumeric = 1.8;
+              // Log decision + save to collection (fire-and-forget)
+              decisionsService.log(mealId, mealTitle, 'cooked', costNumeric);
+              savedMealsService.saveMeal({
+                mealId,
+                title: mealTitle,
+                type: 'home',
+                cookTime: '8 min',
+                cost: convertMealCost(costNumeric, pass.currencyCode, pass.currencySymbol),
+                costNumeric,
+                imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
+              });
+              preferencesStore.recordMealDecision(mealId, 'cooked', costNumeric);
               navigation.navigate('AtHomeMealDetails', {
-                id: 'pantry-make-now-1',
-                title: 'Tomato & Sizzled Egg Rice Bowl',
+                id: mealId,
+                title: mealTitle,
                 subtitle: 'Velvety eggs folded into sweet tomatoes over steamed rice.',
                 cookTime: '8 min',
                 gear: '1 Pan',
-                estCost: convertMealCost(1.8, pass.currencyCode, pass.currencySymbol),
-                costNumeric: 1.8,
+                estCost: convertMealCost(costNumeric, pass.currencyCode, pass.currencySymbol),
+                costNumeric,
                 image:
                   'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
-              })
-            }
+              });
+            }}
           />
 
           {/* Section 5: Optional Pass Reasons */}
