@@ -81,8 +81,8 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
     setLoading(true);
 
     try {
-      // Backend client will be plugged in here cleanly
-      console.log('Signing in with:', email);
+      const { authService } = await import('../../services/api/authService');
+      await authService.signIn({ email: email.trim(), password });
       navigation.replace('MakeItYours');
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to sign in. Please try again.');
@@ -91,6 +91,7 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
       setLoading(false);
     }
   };
+
 
   const handleForgotPassword = () => {
     // Navigation to forgot password when added

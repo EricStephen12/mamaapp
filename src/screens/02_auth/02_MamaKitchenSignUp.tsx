@@ -92,8 +92,8 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
     setLoading(true);
 
     try {
-      // Backend client will be connected here
-      console.log('Creating account for:', { name, email });
+      const { authService } = await import('../../services/api/authService');
+      await authService.signUp({ name: name.trim(), email: email.trim(), password });
       navigation.replace('MakeItYours');
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to create account. Please try again.');
