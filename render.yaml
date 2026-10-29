@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: mama-backend
+    runtime: node
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false   # set manually in Render dashboard
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CF_ACCOUNT_ID
+        sync: false
+      - key: CF_API_TOKEN
+        sync: false
