@@ -1,19 +1,30 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
 
-const PITA_IMAGE_URL =
-  'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&w=400&q=80';
-
 interface EatingOutRecommendationCardProps {
+  dishName?: string;
+  spotName?: string;
+  costText?: string;
+  image?: string;
+  eyebrow?: string;
   onExploreEatingOut?: () => void;
 }
 
 export const EatingOutRecommendationCard: React.FC<
   EatingOutRecommendationCardProps
-> = ({ onExploreEatingOut }) => {
+> = ({
+  dishName,
+  spotName,
+  costText,
+  image,
+  eyebrow = 'Eating out nearby',
+  onExploreEatingOut,
+}) => {
+  if (!dishName && !spotName) return null;
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Or let someone else cook</Text>
@@ -23,18 +34,26 @@ export const EatingOutRecommendationCard: React.FC<
         activeOpacity={0.8}
         onPress={onExploreEatingOut}
       >
-        <Image
-          source={{ uri: PITA_IMAGE_URL }}
-          style={styles.thumbnail}
-          resizeMode="cover"
-        />
+        {image ? (
+          <Image
+            source={{ uri: image }}
+            style={styles.thumbnail}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.placeholderThumbnail}>
+            <Ionicons name="restaurant-outline" size={24} color={colors.primary} />
+          </View>
+        )}
 
         <View style={styles.mealInfo}>
-          <Text style={styles.eyebrow}>Eating out nearby</Text>
-          <Text style={styles.mealName}>Roasted veg & hummus pita</Text>
+          <Text style={styles.eyebrow}>{eyebrow}</Text>
+          <Text style={styles.mealName}>{dishName || spotName}</Text>
 
           <View style={styles.costRow}>
-            <Text style={styles.costText}>$8.50 est. · Olive & Grain</Text>
+            <Text style={styles.costText}>
+              {costText ? `${costText}${spotName && dishName ? ` · ${spotName}` : ''}` : spotName || ''}
+            </Text>
             <Feather name="arrow-up-right" size={16} color={colors.primary} />
           </View>
         </View>
@@ -58,41 +77,51 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    width: '100%',
+    padding: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(235, 230, 222, 0.7)',
   },
   thumbnail: {
-    width: 92,
-    height: 100,
-    borderRadius: 14,
-    backgroundColor: colors.border,
+    width: 68,
+    height: 68,
+    borderRadius: 12,
+    backgroundColor: colors.sand,
+  },
+  placeholderThumbnail: {
+    width: 68,
+    height: 68,
+    borderRadius: 12,
+    backgroundColor: colors.sand,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mealInfo: {
     flex: 1,
-    gap: 6,
-    alignItems: 'flex-start',
+    gap: 3,
   },
   eyebrow: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: '500',
+    fontSize: 10,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
     color: colors.primary,
+    fontWeight: '700',
   },
   mealName: {
-    fontSize: 22,
-    lineHeight: 25,
-    fontFamily: typography.fontFamily.serif,
+    fontSize: 16,
+    fontWeight: '700',
     color: colors.text.primary,
-    fontWeight: '500',
+    fontFamily: typography.fontFamily.serif,
   },
   costRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
+    paddingRight: 4,
   },
   costText: {
-    fontSize: 12,
-    color: colors.text.primary,
+    fontSize: 13,
+    color: colors.text.muted,
   },
 });
-
-export default EatingOutRecommendationCard;

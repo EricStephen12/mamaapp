@@ -48,9 +48,11 @@ interface DeckItem {
   gearOrVibe: string;
   estCost: string;
   costNumeric: number;
-  image: string;
+  image?: string;
   mamaQuote: string;
   mamaPose: MamaPose;
+  steps?: string[];
+  ingredients?: { name: string; amount: string }[];
 }
 
 function getAutoMealPeriod(): MealPeriod {
@@ -105,15 +107,33 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
     ]).start();
 
     // Load AI-curated daily edit from backend
+    // Load AI-curated daily edit from backend (One Winner + One Alternative)
     const loadApiDeck = async () => {
       try {
         const pass = preferencesStore.getKitchenPass();
+        const { pantryService } = await import('../../services/api/pantryService');
+        const { SUPPORTED_COUNTRIES } = await import('../../services/preferencesStore');
+
+        // Fetch real stored pantry items from Neon DB
+        const dbItems = await pantryService.fetchAll();
+        const pantryList = dbItems.length > 0
+          ? dbItems.map((item) => item.name)
+          : (SUPPORTED_COUNTRIES.find((c) => c.id === pass.country)?.popularStaples || ['Eggs', 'Tomatoes', 'Rice', 'Onions']);
+
         const result = await apiClient<any>('/api/daily-edit', {
           method: 'POST',
           body: JSON.stringify({
-            pantryItems: ['Eggs', 'Tomatoes', 'Rice', 'Onions'],
+            pantryItems: pantryList,
             kitchenPass: {
+              country: pass.country,
+              countryName: pass.countryName,
+              currencyCode: pass.currencyCode,
+              currencySymbol: pass.currencySymbol,
+              weeklyBudget: pass.weeklyBudget,
               cuisineAnchor: pass.cuisineAnchor,
+              cuisineLabel: pass.cuisineLabel,
+              cookingGear: pass.cookingGear,
+              cookingGearLabel: pass.cookingGearLabel,
               timeLimitMinutes: pass.timeLimitMinutes,
               stapleBase: pass.stapleBase,
               spiceLevel: pass.spiceLevel,
@@ -123,51 +143,63 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
         });
 
         if (result && result.makeNowMeal) {
-          const costNum = typeof result.makeNowMeal.estimatedCost === 'number'
-            ? result.makeNowMeal.estimatedCost
+          const makeNow = result.makeNowMeal;
+          const costNum = typeof makeNow.estimatedCost === 'number'
+            ? makeNow.estimatedCost
             : 2.2;
-          const survNum = typeof result.survivalMode?.estimatedCost === 'number'
-            ? result.survivalMode.estimatedCost
-            : 1.4;
 
           const deck: DeckItem[] = [];
 
+          // 1. The One Winner (Primary Curated Choice)
           deck.push({
-            id: 'api-make-now',
+            id: makeNow.id || 'api-make-now',
             type: 'standard',
-            title: result.makeNowMeal.title || 'Tonight\'s Curated Meal',
-            subtitle: result.makeNowMeal.subtitle || result.makeNowMeal.mamaVoiceLine || '',
-            cookTimeOrDistance: `${result.makeNowMeal.cookTimeMinutes || 15} min`,
-            gearOrVibe: result.makeNowMeal.gear || '1 Pan',
+            title: makeNow.title || "Tonight's Curated Meal",
+            subtitle: makeNow.subtitle || makeNow.description || '',
+            cookTimeOrDistance: `${makeNow.timeMinutes || makeNow.cookTimeMinutes || 10} min`,
+            gearOrVibe: makeNow.tags?.[0] || pass.cookingGearLabel || '1 Pan',
             estCost: convertMealCost(costNum, pass.currencyCode, pass.currencySymbol),
             costNumeric: costNum,
-            image: result.makeNowMeal.imageUrl ||
-              'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80',
-            mamaQuote: result.makeNowMeal.mamaVoiceLine || 'Hot skillet comfort tonight!',
+            image: makeNow.imageUrl || undefined,
+            mamaQuote: makeNow.description || result.curatorNote || 'Hot skillet comfort tonight!',
             mamaPose: 'cooking',
+            steps: Array.isArray(makeNow.steps) ? makeNow.steps : undefined,
+            ingredients: Array.isArray(makeNow.ingredients) ? makeNow.ingredients : undefined,
           });
 
-          if (result.survivalMode) {
+          // 2. The One Alternative (Backup Choice)
+          if (result.tonightDinner) {
+            const dinner = result.tonightDinner;
+            const dinnerCostNum = typeof dinner.estimatedCost === 'number'
+              ? dinner.estimatedCost
+              : 2.5;
+
             deck.push({
-              id: 'api-survival',
-              type: 'survival',
-              title: result.survivalMode.title || 'Survival Mode',
-              subtitle: result.survivalMode.subtitle || result.survivalMode.mamaVoiceLine || '',
-              cookTimeOrDistance: `${result.survivalMode.cookTimeMinutes || 5} min`,
-              gearOrVibe: result.survivalMode.gear || '1 Pan',
-              estCost: convertMealCost(survNum, pass.currencyCode, pass.currencySymbol),
-              costNumeric: survNum,
-              image: result.survivalMode.imageUrl ||
-                'https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=800&q=80',
-              mamaQuote: result.survivalMode.mamaVoiceLine || 'Zero effort. In 4 minutes you\'re eating.',
-              mamaPose: 'writing',
+              id: dinner.id || 'api-dinner',
+              type: 'standard',
+              title: dinner.title || "Tonight's Alternative",
+              subtitle: dinner.subtitle || dinner.description || '',
+              cookTimeOrDistance: `${dinner.timeMinutes || dinner.cookTimeMinutes || 14} min`,
+              gearOrVibe: dinner.tags?.[0] || '1 Pan Skillet',
+              estCost: convertMealCost(dinnerCostNum, pass.currencyCode, pass.currencySymbol),
+              costNumeric: dinnerCostNum,
+              image: dinner.imageUrl || undefined,
+              mamaQuote: dinner.description || "A comforting alternative that respects your budget.",
+              mamaPose: 'delighted',
+              steps: Array.isArray(dinner.steps) ? dinner.steps : undefined,
+              ingredients: Array.isArray(dinner.ingredients) ? dinner.ingredients : undefined,
             });
           }
 
-          setApiDeck(deck);
+          if (deck.length > 0) {
+            setApiDeck(deck);
+            if (result.curatorNote) {
+              setMamaQuote(result.curatorNote);
+            }
+          }
         }
-      } catch {
-        // API unavailable — local catalog fallback is already in place
+      } catch (err) {
+        console.warn('[YourDailyEdit] loadApiDeck fallback:', err);
       } finally {
         setApiDeckLoading(false);
       }
@@ -190,30 +222,28 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
       case 'lunch':
         return 'Midday Lunch';
       case 'dinner':
-        return "Tonight's Edit";
+        return "Tonight's Decision";
       case 'late_night':
         return 'Late Night Plate';
     }
   }, [mealPeriod]);
 
-  // Build 3-card deck: prefer live API deck, fall back to local catalog
+  // Build 2-card deck (One Winner + One Alternative): prefer live API deck, fall back to local catalog
   const mealDeck: DeckItem[] = useMemo(() => {
     // Use API deck when loaded and available
     if (!apiDeckLoading && apiDeck && apiDeck.length > 0) {
       return apiDeck;
     }
-    // Local catalog fallback
+    // Local catalog fallback (One Winner + One Alternative, no takeout in V1)
     const periodCatalog = MEAL_CATALOG[mealPeriod];
     const cuisineGroup =
       periodCatalog[kitchenPass.cuisineAnchor] || periodCatalog.default;
 
     const std = cuisineGroup.standard;
     const surv = cuisineGroup.survival;
-    const out = cuisineGroup.takeout;
 
     const stdCostNum = parseFloat(std.estCost.replace(/[^0-9.]/g, '')) || 2.2;
     const survCostNum = parseFloat(surv.estCost.replace(/[^0-9.]/g, '')) || 1.4;
-    const outCostNum = 14.0;
 
     return [
       {
@@ -228,6 +258,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
         image: std.image,
         mamaQuote: "Hot skillet comfort. One pan, zero sink dishes tonight.",
         mamaPose: 'cooking',
+        steps: std.steps,
       },
       {
         id: surv.id,
@@ -239,24 +270,12 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
         estCost: convertMealCost(survCostNum, kitchenPass.currencyCode, kitchenPass.currencySymbol),
         costNumeric: survCostNum,
         image: surv.image,
-        mamaQuote: "Zero effort. In 4 minutes you're eating, my child.",
+        mamaQuote: "Zero effort alternative. In 4 minutes you're eating.",
         mamaPose: 'writing',
-      },
-      {
-        id: 'takeout-spot',
-        type: 'takeout',
-        title: `${out.dish} at ${out.name}`,
-        subtitle: out.vibe,
-        cookTimeOrDistance: out.distance,
-        gearOrVibe: 'Eating Out',
-        estCost: convertMealCost(outCostNum, kitchenPass.currencyCode, kitchenPass.currencySymbol),
-        costNumeric: outCostNum,
-        image: out.image,
-        mamaQuote: "Too tired to stand? Zero guilt. Let someone else cook tonight.",
-        mamaPose: 'welcoming',
+        steps: surv.steps,
       },
     ];
-  }, [mealPeriod, kitchenPass.cuisineAnchor, kitchenPass.currencyCode, kitchenPass.currencySymbol]);
+  }, [apiDeckLoading, apiDeck, mealPeriod, kitchenPass.cuisineAnchor, kitchenPass.currencyCode, kitchenPass.currencySymbol]);
 
   const activeItem = mealDeck[deckIndex % mealDeck.length];
 
@@ -333,34 +352,27 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
         savedMealsService.saveMeal({
           mealId: activeItem.id,
           title: activeItem.title,
-          type: activeItem.type === 'takeout' ? 'eating_out' : 'home',
+          type: 'home',
           cookTime: activeItem.cookTimeOrDistance,
           cost: activeItem.estCost,
           costNumeric: activeItem.costNumeric,
           imageUrl: activeItem.image,
+          recipeSteps: activeItem.steps,
+          ingredients: activeItem.ingredients,
         });
 
-        if (activeItem.type === 'takeout') {
-          navigation.navigate('EatingOutMealDetails', {
-            dishName: activeItem.title,
-            spotName: activeItem.subtitle,
-            distance: activeItem.cookTimeOrDistance,
-            price: activeItem.estCost,
-            vibe: activeItem.gearOrVibe,
-            image: activeItem.image,
-          });
-        } else {
-          navigation.navigate('AtHomeMealDetails', {
-            id: activeItem.id,
-            title: activeItem.title,
-            subtitle: activeItem.subtitle,
-            cookTime: activeItem.cookTimeOrDistance,
-            gear: activeItem.gearOrVibe,
-            estCost: activeItem.estCost,
-            costNumeric: activeItem.costNumeric,
-            image: activeItem.image,
-          });
-        }
+        navigation.navigate('AtHomeMealDetails', {
+          id: activeItem.id,
+          title: activeItem.title,
+          subtitle: activeItem.subtitle,
+          cookTime: activeItem.cookTimeOrDistance,
+          gear: activeItem.gearOrVibe,
+          estCost: activeItem.estCost,
+          costNumeric: activeItem.costNumeric,
+          image: activeItem.image,
+          steps: activeItem.steps,
+          ingredients: activeItem.ingredients,
+        });
         position.setValue({ x: 0, y: 0 });
         cardOpacity.setValue(1);
       } else {
@@ -484,7 +496,17 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
               activeOpacity={0.92}
               onPress={() => handleSwipeAction('right')}
             >
-              <Image source={{ uri: activeItem.image }} style={styles.mealImage} resizeMode="cover" />
+              {activeItem.image ? (
+                <Image source={{ uri: activeItem.image }} style={styles.mealImage} resizeMode="cover" />
+              ) : (
+                <View style={styles.placeholderMealImage}>
+                  <Ionicons
+                    name={activeItem.type === 'takeout' ? 'restaurant-outline' : 'flame-outline'}
+                    size={44}
+                    color={colors.primary}
+                  />
+                </View>
+              )}
 
               <View style={styles.timeBadge}>
                 <Ionicons
@@ -520,15 +542,15 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
             </View>
           </Animated.View>
 
-          {/* 4. THE SIGNATURE ACTIONS: NOT TODAY vs COOK TODAY */}
+          {/* 4. THE SIGNATURE ACTIONS: SHOW ME ANOTHER vs I'M COOKING THIS */}
           <View style={styles.actionsRow}>
             <TouchableOpacity
               style={styles.notTodayButton}
               onPress={() => handleSwipeAction('left')}
               activeOpacity={0.8}
             >
-              <Ionicons name="arrow-back" size={16} color={colors.text.secondary} />
-              <Text style={styles.notTodayText}>Not today</Text>
+              <Ionicons name="refresh-outline" size={16} color={colors.text.secondary} />
+              <Text style={styles.notTodayText}>Show me another</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -537,13 +559,11 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
               activeOpacity={0.85}
             >
               <Ionicons
-                name={activeItem.type === 'takeout' ? 'bag-handle' : 'restaurant'}
+                name="restaurant"
                 size={16}
                 color={colors.snow100}
               />
-              <Text style={styles.cookTodayText}>
-                {activeItem.type === 'takeout' ? 'View Spot' : 'Cook today'}
-              </Text>
+              <Text style={styles.cookTodayText}>I&apos;m Cooking This</Text>
               <Ionicons name="arrow-forward" size={16} color={colors.snow100} />
             </TouchableOpacity>
           </View>
@@ -710,6 +730,13 @@ const styles = StyleSheet.create({
   mealImage: {
     width: '100%',
     height: '100%',
+  },
+  placeholderMealImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.sand,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   timeBadge: {
     position: 'absolute',

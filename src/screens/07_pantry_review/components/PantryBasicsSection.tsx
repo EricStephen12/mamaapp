@@ -74,11 +74,15 @@ export const PantryBasicsSection: React.FC = () => {
         ))}
       </View>
 
-      {/* Missing Staple Indicator */}
-      <View style={styles.missingStapleRow}>
-        <Text style={styles.missingName}>Black pepper</Text>
-        <Text style={styles.missingStatus}>Missing · won’t be assumed</Text>
-      </View>
+      {/* Missing Staples List */}
+      {staples
+        .filter((item) => !item.isAvailable)
+        .map((missing) => (
+          <View key={missing.id} style={styles.missingStapleRow}>
+            <Text style={styles.missingName}>{missing.name}</Text>
+            <Text style={styles.missingStatus}>Missing · won’t be assumed</Text>
+          </View>
+        ))}
 
       {/* Edit Basics Action Link */}
       <TouchableOpacity onPress={handleAddStaple} activeOpacity={0.7}>

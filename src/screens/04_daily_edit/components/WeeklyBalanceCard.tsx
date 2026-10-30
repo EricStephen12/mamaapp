@@ -17,17 +17,17 @@ interface WeeklyBalanceCardProps {
 }
 
 export const WeeklyBalanceCard: React.FC<WeeklyBalanceCardProps> = ({
-  remainingAmount = 23800,
-  remainingDays = 4,
-  spentAmount = 11200,
-  totalBudget = 35000,
+  remainingAmount = 0,
+  remainingDays = 1,
+  spentAmount = 0,
+  totalBudget = 0,
   currencySymbol = '₦',
   currencyCode = 'NGN',
   countryName = 'Nigeria',
   onPressManage,
 }) => {
   const safeBudget = Math.max(1, totalBudget);
-  const progressPercent = Math.min(100, Math.max(0, (spentAmount / safeBudget) * 100));
+  const progressPercent = totalBudget > 0 ? Math.min(100, Math.max(0, (spentAmount / safeBudget) * 100)) : 0;
 
   const formattedRemaining = formatCurrency(remainingAmount, currencySymbol, currencyCode);
   const formattedSpent = formatCurrency(spentAmount, currencySymbol, currencyCode);

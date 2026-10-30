@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Animated,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
 
@@ -19,7 +19,7 @@ export interface DiscoveryItem {
   title: string;
   nutrition: string;
   reason: string;
-  imageUrl: string;
+  imageUrl?: string;
 }
 
 interface FeaturedDiscoveryCardProps {
@@ -55,11 +55,17 @@ export const FeaturedDiscoveryCard: React.FC<FeaturedDiscoveryCardProps> = ({
     <Animated.View style={[styles.card, animatedStyle]}>
       {/* Featured Meal Image Header */}
       <View style={styles.imageWrapper}>
-        <Image
-          source={{ uri: item.imageUrl }}
-          style={styles.mealImage}
-          resizeMode="cover"
-        />
+        {item.imageUrl ? (
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={styles.mealImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.placeholderImage}>
+            <Ionicons name="restaurant-outline" size={44} color={colors.primary} />
+          </View>
+        )}
 
         {/* Position Counter Badge */}
         <View style={styles.positionBadge}>
@@ -102,108 +108,112 @@ export const FeaturedDiscoveryCard: React.FC<FeaturedDiscoveryCardProps> = ({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.snow100,
+    backgroundColor: colors.surface,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
-    borderRadius: 20,
+    borderColor: 'rgba(235, 230, 222, 0.9)',
     overflow: 'hidden',
-    width: '100%',
-    shadowColor: colors.text.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
   imageWrapper: {
-    height: 300,
-    width: '100%',
     position: 'relative',
-    backgroundColor: colors.border,
+    height: 220,
+    backgroundColor: colors.sand,
   },
   mealImage: {
     width: '100%',
     height: '100%',
   },
+  placeholderImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.sand,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   positionBadge: {
     position: 'absolute',
-    top: 16,
-    left: 16,
-    backgroundColor: colors.snow200,
+    top: 14,
+    left: 14,
+    backgroundColor: 'rgba(26, 24, 21, 0.7)',
+    borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 99,
+    paddingVertical: 4,
   },
   positionText: {
-    fontSize: typography.fontSize.label,
-    fontFamily: typography.fontFamily.regular,
-    color: colors.text.primary,
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.white,
     letterSpacing: 0.5,
   },
   recipeDetailsButton: {
     position: 'absolute',
-    bottom: 16,
-    right: 16,
+    top: 14,
+    right: 14,
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: colors.snow200,
-    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
+    justifyContent: 'center',
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     elevation: 2,
   },
   contentBody: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 24,
-    gap: 8,
+    padding: 20,
+    gap: 12,
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'baseline',
   },
   eyebrow: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: '500',
+    fontSize: 10,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
     color: colors.primary,
+    fontWeight: '700',
   },
   estimatedCost: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.primary,
   },
   heading: {
-    fontSize: 28,
-    lineHeight: 32,
-    fontFamily: typography.fontFamily.serif,
+    fontSize: 22,
+    fontWeight: '700',
     color: colors.text.primary,
-    fontWeight: '500',
+    fontFamily: typography.fontFamily.serif,
+    lineHeight: 28,
   },
   nutritionCopy: {
-    fontSize: typography.fontSize.reassurance,
-    lineHeight: 17,
-    color: colors.text.secondary,
-  },
-  quoteBlock: {
-    marginTop: 12,
-    gap: 12,
-  },
-  quoteRule: {
-    width: 24,
-    height: 1,
-    backgroundColor: colors.primary,
-  },
-  reasonText: {
-    fontSize: 18,
-    lineHeight: 24,
-    fontFamily: typography.fontFamily.serif,
-    fontStyle: 'italic',
+    fontSize: 12,
     color: colors.text.muted,
   },
+  quoteBlock: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 12,
+    marginTop: 4,
+  },
+  quoteRule: {
+    width: 3,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
+  reasonText: {
+    flex: 1,
+    fontSize: 13,
+    fontStyle: 'italic',
+    color: colors.text.secondary,
+    lineHeight: 18,
+  },
 });
-
-export default FeaturedDiscoveryCard;

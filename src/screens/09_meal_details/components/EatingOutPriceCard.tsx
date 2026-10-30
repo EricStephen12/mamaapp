@@ -8,13 +8,15 @@ interface EatingOutPriceCardProps {
   serving?: string;
   disclaimer?: string;
   budgetRemaining?: string;
+  tasteLabel?: string;
 }
 
 export const EatingOutPriceCard: React.FC<EatingOutPriceCardProps> = ({
-  price = '$8.50',
-  serving = '1 filled pita',
+  price = '',
+  serving = '1 portion',
   disclaimer = 'Before tax, tips or extras',
-  budgetRemaining = '$44.00',
+  budgetRemaining,
+  tasteLabel = 'culinary',
 }) => {
   return (
     <View style={styles.container}>
@@ -35,7 +37,7 @@ export const EatingOutPriceCard: React.FC<EatingOutPriceCardProps> = ({
       <View style={styles.quoteBlock}>
         <View style={styles.quoteRule} />
         <Text style={styles.reasonText}>
-          Fits your Mediterranean tastes · Leaves {budgetRemaining} this week
+          Fits your {tasteLabel} tastes{budgetRemaining ? ` · Leaves ${budgetRemaining} this week` : ''}
         </Text>
       </View>
     </View>

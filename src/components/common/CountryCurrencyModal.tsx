@@ -33,10 +33,12 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
   onClose,
 }) => {
   const currentPass = preferencesStore.getKitchenPass();
+  const matchedCountry = SUPPORTED_COUNTRIES.find((c) => c.id === currentPass.country);
+  const fallbackBudget = matchedCountry?.defaultWeeklyBudget ?? currentPass.weeklyBudget ?? 50;
 
   const [selectedCountryId, setSelectedCountryId] = useState(currentPass.country || 'NG');
   const [selectedCurrencyCode, setSelectedCurrencyCode] = useState(currentPass.currencyCode || 'NGN');
-  const [weeklyBudgetString, setWeeklyBudgetString] = useState(String(currentPass.weeklyBudget || 35000));
+  const [weeklyBudgetString, setWeeklyBudgetString] = useState(String(currentPass.weeklyBudget || fallbackBudget));
   const [customCountryName, setCustomCountryName] = useState('');
   const [customCurrencySymbol, setCustomCurrencySymbol] = useState('');
   const [mamaNote, setMamaNote] = useState<string>("Choose your country so I can price meals and match local staples.");
@@ -48,14 +50,14 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedCountryId(pass.country);
       setSelectedCurrencyCode(pass.currencyCode);
-      setWeeklyBudgetString(String(pass.weeklyBudget));
+      setWeeklyBudgetString(String(pass.weeklyBudget || fallbackBudget));
       const found = SUPPORTED_COUNTRIES.find((c) => c.id === pass.country);
       if (found) {
         setMamaNote(found.mamaGreeting);
         setMamaPose('delighted');
       }
     }
-  }, [visible]);
+  }, [visible, fallbackBudget]);
 
   const handleSelectCountry = (country: SupportedCountry) => {
     setSelectedCountryId(country.id);
@@ -66,7 +68,7 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
   };
 
   const handleSave = () => {
-    const budgetNum = parseFloat(weeklyBudgetString.replace(/[^0-9.]/g, '')) || 35000;
+    const budgetNum = parseFloat(weeklyBudgetString.replace(/[^0-9.]/g, '')) || fallbackBudget;
     
     if (selectedCountryId === 'custom' && customCountryName.trim()) {
       preferencesStore.updateKitchenPass({
@@ -75,7 +77,7 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
         currencyCode: selectedCurrencyCode,
         currencySymbol: customCurrencySymbol.trim() || '$',
         weeklyBudget: budgetNum,
-        spentThisWeek: Math.round(budgetNum * 0.3),
+        spentThisWeek: currentPass.spentThisWeek || 0,
       });
     } else {
       preferencesStore.updateCountryAndCurrency(
@@ -178,7 +180,7 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
                     value={weeklyBudgetString}
                     onChangeText={setWeeklyBudgetString}
                     keyboardType="numeric"
-                    placeholder="e.g. 35000"
+                    placeholder={`e.g. ${fallbackBudget}`}
                     placeholderTextColor={colors.text.muted}
                   />
                   <Text style={styles.budgetSuffix}>/ week</Text>

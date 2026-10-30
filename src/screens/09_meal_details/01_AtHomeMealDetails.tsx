@@ -21,6 +21,8 @@ import {
   preferencesStore,
   convertMealCost,
 } from '../../services/preferencesStore';
+import { savedMealsService } from '../../services/api/savedMealsService';
+import { decisionsService } from '../../services/api/decisionsService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AtHomeMealDetails'>;
 
@@ -31,46 +33,9 @@ interface CookingStepItem {
   instruction: string;
 }
 
-const DEFAULT_STEPS: CookingStepItem[] = [
-  {
-    id: 1,
-    timeHint: '2 min · medium heat',
-    title: 'Warm the skillet & aromatics',
-    instruction: 'Drizzle 1 tbsp of oil into your pan. Toss in sliced onions and peppers; let them soften and sweeten.',
-  },
-  {
-    id: 2,
-    timeHint: '2 min · loose curds',
-    title: 'Fold in the eggs',
-    instruction: 'Pour in beaten eggs with a pinch of sea salt. Gently push and fold from the edges into velvety folds.',
-  },
-  {
-    id: 3,
-    timeHint: '1 min · plate & serve',
-    title: 'Plate up warm',
-    instruction: 'Slide steaming hot onto your plate beside toasted crusty bread or warm rice. Eat while it sizzles.',
-  },
-];
-
-const DEFAULT_INGREDIENTS = [
-  { name: 'Eggs', amount: '2-3 eggs', inPantry: true },
-  { name: 'Sweet onion & bell pepper', amount: '1 small, sliced', inPantry: true },
-  { name: 'Cooking oil / butter', amount: '1 tbsp', inPantry: true },
-  { name: 'Crusty bread or warm rice', amount: 'for serving', inPantry: true },
-  { name: 'Chili flakes & black pepper', amount: 'to taste', inPantry: true },
-];
-
 export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
-  const params = route.params || {};
-  const currentPass = preferencesStore.getKitchenPass();
-
-  const title = params.title || 'Sizzled Pepper Eggs & Crusty Bread';
-  const cookTime = params.cookTime || '7 min';
-  const gear = params.gear || '1 Skillet';
-  const costNumeric = params.costNumeric || 2.2;
-  const image =
-    params.image ||
-    'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=800&q=80';
+  const params = route.params;
+  const cookTime = params?.cookTime || '15 min';
 
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -90,7 +55,72 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
       Animated.timing(contentFade, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.timing(contentY, { toValue: 0, duration: 400, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [contentFade, contentY]);
+
+  // Empty state guard: if screen opened without meal, don't invent mock egg data
+  if (!params || !params.title) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <StatusBar style="dark" />
+        <View style={styles.masthead}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={18} color={colors.text.primary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Recipe Details</Text>
+          <View style={{ width: 32 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16 }}>
+          <MamaCharacter pose="thinking" size={80} />
+          <Text style={{ fontSize: 20, fontFamily: typography.fontFamily.serif, fontWeight: '700', color: colors.text.primary, textAlign: 'center' }}>
+            No Recipe Selected
+          </Text>
+          <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', lineHeight: 20 }}>
+            Choose a meal from Your Daily Edit, Discover, or Your Collection to see full cooking instructions.
+          </Text>
+          <TouchableOpacity
+            style={[styles.cookedButton, { marginTop: 12, paddingHorizontal: 24 }]}
+            onPress={() => navigation.navigate('YourDailyEdit')}
+          >
+            <Text style={styles.cookedButtonText}>Go to Daily Edit</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const currentPass = preferencesStore.getKitchenPass();
+
+  const title = params.title;
+  const gear = params.gear || '1 Pan';
+  const costNumeric = typeof params.costNumeric === 'number' ? params.costNumeric : 2.5;
+  // Use API-provided image only — never fall back to a hardcoded third-party URL
+  const image = params.image || undefined;
+
+  const mealId = params.id || `meal-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+  const rawIngredients = params.ingredients;
+  const rawSteps = params.steps;
+
+  // Dynamically resolve ingredients from params — no hardcoded eggs or mock ingredients
+  const resolvedIngredients =
+    rawIngredients && rawIngredients.length > 0
+      ? rawIngredients.map((ing) => ({
+          name: ing.name,
+          amount: ing.amount,
+          inPantry: true,
+        }))
+      : [];
+
+  // Dynamically resolve steps from params — no hardcoded mock steps
+  const resolvedSteps: CookingStepItem[] =
+    rawSteps && rawSteps.length > 0
+      ? rawSteps.map((stepText, idx) => ({
+          id: idx + 1,
+          timeHint: `Step ${idx + 1}`,
+          title: stepText.length > 32 ? stepText.slice(0, 32).trim() + '…' : stepText,
+          instruction: stepText,
+        }))
+      : [];
 
   const toggleStep = (stepId: number) => {
     let updated: number[];
@@ -107,7 +137,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
     } else if (updated.length === 1) {
       setMamaPose('writing');
       setMamaNote(`"Smells incredible already! Don't rush it, let the flavor build."`);
-    } else if (updated.length === DEFAULT_STEPS.length) {
+    } else if (updated.length === resolvedSteps.length) {
       setMamaPose('delighted');
       setMamaNote(`"Magnificent! Dinner is served. Sit down, relax, and eat warm."`);
     } else {
@@ -117,7 +147,11 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleMarkAsCooked = () => {
-    preferencesStore.recordMealDecision(title, 'cooked', costNumeric);
+    // 1. Update local preference store
+    preferencesStore.recordMealDecision(mealId, 'cooked', costNumeric);
+    // 2. Persist decision to Neon DB
+    decisionsService.log(mealId, title, 'cooked', costNumeric);
+
     setMamaPose('delighted');
     setToastMessage(`Mama: "Well done! I logged this in your weekly budget."`);
 
@@ -134,7 +168,24 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
   const handleToggleBookmark = () => {
     const next = !isBookmarked;
     setIsBookmarked(next);
-    setToastMessage(next ? 'Saved to your personal collection!' : 'Removed from collection');
+    if (next) {
+      // Save to Neon DB collection
+      savedMealsService.saveMeal({
+        mealId,
+        title,
+        type: 'home',
+        cookTime,
+        cost: convertMealCost(costNumeric, currentPass.currencyCode, currentPass.currencySymbol),
+        costNumeric,
+        imageUrl: image,
+        recipeSteps: resolvedSteps.map((s) => s.instruction),
+        ingredients: resolvedIngredients.map((i) => ({ name: i.name, amount: i.amount })),
+      });
+      setToastMessage('Saved to your personal collection!');
+    } else {
+      savedMealsService.removeMeal(mealId);
+      setToastMessage('Removed from collection');
+    }
   };
 
   // Localized Costs
@@ -184,7 +235,13 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
         <Animated.View style={[styles.container, { opacity: contentFade, transform: [{ translateY: contentY }] }]}>
           {/* Hero Image with cook time & gear badges */}
           <View style={styles.heroWrap}>
-            <Image source={{ uri: image }} style={styles.heroImage} resizeMode="cover" />
+            {image ? (
+              <Image source={{ uri: image }} style={styles.heroImage} resizeMode="cover" />
+            ) : (
+              <View style={styles.placeholderHero}>
+                <Ionicons name="flame-outline" size={48} color={colors.primary} />
+              </View>
+            )}
             <View style={styles.timeTag}>
               <Ionicons name="time-outline" size={13} color={colors.primary} />
               <Text style={styles.timeTagText}>{cookTime}</Text>
@@ -237,15 +294,21 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
           <View style={styles.sectionCard}>
             <Text style={styles.sectionHeading}>Ingredients</Text>
             <View style={styles.ingredientList}>
-              {DEFAULT_INGREDIENTS.map((item, idx) => (
-                <View key={idx} style={styles.ingredientRow}>
-                  <View style={styles.ingredientBullet}>
-                    <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
+              {resolvedIngredients.length > 0 ? (
+                resolvedIngredients.map((item, idx) => (
+                  <View key={idx} style={styles.ingredientRow}>
+                    <View style={styles.ingredientBullet}>
+                      <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
+                    </View>
+                    <Text style={styles.ingredientName}>{item.name}</Text>
+                    <Text style={styles.ingredientAmount}>{item.amount}</Text>
                   </View>
-                  <Text style={styles.ingredientName}>{item.name}</Text>
-                  <Text style={styles.ingredientAmount}>{item.amount}</Text>
-                </View>
-              ))}
+                ))
+              ) : (
+                <Text style={{ fontSize: 13, color: colors.text.secondary, fontStyle: 'italic', paddingVertical: 4 }}>
+                  Uses your confirmed kitchen staples and seasoning to taste.
+                </Text>
+              )}
             </View>
           </View>
 
@@ -254,42 +317,48 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
             <View style={styles.stepsHeader}>
               <Text style={styles.sectionHeading}>Cooking Steps</Text>
               <Text style={styles.stepsCount}>
-                {completedSteps.length}/{DEFAULT_STEPS.length} done
+                {completedSteps.length}/{resolvedSteps.length} done
               </Text>
             </View>
 
             <View style={styles.stepsList}>
-              {DEFAULT_STEPS.map((step) => {
-                const isDone = completedSteps.includes(step.id);
-                return (
-                  <TouchableOpacity
-                    key={step.id}
-                    style={[styles.stepItem, isDone && styles.stepItemDone]}
-                    onPress={() => toggleStep(step.id)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[styles.stepCircle, isDone && styles.stepCircleDone]}>
-                      {isDone ? (
-                        <Ionicons name="checkmark" size={16} color={colors.snow100} />
-                      ) : (
-                        <Text style={styles.stepNumText}>{step.id}</Text>
-                      )}
-                    </View>
-
-                    <View style={styles.stepBody}>
-                      <View style={styles.stepTopLine}>
-                        <Text style={[styles.stepTitle, isDone && styles.stepTitleDone]}>
-                          {step.title}
-                        </Text>
-                        <Text style={styles.stepTimeHint}>{step.timeHint}</Text>
+              {resolvedSteps.length > 0 ? (
+                resolvedSteps.map((step) => {
+                  const isDone = completedSteps.includes(step.id);
+                  return (
+                    <TouchableOpacity
+                      key={step.id}
+                      style={[styles.stepItem, isDone && styles.stepItemDone]}
+                      onPress={() => toggleStep(step.id)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[styles.stepCircle, isDone && styles.stepCircleDone]}>
+                        {isDone ? (
+                          <Ionicons name="checkmark" size={16} color={colors.snow100} />
+                        ) : (
+                          <Text style={styles.stepNumText}>{step.id}</Text>
+                        )}
                       </View>
-                      <Text style={[styles.stepInstruction, isDone && styles.stepInstructionDone]}>
-                        {step.instruction}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
+
+                      <View style={styles.stepBody}>
+                        <View style={styles.stepTopLine}>
+                          <Text style={[styles.stepTitle, isDone && styles.stepTitleDone]}>
+                            {step.title}
+                          </Text>
+                          <Text style={styles.stepTimeHint}>{step.timeHint}</Text>
+                        </View>
+                        <Text style={[styles.stepInstruction, isDone && styles.stepInstructionDone]}>
+                          {step.instruction}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <Text style={{ fontSize: 13, color: colors.text.secondary, fontStyle: 'italic', paddingVertical: 4 }}>
+                  Follow Mama&apos;s cooking tips above to prepare this meal in your skillet.
+                </Text>
+              )}
             </View>
           </View>
 
@@ -364,6 +433,13 @@ const styles = StyleSheet.create({
   heroImage: {
     width: '100%',
     height: '100%',
+  },
+  placeholderHero: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.sand,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   timeTag: {
     position: 'absolute',

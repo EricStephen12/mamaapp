@@ -11,16 +11,27 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
 
-const MAKE_NOW_IMAGE_URL =
-  'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
-
 interface MakeNowMealCardProps {
+  title?: string;
+  subtitle?: string;
+  cookTime?: string;
+  cost?: string;
+  image?: string;
+  reason?: string;
+  ingredientsSummary?: string;
   onPass?: () => void;
   onLikeAndSave?: () => void;
   onChooseToCook?: () => void;
 }
 
 export const MakeNowMealCard: React.FC<MakeNowMealCardProps> = ({
+  title = '',
+  subtitle = '',
+  cookTime = '',
+  cost = '',
+  image,
+  reason = '',
+  ingredientsSummary = '',
   onPass,
   onLikeAndSave,
   onChooseToCook,
@@ -51,6 +62,8 @@ export const MakeNowMealCard: React.FC<MakeNowMealCardProps> = ({
     if (onLikeAndSave) onLikeAndSave();
   };
 
+  if (!title) return null;
+
   return (
     <View style={styles.container}>
       <Text style={styles.eyebrow}>Make now, nothing to buy</Text>
@@ -58,42 +71,45 @@ export const MakeNowMealCard: React.FC<MakeNowMealCardProps> = ({
       {/* Featured Meal Card */}
       <View style={styles.mealCard}>
         {/* Meal Photograph with Preparation Badge */}
-        <View style={styles.imageWrapper}>
-          <Image
-            source={{ uri: MAKE_NOW_IMAGE_URL }}
-            style={styles.mealImage}
-            resizeMode="cover"
-          />
-          <View style={styles.mealBadge}>
-            <Text style={styles.badgeLabel}>25 min</Text>
+        {image ? (
+          <View style={styles.imageWrapper}>
+            <Image
+              source={{ uri: image }}
+              style={styles.mealImage}
+              resizeMode="cover"
+            />
+            {cookTime ? (
+              <View style={styles.mealBadge}>
+                <Text style={styles.badgeLabel}>{cookTime}</Text>
+              </View>
+            ) : null}
           </View>
-        </View>
+        ) : null}
 
         {/* Meal Details Body */}
         <View style={styles.mealBody}>
-          <Text style={styles.mealHeading}>Tomato & egg rice bowls</Text>
-          <Text style={styles.mealSubtitle}>
-            Easy · Makes 2 servings · Contains egg
-          </Text>
+          <Text style={styles.mealHeading}>{title}</Text>
+          {subtitle ? <Text style={styles.mealSubtitle}>{subtitle}</Text> : null}
 
           {/* Price line */}
-          <View style={styles.priceLine}>
-            <Text style={styles.costAmount}>$1.85</Text>
-            <Text style={styles.costBasis}>a serving, from what you have</Text>
-          </View>
+          {cost ? (
+            <View style={styles.priceLine}>
+              <Text style={styles.costAmount}>{cost}</Text>
+              <Text style={styles.costBasis}>a serving, from what you have</Text>
+            </View>
+          ) : null}
 
           {/* Editorial note on why this was picked */}
-          <View style={styles.quoteBlock}>
-            <View style={styles.quoteRule} />
-            <Text style={styles.reasonText}>
-              Mediterranean, the way you like it, and it uses the tomatoes first.
-            </Text>
-          </View>
+          {reason ? (
+            <View style={styles.quoteBlock}>
+              <View style={styles.quoteRule} />
+              <Text style={styles.reasonText}>{reason}</Text>
+            </View>
+          ) : null}
 
-          <Text style={styles.ingredientsSummary}>
-            Tomatoes, eggs, rice, onion, olive oil and cumin. About 540 kcal and
-            20g protein a serving.
-          </Text>
+          {ingredientsSummary ? (
+            <Text style={styles.ingredientsSummary}>{ingredientsSummary}</Text>
+          ) : null}
         </View>
       </View>
 
@@ -131,52 +147,52 @@ export const MakeNowMealCard: React.FC<MakeNowMealCardProps> = ({
             </Text>
           </TouchableOpacity>
         </Animated.View>
-      </View>
 
-      {/* Choose to Cook Today Primary Action */}
-      <Animated.View style={[{ transform: [{ scale: cookScale }] }]}>
-        <TouchableOpacity
-          style={styles.chooseToCookButton}
-          onPress={onChooseToCook}
-          onPressIn={() => handlePressIn(cookScale)}
-          onPressOut={() => handlePressOut(cookScale)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.chooseToCookLabel}>Cook this tonight</Text>
-        </TouchableOpacity>
-      </Animated.View>
+        {/* Cook this */}
+        <Animated.View style={[{ transform: [{ scale: cookScale }] }, styles.cookFlex]}>
+          <TouchableOpacity
+            style={styles.cookButton}
+            onPress={onChooseToCook}
+            onPressIn={() => handlePressIn(cookScale)}
+            onPressOut={() => handlePressOut(cookScale)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.cookButtonText}>Cook this</Text>
+            <Ionicons name="arrow-forward" size={16} color={colors.white} />
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    gap: 16,
-    width: '100%',
+    gap: 12,
   },
   eyebrow: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: '500',
+    fontSize: 10,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
     color: colors.primary,
+    fontWeight: '700',
   },
   mealCard: {
-    backgroundColor: colors.snow100,
-    borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.06)',
+    backgroundColor: colors.surface,
     borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(235, 230, 222, 0.9)',
     overflow: 'hidden',
-    width: '100%',
-    shadowColor: colors.text.primary,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 16,
     elevation: 3,
   },
   imageWrapper: {
-    height: 256,
-    width: '100%',
     position: 'relative',
-    backgroundColor: colors.border,
+    height: 220,
+    backgroundColor: colors.sand,
   },
   mealImage: {
     width: '100%',
@@ -184,152 +200,128 @@ const styles = StyleSheet.create({
   },
   mealBadge: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: 'rgba(255, 252, 247, 0.94)',
-    borderRadius: 99,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    shadowColor: colors.text.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
+    bottom: 12,
+    left: 12,
+    backgroundColor: 'rgba(26, 24, 21, 0.72)',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
   },
   badgeLabel: {
-    fontSize: typography.fontSize.xs,
-    color: colors.primary,
-    fontFamily: typography.fontFamily.medium,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.white,
+    letterSpacing: 0.5,
   },
   mealBody: {
-    paddingHorizontal: 22,
-    paddingTop: 20,
-    paddingBottom: 22,
-    gap: 12,
+    padding: 20,
+    gap: 10,
   },
   mealHeading: {
-    fontSize: 28,
-    lineHeight: 32,
-    fontFamily: typography.fontFamily.serif,
+    fontSize: 22,
+    fontWeight: '700',
     color: colors.text.primary,
-    fontWeight: '500',
+    fontFamily: typography.fontFamily.serif,
+    lineHeight: 28,
   },
   mealSubtitle: {
-    fontSize: typography.fontSize.reassurance,
-    lineHeight: 16,
-    color: colors.text.secondary,
-    fontFamily: typography.fontFamily.regular,
+    fontSize: 13,
+    color: colors.text.muted,
   },
   priceLine: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: 8,
-    marginTop: 4,
+    gap: 6,
+    paddingVertical: 2,
   },
   costAmount: {
-    fontSize: 28,
-    lineHeight: 32,
-    fontFamily: typography.fontFamily.serif,
-    color: colors.text.primary,
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.primary,
   },
   costBasis: {
-    fontSize: typography.fontSize.xs,
-    color: colors.text.secondary,
-    fontFamily: typography.fontFamily.regular,
-  },
-  quoteBlock: {
-    marginTop: 8,
-    gap: 10,
-  },
-  quoteRule: {
-    width: 24,
-    height: 1,
-    backgroundColor: colors.primary,
-  },
-  reasonText: {
-    fontSize: 17,
-    lineHeight: 23,
-    fontFamily: typography.fontFamily.serif,
-    fontStyle: 'italic',
+    fontSize: 12,
     color: colors.text.muted,
   },
-  ingredientsSummary: {
-    fontSize: typography.fontSize.reassurance,
-    lineHeight: 18,
+  quoteBlock: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 12,
+    marginVertical: 4,
+  },
+  quoteRule: {
+    width: 3,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
+  reasonText: {
+    flex: 1,
+    fontSize: 13,
+    fontStyle: 'italic',
     color: colors.text.secondary,
-    fontFamily: typography.fontFamily.regular,
-    marginTop: 4,
+    lineHeight: 19,
+  },
+  ingredientsSummary: {
+    fontSize: 12,
+    color: colors.text.muted,
+    lineHeight: 17,
   },
   actionsRow: {
     flexDirection: 'row',
-    gap: 12,
-    width: '100%',
+    gap: 8,
+    alignItems: 'center',
   },
   actionFlex: {
     flex: 1,
   },
+  cookFlex: {
+    flex: 1.4,
+  },
   notTodayButton: {
-    height: 50,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.12)',
-    borderRadius: 25,
-    backgroundColor: colors.snow100,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.text.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
   },
   notTodayText: {
-    fontSize: typography.fontSize.sub,
+    fontSize: 12,
+    fontWeight: '600',
     color: colors.text.secondary,
-    fontFamily: typography.fontFamily.medium,
   },
   likeAndSaveButton: {
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: 'rgba(102, 112, 74, 0.25)',
-    backgroundColor: colors.linen100,
     flexDirection: 'row',
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: colors.text.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    shadowColor: colors.text.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
+    gap: 6,
   },
   likeAndSaveText: {
-    fontSize: typography.fontSize.sub,
-    color: colors.primary,
-    fontFamily: typography.fontFamily.medium,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.white,
   },
-  chooseToCookButton: {
-    height: 54,
-    borderRadius: 27,
+  cookButton: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    borderRadius: 14,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    width: '100%',
+    gap: 6,
     shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
     elevation: 3,
   },
-  chooseToCookLabel: {
-    fontSize: typography.fontSize.sub,
+  cookButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.white,
-    fontFamily: typography.fontFamily.medium,
-    fontWeight: '600',
-    letterSpacing: 0.3,
   },
 });
-
-export default MakeNowMealCard;

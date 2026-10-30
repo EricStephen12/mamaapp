@@ -65,7 +65,7 @@ model SavedMeal {
   cookTime    String   @default("15 min")
   cost        String
   costNumeric Float    @default(2.5)
-  imageUrl    String
+  imageUrl    String?
   recipeSteps String[] @default([])
   ingredients Json?
   spotName    String?

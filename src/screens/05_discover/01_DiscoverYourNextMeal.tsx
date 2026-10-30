@@ -61,10 +61,10 @@ const RAW_DECK: RawDiscoveryItem[] = [
     categoryType: 'home',
     cookTimeOrDistance: '20 min',
     title: 'Lemon chickpea & couscous bowl',
-    nutrition: 'Vegetarian · 540 kcal · 20g protein · 13g fibre*',
+    nutrition: 'Vegetarian Â· 540 kcal Â· 20g protein Â· 13g fibre*',
     reason: 'Mediterranean flavours using pantry staples you already have.',
     imageUrl:
-      'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+      '',
     baseCostUsd: 2.8,
     cuisineTags: ['mediterranean_european', 'comfort_classics'],
     steps: [
@@ -85,10 +85,10 @@ const RAW_DECK: RawDiscoveryItem[] = [
     categoryType: 'home',
     cookTimeOrDistance: '15 min',
     title: 'Crispy tofu sesame noodle bowl',
-    nutrition: 'Vegan · 480 kcal · 18g protein · 7g fibre*',
+    nutrition: 'Vegan Â· 480 kcal Â· 18g protein Â· 7g fibre*',
     reason: 'Fast, comforting, and uses soy sauce and sesame oil on hand.',
     imageUrl:
-      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
+      '',
     baseCostUsd: 3.1,
     cuisineTags: ['asian_comfort'],
     steps: [
@@ -109,10 +109,10 @@ const RAW_DECK: RawDiscoveryItem[] = [
     categoryType: 'eating_out',
     cookTimeOrDistance: '10 min walk',
     title: 'Warm grain bowl with wild mushrooms',
-    nutrition: 'Vegetarian · 510 kcal · 16g protein · 9g fibre*',
+    nutrition: 'Vegetarian Â· 510 kcal Â· 16g protein Â· 9g fibre*',
     reason: 'Handcrafted by Harvest Table nearby. Within your weekly balance.',
     imageUrl:
-      'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80',
+      '',
     baseCostUsd: 9.2,
     cuisineTags: ['mediterranean_european', 'comfort_classics'],
     spotName: 'Harvest Table Cafe',
@@ -122,10 +122,10 @@ const RAW_DECK: RawDiscoveryItem[] = [
     categoryType: 'home',
     cookTimeOrDistance: '25 min',
     title: 'Charred salmon & garlic greens',
-    nutrition: 'High Protein · 610 kcal · 36g protein · 8g fibre*',
+    nutrition: 'High Protein Â· 610 kcal Â· 36g protein Â· 8g fibre*',
     reason: 'Rich in omega-3 and pairs beautifully with fresh citrus and leafy greens.',
     imageUrl:
-      'https://images.unsplash.com/photo-1467003909585-2f8a72700288?auto=format&fit=crop&w=800&q=80',
+      '',
     baseCostUsd: 4.5,
     cuisineTags: ['mediterranean_european', 'comfort_classics'],
     steps: [
@@ -146,10 +146,10 @@ const RAW_DECK: RawDiscoveryItem[] = [
     categoryType: 'home',
     cookTimeOrDistance: '10 min',
     title: 'Sizzled pepper eggs & sweet plantains',
-    nutrition: 'Comfort · 420 kcal · 22g protein · 5g fibre*',
-    reason: "Mama's signature combo — golden sweet plantains with velvety pepper eggs.",
+    nutrition: 'Comfort Â· 420 kcal Â· 22g protein Â· 5g fibre*',
+    reason: "Mama's signature combo â€” golden sweet plantains with velvety pepper eggs.",
     imageUrl:
-      'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=800&q=80',
+      '',
     baseCostUsd: 1.9,
     cuisineTags: ['african_caribbean'],
     steps: [
@@ -170,10 +170,10 @@ const RAW_DECK: RawDiscoveryItem[] = [
     categoryType: 'eating_out',
     cookTimeOrDistance: '5 min walk',
     title: 'Smoky jollof rice with suya skewers',
-    nutrition: 'High Protein · 580 kcal · 28g protein · 6g fibre*',
+    nutrition: 'High Protein Â· 580 kcal Â· 28g protein Â· 6g fibre*',
     reason: 'Authentic firewood aroma from a local kitchen. Pure nostalgia.',
     imageUrl:
-      'https://images.unsplash.com/photo-1574484284002-952d92456975?auto=format&fit=crop&w=800&q=80',
+      '',
     baseCostUsd: 10.5,
     cuisineTags: ['african_caribbean'],
     spotName: 'Mama Boma West African Grill',
@@ -183,10 +183,10 @@ const RAW_DECK: RawDiscoveryItem[] = [
     categoryType: 'home',
     cookTimeOrDistance: '12 min',
     title: 'Creamy garlic pasta with chili oil',
-    nutrition: 'Comfort · 560 kcal · 16g protein · 4g fibre*',
+    nutrition: 'Comfort Â· 560 kcal Â· 16g protein Â· 4g fibre*',
     reason: 'Five ingredients, one pan, zero stress. The ultimate late-evening plate.',
     imageUrl:
-      'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=800&q=80',
+      '',
     baseCostUsd: 2.2,
     cuisineTags: ['mediterranean_european', 'comfort_classics'],
     steps: [
@@ -207,10 +207,10 @@ const RAW_DECK: RawDiscoveryItem[] = [
     categoryType: 'home',
     cookTimeOrDistance: '8 min',
     title: 'Soft chapati with spiced scrambled eggs',
-    nutrition: 'Comfort · 390 kcal · 19g protein · 3g fibre*',
+    nutrition: 'Comfort Â· 390 kcal Â· 19g protein Â· 3g fibre*',
     reason: 'Warm flatbread rolled around spiced eggs and sweet sauteed onions.',
     imageUrl:
-      'https://images.unsplash.com/photo-1603360946369-dc9bb6258143?auto=format&fit=crop&w=800&q=80',
+      '',
     baseCostUsd: 1.6,
     cuisineTags: ['african_caribbean'],
     steps: [
@@ -317,8 +317,8 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
       );
       const categoryLabel =
         item.categoryType === 'home'
-          ? `At home · ${item.cookTimeOrDistance}`
-          : `Eating out · ${item.cookTimeOrDistance}`;
+          ? `At home Â· ${item.cookTimeOrDistance}`
+          : `Eating out Â· ${item.cookTimeOrDistance}`;
 
       return {
         id: item.id,
@@ -349,19 +349,19 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
     return [
       {
         id: 'opt-1',
-        eyebrow: 'EATING OUT · 10 MIN WALK',
+        eyebrow: 'EATING OUT Â· 10 MIN WALK',
         mealName: 'Roasted veg & hummus pita',
         estimatedCost: `${costOpt1} est. / meal`,
         imageUrl:
-          'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&w=400&q=80',
+          '',
       },
       {
         id: 'opt-2',
-        eyebrow: 'AT HOME · 25 MIN',
+        eyebrow: 'AT HOME Â· 25 MIN',
         mealName: 'Tomato & white bean pasta',
         estimatedCost: `${costOpt2} est. / serving`,
         imageUrl:
-          'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=400&q=80',
+          '',
       },
     ];
   }, [kitchenPass.currencyCode, kitchenPass.currencySymbol]);
@@ -471,7 +471,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
         setSavedItemIds((prev) =>
           prev.includes(currentItem.id) ? prev : [...prev, currentItem.id]
         );
-        setToastMessage(`"${currentItem.title}" saved to your collection ✨`);
+        setToastMessage(`"${currentItem.title}" saved to your collection âœ¨`);
       }
     });
   };
@@ -587,7 +587,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
           <View style={styles.introductionBlock}>
             <View style={styles.introHeaderRow}>
               <Text style={styles.eyebrow}>
-                A LITTLE INSPIRATION · {kitchenPass.countryName.toUpperCase()}
+                A LITTLE INSPIRATION Â· {kitchenPass.countryName.toUpperCase()}
               </Text>
             </View>
             <Text style={styles.heading}>Follow your{'\n'}appetite.</Text>
@@ -750,7 +750,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
                   {kitchenPass.currencySymbol}
                   {(kitchenPass.weeklyBudget - kitchenPass.spentThisWeek).toLocaleString()}
                 </Text>{' '}
-                left · {kitchenPass.remainingDaysInWeek} days
+                left Â· {kitchenPass.remainingDaysInWeek} days
               </Text>
             </View>
             <Feather name="settings" size={14} color={colors.text.secondary} />
@@ -1017,3 +1017,4 @@ const styles = StyleSheet.create({
 });
 
 export default DiscoverYourNextMeal;
+

@@ -30,20 +30,36 @@ import { MamaDialogueService } from '../../services/mamaDialogueService';
 import { AiMamaService } from '../../services/aiMamaService';
 import { savedMealsService } from '../../services/api/savedMealsService';
 import { decisionsService } from '../../services/api/decisionsService';
+import { apiClient } from '../../services/api/client';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AlreadyInYourKitchen'>;
 
 const PASS_REASONS = ['Too much effort', 'Not my taste', 'Save ingredients'];
 
-export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation }) => {
+export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation, route }) => {
   const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [pass, setPass] = useState(preferencesStore.getKitchenPass());
+
+  const passedItems = route.params?.items || ['Eggs', 'Tomatoes', 'Onions', 'Rice'];
+
   const [mamaQuote, setMamaQuote] = useState<string>(
-    'I looked at what you have: eggs, sweet onions, and rice. In 8 minutes we can make this warm comfort bowl!'
+    `I looked at what you have: ${passedItems.slice(0, 3).join(', ')}. In 10 minutes we can make this warm comfort bowl!`
   );
   const [mamaPose, setMamaPose] = useState<MamaPose>('cooking');
+
+  // Dynamic AI-generated recipe based on actual ingredients
+  const [dynamicRecipe, setDynamicRecipe] = useState({
+    title: `${passedItems[0] || ''} Skillet Bowl`,
+    subtitle: 'Generating your personalised recipe...',
+    cookTime: '10 min',
+    costNumeric: 1.8,
+    cost: convertMealCost(1.8, pass.currencyCode, pass.currencySymbol),
+    image: undefined as string | undefined,
+    steps: [] as string[],
+    ingredients: passedItems.map((item) => ({ name: item, amount: '1 portion' })),
+  });
 
   // Entrance animations
   const contentFade = useRef(new Animated.Value(0)).current;
@@ -55,6 +71,40 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation }) => {
       Animated.timing(contentFade, { toValue: 1, duration: 450, useNativeDriver: true }),
       Animated.timing(contentY, { toValue: 0, duration: 450, useNativeDriver: true }),
     ]).start();
+
+    // Call backend to generate custom recipe with these exact ingredients
+    apiClient<any>('/api/recipes/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        availableIngredients: passedItems,
+      }),
+    })
+      .then((res) => {
+        if (res && res.title) {
+          const costNum = typeof res.estimatedCost === 'number' ? res.estimatedCost : 1.8;
+          setDynamicRecipe({
+            title: res.title,
+            subtitle: res.subtitle || `Easy · Uses ${passedItems.slice(0, 2).join(' & ')}`,
+            cookTime: `${res.cookTimeMinutes || 12} min`,
+            costNumeric: costNum,
+            cost: convertMealCost(costNum, pass.currencyCode, pass.currencySymbol),
+            image: res.imageUrl || undefined,
+            steps: Array.isArray(res.steps) && res.steps.length > 0 ? res.steps : [
+              `Warm your skillet with cooking oil on medium heat.`,
+              `Add ${passedItems.join(', ')} and cook until tender and fragrant.`,
+              `Season to taste and serve hot.`,
+            ],
+            ingredients: Array.isArray(res.ingredients) && res.ingredients.length > 0
+              ? res.ingredients.map((i: any) => typeof i === 'string' ? { name: i, amount: '1 portion' } : i)
+              : passedItems.map((name) => ({ name, amount: '1 portion' })),
+          });
+          if (res.mamaVoiceLine) {
+            setMamaQuote(res.mamaVoiceLine);
+          }
+        }
+      })
+      .catch(() => {});
+
     return unsub;
   }, []);
 
@@ -149,37 +199,45 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation }) => {
 
           {/* Section 3: Confirmed Pantry Summary */}
           <ConfirmedPantrySummaryCard
-            onEditPantry={() => navigation.navigate('ConfirmYourPantry')}
+            items={passedItems}
+            onEditPantry={() => navigation.navigate('ConfirmYourPantry', { items: passedItems })}
           />
 
           {/* Section 4: Make Now Meal Card */}
           <MakeNowMealCard
+            title={dynamicRecipe.title}
+            subtitle={dynamicRecipe.subtitle}
+            cookTime={dynamicRecipe.cookTime}
+            cost={dynamicRecipe.cost}
+            image={dynamicRecipe.image}
+            ingredientsSummary={`Confirmed ingredients: ${dynamicRecipe.ingredients.map((i) => i.name).join(', ')}.`}
             onChooseToCook={() => {
-              const mealId = 'pantry-make-now-1';
-              const mealTitle = 'Tomato & Sizzled Egg Rice Bowl';
-              const costNumeric = 1.8;
-              // Log decision + save to collection (fire-and-forget)
-              decisionsService.log(mealId, mealTitle, 'cooked', costNumeric);
+              const mealId = `pantry-${Date.now()}`;
+              // Log decision + save to collection (fire-and-forget to Neon DB)
+              decisionsService.log(mealId, dynamicRecipe.title, 'cooked', dynamicRecipe.costNumeric);
               savedMealsService.saveMeal({
                 mealId,
-                title: mealTitle,
+                title: dynamicRecipe.title,
                 type: 'home',
-                cookTime: '8 min',
-                cost: convertMealCost(costNumeric, pass.currencyCode, pass.currencySymbol),
-                costNumeric,
-                imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
+                cookTime: dynamicRecipe.cookTime,
+                cost: dynamicRecipe.cost,
+                costNumeric: dynamicRecipe.costNumeric,
+                imageUrl: dynamicRecipe.image,
+                recipeSteps: dynamicRecipe.steps,
+                ingredients: dynamicRecipe.ingredients,
               });
-              preferencesStore.recordMealDecision(mealId, 'cooked', costNumeric);
+              preferencesStore.recordMealDecision(mealId, 'cooked', dynamicRecipe.costNumeric);
               navigation.navigate('AtHomeMealDetails', {
                 id: mealId,
-                title: mealTitle,
-                subtitle: 'Velvety eggs folded into sweet tomatoes over steamed rice.',
-                cookTime: '8 min',
+                title: dynamicRecipe.title,
+                subtitle: dynamicRecipe.subtitle,
+                cookTime: dynamicRecipe.cookTime,
                 gear: '1 Pan',
-                estCost: convertMealCost(costNumeric, pass.currencyCode, pass.currencySymbol),
-                costNumeric,
-                image:
-                  'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
+                estCost: dynamicRecipe.cost,
+                costNumeric: dynamicRecipe.costNumeric,
+                image: dynamicRecipe.image,
+                steps: dynamicRecipe.steps,
+                ingredients: dynamicRecipe.ingredients,
               });
             }}
           />
@@ -221,22 +279,28 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation }) => {
             </View>
           </View>
 
-          {/* Section 6: Alternative Meal Option */}
-          <AlternativeMealCard
-            onViewRecipe={() =>
-              navigation.navigate('AtHomeMealDetails', {
-                id: 'alt-meal-1',
-                title: 'Spinach, Tomato & Egg Rice',
-                subtitle: 'Caramelized onions, garlic chili crunch, and golden crusty bread.',
-                cookTime: '6 min',
-                gear: '1 Skillet',
-                estCost: convertMealCost(1.4, pass.currencyCode, pass.currencySymbol),
-                costNumeric: 1.4,
-                image:
-                  'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400&q=80',
-              })
-            }
-          />
+          {/* Section 6: Alternative Meal (from API second suggestion, if available) */}
+          {dynamicRecipe.ingredients.length > 2 && (
+            <AlternativeMealCard
+              title={`${passedItems.slice(0, 2).join(' & ')} stir-fry variation`}
+              subtitle={`15 min · ${passedItems.length} ingredients`}
+              image={undefined}
+              onViewRecipe={() =>
+                navigation.navigate('AtHomeMealDetails', {
+                  id: 'alt-meal-1',
+                  title: `${passedItems.slice(0, 2).join(' & ')} Stir-fry`,
+                  subtitle: `A quick variation using your confirmed pantry.`,
+                  cookTime: '15 min',
+                  gear: '1 Skillet',
+                  estCost: convertMealCost(1.4, pass.currencyCode, pass.currencySymbol),
+                  costNumeric: 1.4,
+                  image: undefined,
+                  steps: dynamicRecipe.steps,
+                  ingredients: dynamicRecipe.ingredients,
+                })
+              }
+            />
+          )}
 
           {/* Section 7: Save for Later Option */}
           <SaveForLaterMealCard />

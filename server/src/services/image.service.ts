@@ -4,33 +4,27 @@ dotenv.config();
 
 /**
  * ImageService
- * Supports FLUX.1 (Schnell / Dev) via hosted serverless APIs:
- * 1. Fal.ai (Recommended: 0.5s - 1.2s latency, ~$0.003/image)
- * 2. Together AI (1.5s latency, ~$0.003/image)
- * 3. Replicate (2s latency)
- * 
- * Includes an in-memory cache and high-quality culinary fallback images
- * so the mobile app always renders beautiful visuals instantly without waiting.
+ * Generates food images via FLUX.1 (Schnell) from multiple providers:
+ * 1. Cloudflare Workers AI (Free Edge GPUs)
+ * 2. Fal.ai (~0.6s latency)
+ * 3. Together AI (~1.5s latency)
+ *
+ * If ALL providers fail, returns null so callers can handle the missing image
+ * gracefully (empty state) instead of showing a hardcoded third-party URL.
  */
-
-// High quality curated culinary photos for instant fallback
-const CURATED_FOOD_IMAGES: Record<string, string> = {
-  rice: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
-  pasta: 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=800&q=80',
-  egg: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=800&q=80',
-  soup: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=800&q=80',
-  salad: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80',
-  default: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80',
-};
 
 // In-memory image cache to prevent redundant generation calls
 const imageCache = new Map<string, string>();
 
 export class ImageService {
   /**
-   * Generate an image using FLUX.1
+   * Generate an image using FLUX.1.
+   * Returns null if all providers are unavailable — callers must handle null.
    */
-  static async generateFoodImage(prompt: string, mealType = 'default'): Promise<{ imageUrl: string; provider: string; cached: boolean }> {
+  static async generateFoodImage(
+    prompt: string,
+    mealType?: string,
+  ): Promise<{ imageUrl: string; provider: string; cached: boolean } | null> {
     // 1. Check cache first
     const cacheKey = prompt.trim().toLowerCase();
     if (imageCache.has(cacheKey)) {
@@ -71,7 +65,6 @@ export class ImageService {
             imageCache.set(cacheKey, imageUrl);
             return { imageUrl, provider: 'cloudflare-workers-flux-schnell', cached: false };
           } else {
-            // Some Cloudflare endpoints return JSON with base64 image
             const data = (await response.json()) as { result?: { image?: string } };
             if (data?.result?.image) {
               const imageUrl = `data:image/jpeg;base64,${data.result.image}`;
@@ -81,7 +74,7 @@ export class ImageService {
           }
         }
       } catch (err) {
-        console.warn('[ImageService] Cloudflare Workers AI request error, trying fallback:', err);
+        console.warn('[ImageService] Cloudflare Workers AI error, trying fallback:', err);
       }
     }
 
@@ -111,11 +104,11 @@ export class ImageService {
           }
         }
       } catch (err) {
-        console.warn('[ImageService] Fal.ai request error, trying fallback:', err);
+        console.warn('[ImageService] Fal.ai error, trying next fallback:', err);
       }
     }
 
-    // 3. Try Together AI (alternative Flux host)
+    // 4. Try Together AI (alternative Flux host)
     if (togetherKey) {
       try {
         const response = await fetch('https://api.together.xyz/v1/images/generations', {
@@ -144,18 +137,12 @@ export class ImageService {
           }
         }
       } catch (err) {
-        console.warn('[ImageService] Together AI request error:', err);
+        console.warn('[ImageService] Together AI error:', err);
       }
     }
 
-    // 4. Return instant curated aesthetic food imagery if API keys are pending
-    const matchKey = Object.keys(CURATED_FOOD_IMAGES).find((k) => prompt.toLowerCase().includes(k)) || mealType || 'default';
-    const fallbackUrl = CURATED_FOOD_IMAGES[matchKey] || CURATED_FOOD_IMAGES.default;
-
-    return {
-      imageUrl: fallbackUrl,
-      provider: 'curated-fallback',
-      cached: false,
-    };
+    // All providers unavailable — return null, never fall back to external images
+    console.warn('[ImageService] All providers unavailable. No image generated.');
+    return null;
   }
 }

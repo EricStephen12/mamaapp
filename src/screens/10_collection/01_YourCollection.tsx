@@ -56,101 +56,7 @@ interface BaseMealEntry {
   vibe?: string;
 }
 
-const DEFAULT_SAVED_MEALS: BaseMealEntry[] = [
-  {
-    id: 'save-1',
-    title: 'Lemon chickpea & couscous bowl',
-    type: 'home',
-    cookTimeOrDistance: '20 MIN',
-    baseCostUsd: 2.8,
-    imageUrl:
-      'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
-    targetScreen: 'AtHomeMealDetails',
-    steps: [
-      'Toast couscous with olive oil in a skillet for 2 minutes.',
-      'Steam couscous in hot broth for 5 minutes.',
-      'Toss chickpeas with fresh lemon, cumin, and sea salt.',
-      'Fluff couscous, fold in seasoned chickpeas, and serve warm.',
-    ],
-    ingredients: [
-      { name: 'Couscous', amount: '1 cup' },
-      { name: 'Chickpeas', amount: '1 can' },
-      { name: 'Lemon & olive oil', amount: '2 tbsp' },
-    ],
-  },
-  {
-    id: 'save-2',
-    title: 'Roasted veg & hummus pita',
-    type: 'eating_out',
-    cookTimeOrDistance: '10 MIN WALK',
-    baseCostUsd: 8.5,
-    imageUrl:
-      'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&w=800&q=80',
-    targetScreen: 'EatingOutMealDetails',
-    spotName: 'Greenery Fresh Deli',
-    vibe: 'Warm pita packed with roasted seasonal veggies and house tahini.',
-  },
-  {
-    id: 'save-3',
-    title: 'Tomato & white bean pasta',
-    type: 'home',
-    cookTimeOrDistance: '25 MIN',
-    baseCostUsd: 2.4,
-    imageUrl:
-      'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=800&q=80',
-    targetScreen: 'AtHomeMealDetails',
-    steps: [
-      'Boil pasta in salted water until al dente.',
-      'Simmer cannellini beans and crushed tomatoes with garlic.',
-      'Combine pasta directly into the sauce and swirl with olive oil.',
-    ],
-    ingredients: [
-      { name: 'Pasta of choice', amount: '150g' },
-      { name: 'White beans', amount: '1 can' },
-      { name: 'Crushed tomatoes', amount: '1 can' },
-    ],
-  },
-  {
-    id: 'save-4',
-    title: 'Soft eggs & spinach toast',
-    type: 'home',
-    cookTimeOrDistance: '10 MIN',
-    baseCostUsd: 1.9,
-    imageUrl:
-      'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=800&q=80',
-    targetScreen: 'AtHomeMealDetails',
-    steps: [
-      'Toast sourdough or bread in butter until golden.',
-      'Wilt fresh spinach in hot skillet for 1 minute.',
-      'Cook eggs to soft medium and slide onto warm spinach toast.',
-    ],
-    ingredients: [
-      { name: 'Crusty bread', amount: '2 slices' },
-      { name: 'Fresh eggs', amount: '2 large' },
-      { name: 'Baby spinach', amount: 'Handful' },
-    ],
-  },
-  {
-    id: 'disc-5',
-    title: 'Sizzled pepper eggs & sweet plantains',
-    type: 'home',
-    cookTimeOrDistance: '10 MIN',
-    baseCostUsd: 1.9,
-    imageUrl:
-      'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=800&q=80',
-    targetScreen: 'AtHomeMealDetails',
-    steps: [
-      'Slice ripe plantains diagonally and pan-fry in hot oil until golden.',
-      'In the same pan, saute diced red onions and scotch bonnet / chili.',
-      'Pour in seasoned beaten eggs and fold gently into soft curds.',
-    ],
-    ingredients: [
-      { name: 'Ripe sweet plantain', amount: '1 whole' },
-      { name: 'Fresh eggs', amount: '2 large' },
-      { name: 'Red onion & pepper', amount: '1 small diced' },
-    ],
-  },
-];
+
 
 export const YourCollection: React.FC<Props> = ({ navigation }) => {
   const [kitchenPass, setKitchenPass] = useState<UserKitchenPass>(
@@ -184,7 +90,7 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
               type: m.type === 'eating_out' ? 'eating_out' : 'home',
               cookTimeOrDistance: m.cookTime || '15 MIN',
               baseCostUsd: typeof m.costNumeric === 'number' ? m.costNumeric : 2.5,
-              imageUrl: m.imageUrl || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+              imageUrl: m.imageUrl || undefined,
               targetScreen: m.type === 'eating_out' ? 'EatingOutMealDetails' : 'AtHomeMealDetails',
               steps: m.recipeSteps,
               ingredients: Array.isArray(m.ingredients) ? m.ingredients : undefined,
@@ -218,7 +124,7 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
           type: m.type === 'eating_out' ? 'eating_out' : 'home',
           cookTimeOrDistance: m.cookTime || '15 MIN',
           baseCostUsd: typeof m.costNumeric === 'number' ? m.costNumeric : 2.5,
-          imageUrl: m.imageUrl || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+          imageUrl: m.imageUrl || undefined,
           targetScreen: m.type === 'eating_out' ? 'EatingOutMealDetails' : 'AtHomeMealDetails',
           steps: m.recipeSteps,
           ingredients: Array.isArray(m.ingredients) ? m.ingredients : undefined,

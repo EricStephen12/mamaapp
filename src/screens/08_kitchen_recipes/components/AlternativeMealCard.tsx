@@ -4,52 +4,65 @@ import { Feather } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
 
-const SPINACH_MEAL_IMAGE =
-  'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400&q=80';
-
 interface AlternativeMealCardProps {
+  title?: string;
+  subtitle?: string;
+  missingIngredient?: string;
+  checkoutCost?: string;
+  servingCost?: string;
+  image?: string;
   onViewRecipe?: () => void;
 }
 
 export const AlternativeMealCard: React.FC<AlternativeMealCardProps> = ({
+  title,
+  subtitle,
+  missingIngredient,
+  checkoutCost,
+  servingCost,
+  image,
   onViewRecipe,
 }) => {
+  if (!title) return null;
+
   return (
     <View style={styles.container}>
       <Text style={styles.eyebrow}>One small extra</Text>
 
       {/* Meal Info Row */}
       <View style={styles.mealRow}>
-        <Image
-          source={{ uri: SPINACH_MEAL_IMAGE }}
-          style={styles.thumbnail}
-          resizeMode="cover"
-        />
+        {image ? (
+          <Image
+            source={{ uri: image }}
+            style={styles.thumbnail}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.thumbnail, styles.thumbnailPlaceholder]} />
+        )}
         <View style={styles.mealInfo}>
-          <Text style={styles.mealTitle}>Spinach, tomato & egg rice</Text>
-          <Text style={styles.mealSubtitle}>
-            25 min · 2 servings · Contains egg
+          <Text style={styles.mealTitle}>{title}</Text>
+          {subtitle ? (
+            <Text style={styles.mealSubtitle}>{subtitle}</Text>
+          ) : null}
+        </View>
+      </View>
+
+      {/* Missing Ingredient & Cost Callout */}
+      {missingIngredient ? (
+        <View style={styles.calloutCard}>
+          <Text style={styles.missingTitle}>Missing: {missingIngredient}</Text>
+
+          <View style={styles.costRow}>
+            {checkoutCost ? <Text style={styles.checkoutCost}>{checkoutCost} est. at checkout</Text> : null}
+            {servingCost ? <Text style={styles.useCost}>{servingCost} est. / serving</Text> : null}
+          </View>
+
+          <Text style={styles.calloutExplanation}>
+            Optional addition for extra variety with your confirmed pantry.
           </Text>
         </View>
-      </View>
-
-      {/* Missing Ingredient & Cost Distinction Callout */}
-      <View style={styles.calloutCard}>
-        <Text style={styles.missingTitle}>Missing: spinach · buy 1 × 150g bag</Text>
-
-        <View style={styles.costRow}>
-          <Text style={styles.checkoutCost}>$2.00 est. at checkout</Text>
-          <Text style={styles.useCost}>$2.25 est. / serving</Text>
-        </View>
-
-        <Text style={styles.calloutExplanation}>
-          Adds fresh spinach to your bowls. Per-serving cost reflects ingredients used.
-        </Text>
-      </View>
-
-      <Text style={styles.varietyGuidance}>
-        Optional addition for extra greens.
-      </Text>
+      ) : null}
 
       {/* View Recipe & Shopping List Action */}
       <TouchableOpacity
@@ -57,7 +70,7 @@ export const AlternativeMealCard: React.FC<AlternativeMealCardProps> = ({
         onPress={onViewRecipe}
         activeOpacity={0.7}
       >
-        <Text style={styles.actionLabel}>View recipe & shopping list</Text>
+        <Text style={styles.actionLabel}>View recipe &amp; shopping list</Text>
         <Feather name="arrow-right" size={16} color={colors.primary} />
       </TouchableOpacity>
     </View>
@@ -85,6 +98,9 @@ const styles = StyleSheet.create({
     height: 116,
     borderRadius: 16,
     backgroundColor: colors.border,
+  },
+  thumbnailPlaceholder: {
+    backgroundColor: 'rgba(102, 112, 74, 0.08)',
   },
   mealInfo: {
     flex: 1,
@@ -136,12 +152,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
   },
   calloutExplanation: {
-    fontSize: typography.fontSize.reassurance,
-    lineHeight: 17,
-    color: colors.text.secondary,
-    fontFamily: typography.fontFamily.regular,
-  },
-  varietyGuidance: {
     fontSize: typography.fontSize.reassurance,
     lineHeight: 17,
     color: colors.text.secondary,

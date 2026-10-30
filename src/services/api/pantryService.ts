@@ -21,7 +21,7 @@ export const pantryService = {
   },
 
   async syncItems(
-    items: Array<{ name: string; category?: string; quantity?: string }>
+    items: { name: string; category?: string; quantity?: string }[]
   ): Promise<boolean> {
     try {
       await apiClient('/api/pantry', {

@@ -25,13 +25,28 @@ import { CookingTimePreferenceSection } from './components/CookingTimePreference
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ConfirmYourPantry'>;
 
-export const ConfirmYourPantry: React.FC<Props> = ({ navigation }) => {
+export const ConfirmYourPantry: React.FC<Props> = ({ navigation, route }) => {
   const contentFade = useRef(new Animated.Value(0)).current;
   const contentY = useRef(new Animated.Value(20)).current;
   const confirmScale = useRef(new Animated.Value(1)).current;
 
+  const passedItems = route.params?.items;
+  const initialDetected: DetectedItemData[] =
+    passedItems && passedItems.length > 0
+      ? passedItems.map((name, idx) => ({
+          id: `ing-${idx + 1}`,
+          name,
+          quantity: '1 portion',
+        }))
+      : [
+          { id: 'ing-1', name: 'Tomatoes', quantity: 'About 4 medium' },
+          { id: 'ing-2', name: 'Eggs', quantity: '6 large' },
+          { id: 'ing-3', name: 'White rice', quantity: '1 cup dry' },
+          { id: 'ing-4', name: 'Onions', quantity: '2 yellow' },
+        ];
+
   // Track confirmed pantry items so we can sync to Neon DB on confirm
-  const [confirmedItems, setConfirmedItems] = useState<DetectedItemData[]>([]);
+  const [confirmedItems, setConfirmedItems] = useState<DetectedItemData[]>(initialDetected);
 
   useEffect(() => {
     Animated.parallel([
@@ -49,13 +64,14 @@ export const ConfirmYourPantry: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleConfirm = () => {
+    const activeList = confirmedItems.length > 0 ? confirmedItems : initialDetected;
     // Sync confirmed pantry items to Neon DB (fire-and-forget — never blocks navigation)
-    if (confirmedItems.length > 0) {
-      pantryService.syncItems(
-        confirmedItems.map((i) => ({ name: i.name, quantity: i.quantity, category: 'pantryStaples' }))
-      );
-    }
-    navigation.navigate('AlreadyInYourKitchen');
+    pantryService.syncItems(
+      activeList.map((i) => ({ name: i.name, quantity: i.quantity, category: 'pantryStaples' }))
+    );
+    navigation.navigate('AlreadyInYourKitchen', {
+      items: activeList.map((i) => i.name),
+    });
   };
 
   return (
@@ -104,13 +120,23 @@ export const ConfirmYourPantry: React.FC<Props> = ({ navigation }) => {
             <MamaCharacter pose="writing" size={48} isSpeaking={true} />
             <View style={styles.mamaBubble}>
               <Text style={styles.mamaBubbleText}>
-                &ldquo;I wrote down your eggs, tomatoes, and onions. Check the list below and tap continue to see your custom meals!&rdquo;
+                &ldquo;
+                {(confirmedItems.length > 0 ? confirmedItems : initialDetected).length > 0
+                  ? `I noted ${(confirmedItems.length > 0 ? confirmedItems : initialDetected)
+                      .slice(0, 3)
+                      .map((i) => i.name)
+                      .join(', ')}${
+                      (confirmedItems.length > 0 ? confirmedItems : initialDetected).length > 3 ? ' and more' : ''
+                    }. Check the list below and tap continue to see your custom meals!`
+                  : 'Add or confirm what you have in your kitchen below and tap continue!'}
+                &rdquo;
               </Text>
             </View>
           </View>
 
           {/* Section 2: Detected Ingredients List */}
           <DetectedIngredientsSection
+            items={initialDetected}
             onRetakePhoto={() => navigation.navigate('WhatsInYourKitchen')}
             onItemsChange={(items) => setConfirmedItems(items)}
           />

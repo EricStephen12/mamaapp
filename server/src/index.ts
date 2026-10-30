@@ -49,7 +49,83 @@ app.use(rateLimiter);
 // ─── Auth Routes (public) ─────────────────────────────────────────────────────
 app.use('/api/auth', authRouter);
 
-// ─── Protected API Routes ─────────────────────────────────────────────────────
+// ─── Public AI Routes (no auth needed — no user-specific data) ───────────────
+// Health check, AI generation, and pantry analysis work without a token
+import { GroqService } from './services/groq.service.js';
+import { ImageService } from './services/image.service.js';
+
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    groqConfigured: !!process.env.GROQ_API_KEY,
+    dbConfigured: !!process.env.DATABASE_URL,
+  });
+});
+
+app.post('/api/daily-edit', async (req: Request, res: Response) => {
+  try {
+    const pantryItems = (req.body?.pantryItems as string[]) || ['Eggs', 'Tomatoes', 'Rice', 'Onions'];
+    const kitchenPass = req.body?.kitchenPass;
+    const dailyEdit = await GroqService.generateDailyEdit(pantryItems, kitchenPass);
+    if (dailyEdit.makeNowMeal?.imagePrompt) {
+      const imgResult = await ImageService.generateFoodImage(dailyEdit.makeNowMeal.imagePrompt, kitchenPass?.stapleBase || 'rice');
+      if (imgResult?.imageUrl) {
+        dailyEdit.makeNowMeal.imageUrl = imgResult.imageUrl;
+      }
+    }
+    if (dailyEdit.tonightDinner?.imagePrompt) {
+      const imgResult = await ImageService.generateFoodImage(dailyEdit.tonightDinner.imagePrompt, kitchenPass?.stapleBase || 'rice');
+      if (imgResult?.imageUrl) {
+        dailyEdit.tonightDinner.imageUrl = imgResult.imageUrl;
+      }
+    }
+    res.json(dailyEdit);
+  } catch (error) {
+    console.error('[API public] /daily-edit error:', error);
+    res.status(500).json({ error: 'Failed to generate daily edit' });
+  }
+});
+
+app.post('/api/kitchen/analyze', async (req: Request, res: Response) => {
+  try {
+    const items = (req.body?.items as string[]) || [];
+    if (!items.length) { res.status(400).json({ error: 'Provide items array.' }); return; }
+    const analysis = await GroqService.analyzePantry(items);
+    res.json(analysis);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to analyze pantry' });
+  }
+});
+
+app.post('/api/recipes/generate', async (req: Request, res: Response) => {
+  try {
+    const ingredients = (req.body?.availableIngredients as string[]) || ['Eggs', 'Tomatoes', 'Rice'];
+    const title = req.body?.titleSuggestion as string | undefined;
+    const recipe = await GroqService.generateRecipe(ingredients, title);
+    if (recipe.imagePrompt) {
+      const imageResult = await ImageService.generateFoodImage(recipe.imagePrompt);
+      // @ts-expect-error add generated image url
+      recipe.imageUrl = imageResult.imageUrl;
+    }
+    res.json(recipe);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate recipe' });
+  }
+});
+
+app.post('/api/images/generate', async (req: Request, res: Response) => {
+  try {
+    const { prompt, mealType } = req.body;
+    if (!prompt) { res.status(400).json({ error: 'Prompt is required' }); return; }
+    const result = await ImageService.generateFoodImage(prompt, mealType);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate image' });
+  }
+});
+
+// ─── Protected API Routes (auth required — reads/writes user data) ────────────
 app.use('/api', requireAuth as express.RequestHandler, apiRouter);
 
 // ─── Root Info ────────────────────────────────────────────────────────────────

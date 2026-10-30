@@ -3,15 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
-
-const COUNTER_IMAGE_URL =
-  'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
 
 interface IngredientViewfinderProps {
   isScanning?: boolean;
@@ -21,9 +17,10 @@ export const IngredientViewfinder: React.FC<IngredientViewfinderProps> = ({
   isScanning = false,
 }) => {
   const scanLineAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0.6)).current;
 
   useEffect(() => {
-    const loop = Animated.loop(
+    const scanLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(scanLineAnim, {
           toValue: 1,
@@ -37,9 +34,19 @@ export const IngredientViewfinder: React.FC<IngredientViewfinderProps> = ({
         }),
       ])
     );
-    loop.start();
-    return () => loop.stop();
-  }, [scanLineAnim]);
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.6, duration: 1200, useNativeDriver: true }),
+      ])
+    );
+    scanLoop.start();
+    pulseLoop.start();
+    return () => {
+      scanLoop.stop();
+      pulseLoop.stop();
+    };
+  }, [scanLineAnim, pulseAnim]);
 
   const translateY = scanLineAnim.interpolate({
     inputRange: [0, 1],
@@ -48,12 +55,11 @@ export const IngredientViewfinder: React.FC<IngredientViewfinderProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Background Raw Ingredients on Counter Photo */}
-      <Image
-        source={{ uri: COUNTER_IMAGE_URL }}
-        style={styles.counterImage}
-        resizeMode="cover"
-      />
+      {/* Dark viewfinder background — no external image */}
+      <View style={styles.viewfinderBg} />
+
+      {/* Subtle radial glow center */}
+      <View style={styles.centerGlow} />
 
       {/* Mode Badge: INGREDIENTS */}
       <View style={styles.cameraModeBadge}>
@@ -68,12 +74,13 @@ export const IngredientViewfinder: React.FC<IngredientViewfinderProps> = ({
         <View style={[styles.corner, styles.cornerBL]} />
         <View style={[styles.corner, styles.cornerBR]} />
 
-        {/* Gentle Scanning Horizon */}
+        {/* Animated Scan Line */}
         <Animated.View
           style={[
             styles.scanLine,
             {
               transform: [{ translateY }],
+              opacity: pulseAnim,
             },
           ]}
         />
@@ -81,6 +88,7 @@ export const IngredientViewfinder: React.FC<IngredientViewfinderProps> = ({
 
       {/* Guidance Framing Prompt */}
       <View style={styles.framingPrompt}>
+        <Ionicons name="scan-outline" size={12} color={colors.primary} style={{ marginRight: 6 }} />
         <Text style={styles.guidanceText}>
           Keep each ingredient in view, in good light.
         </Text>
@@ -96,17 +104,26 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     overflow: 'hidden',
     position: 'relative',
-    backgroundColor: colors.border,
+    backgroundColor: '#0A0E08',
   },
-  counterImage: {
-    width: '100%',
-    height: '100%',
+  viewfinderBg: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: '#0D1209',
+  },
+  centerGlow: {
+    position: 'absolute',
+    top: '20%',
+    left: '20%',
+    right: '20%',
+    bottom: '20%',
+    borderRadius: 120,
+    backgroundColor: 'rgba(102, 112, 74, 0.06)',
   },
   cameraModeBadge: {
     position: 'absolute',
     top: 14,
     left: 14,
-    backgroundColor: colors.snow200,
+    backgroundColor: 'rgba(233, 235, 221, 0.12)',
     borderRadius: 99,
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -114,11 +131,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     zIndex: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(233, 235, 221, 0.08)',
   },
   modeLabel: {
     fontSize: typography.fontSize.label,
     fontWeight: '600',
-    color: colors.text.primary,
+    color: 'rgba(233, 235, 221, 0.85)',
     letterSpacing: 0.5,
   },
   framingGuidesWrapper: {
@@ -133,7 +152,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 24,
     height: 24,
-    borderColor: 'rgba(255, 252, 247, 0.95)',
+    borderColor: 'rgba(233, 235, 221, 0.70)',
   },
   cornerTL: {
     top: 0,
@@ -168,11 +187,11 @@ const styles = StyleSheet.create({
     left: 12,
     right: 12,
     height: 1.5,
-    backgroundColor: 'rgba(233, 235, 221, 0.7)',
+    backgroundColor: 'rgba(102, 112, 74, 0.8)',
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 4,
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
     elevation: 2,
   },
   framingPrompt: {
@@ -180,17 +199,20 @@ const styles = StyleSheet.create({
     bottom: 16,
     left: 20,
     right: 20,
-    backgroundColor: colors.snow200,
+    backgroundColor: 'rgba(233, 235, 221, 0.09)',
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 9,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(233, 235, 221, 0.06)',
   },
   guidanceText: {
     fontSize: typography.fontSize.reassurance,
-    color: colors.text.primary,
+    color: 'rgba(233, 235, 221, 0.7)',
     fontFamily: typography.fontFamily.regular,
     textAlign: 'center',
   },

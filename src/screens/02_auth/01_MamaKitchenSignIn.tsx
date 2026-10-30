@@ -82,8 +82,15 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
 
     try {
       const { authService } = await import('../../services/api/authService');
+      const { preferencesStore } = await import('../../services/preferencesStore');
       await authService.signIn({ email: email.trim(), password });
-      navigation.replace('MakeItYours');
+      await preferencesStore.initFromDb();
+      const pass = preferencesStore.getKitchenPass();
+      if (pass.hasCompletedOnboarding) {
+        navigation.replace('YourDailyEdit');
+      } else {
+        navigation.replace('MakeItYours');
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to sign in. Please try again.');
       triggerErrorShake();

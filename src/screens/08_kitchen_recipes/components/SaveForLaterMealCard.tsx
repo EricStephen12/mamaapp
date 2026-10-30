@@ -11,18 +11,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
 
-const FRITTATA_IMAGE =
-  'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=400&q=80';
-
 interface SaveForLaterMealCardProps {
+  title?: string;
+  subtitle?: string;
+  image?: string;
   onSave?: () => void;
 }
 
 export const SaveForLaterMealCard: React.FC<SaveForLaterMealCardProps> = ({
+  title,
+  subtitle,
+  image,
   onSave,
 }) => {
   const [saved, setSaved] = useState(false);
   const scale = useRef(new Animated.Value(1)).current;
+
+  if (!title) return null;
 
   const handlePressIn = () => {
     Animated.spring(scale, {
@@ -51,23 +56,22 @@ export const SaveForLaterMealCard: React.FC<SaveForLaterMealCardProps> = ({
 
       {/* Meal Info Row */}
       <View style={styles.mealRow}>
-        <Image
-          source={{ uri: FRITTATA_IMAGE }}
-          style={styles.thumbnail}
-          resizeMode="cover"
-        />
+        {image ? (
+          <Image
+            source={{ uri: image }}
+            style={styles.thumbnail}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.thumbnail, styles.thumbnailPlaceholder]} />
+        )}
         <View style={styles.mealInfo}>
-          <Text style={styles.mealTitle}>Tomato & onion rice frittata</Text>
-          <Text style={styles.mealSubtitle}>
-            30 min · 2 servings · $1.70 est. / serving
-          </Text>
+          <Text style={styles.mealTitle}>{title}</Text>
+          {subtitle ? (
+            <Text style={styles.mealSubtitle}>{subtitle}</Text>
+          ) : null}
         </View>
       </View>
-
-      {/* Supporting Copy */}
-      <Text style={styles.supportingCopy}>
-        Another way to use your confirmed eggs, tomatoes, rice, and pantry staples.
-      </Text>
 
       {/* Save to Collection Action Button */}
       <Animated.View style={[{ transform: [{ scale }] }]}>
@@ -114,6 +118,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: colors.border,
   },
+  thumbnailPlaceholder: {
+    backgroundColor: 'rgba(102, 112, 74, 0.08)',
+  },
   mealInfo: {
     flex: 1,
     gap: 8,
@@ -127,12 +134,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   mealSubtitle: {
-    fontSize: typography.fontSize.reassurance,
-    lineHeight: 17,
-    color: colors.text.secondary,
-    fontFamily: typography.fontFamily.regular,
-  },
-  supportingCopy: {
     fontSize: typography.fontSize.reassurance,
     lineHeight: 17,
     color: colors.text.secondary,

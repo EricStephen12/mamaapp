@@ -3,6 +3,8 @@
  * Persists the user's culinary DNA, kitchen equipment, country, currency, and weekly budget.
  */
 
+import { userPreferencesService } from './api/userPreferencesService';
+
 export interface SupportedCountry {
   id: string; // 'NG', 'GB', 'US', 'GH', 'KE', 'CA', 'EU', 'ZA', 'AU', 'custom'
   name: string;
@@ -149,14 +151,19 @@ export interface UserKitchenPass {
   passedDishes: string[];
 }
 
+function calculateRemainingDays(): number {
+  const day = new Date().getDay(); // 0 = Sunday, 1 = Monday...
+  return day === 0 ? 1 : 7 - day;
+}
+
 const DEFAULT_KITCHEN_PASS: UserKitchenPass = {
   country: 'NG',
   countryName: 'Nigeria',
   currencyCode: 'NGN',
   currencySymbol: '₦',
   weeklyBudget: 35000,
-  spentThisWeek: 11200,
-  remainingDaysInWeek: 4,
+  spentThisWeek: 0,
+  remainingDaysInWeek: calculateRemainingDays(),
   cuisineAnchor: 'african_caribbean',
   cuisineLabel: 'African & Caribbean Comfort',
   cookingGear: 'one_pan',
@@ -239,12 +246,30 @@ export const preferencesStore = {
     return currentKitchenPass;
   },
 
+  async initFromDb(): Promise<void> {
+    try {
+      const dbPrefs = await userPreferencesService.fetchFromDb();
+      if (dbPrefs) {
+        currentKitchenPass = {
+          ...currentKitchenPass,
+          ...dbPrefs,
+          remainingDaysInWeek: calculateRemainingDays(),
+        };
+        listeners.forEach((listener) => listener(currentKitchenPass));
+      }
+    } catch {
+      // offline / fallback
+    }
+  },
+
   updateKitchenPass(updates: Partial<UserKitchenPass>): UserKitchenPass {
     currentKitchenPass = {
       ...currentKitchenPass,
       ...updates,
     };
     listeners.forEach((listener) => listener(currentKitchenPass));
+    // Persist to Neon DB asynchronously (fire-and-forget)
+    userPreferencesService.syncToDb(currentKitchenPass);
     return currentKitchenPass;
   },
 
@@ -263,8 +288,8 @@ export const preferencesStore = {
 
     const defaultBudget = foundCountry ? foundCountry.defaultWeeklyBudget : 85;
     const weeklyBudget = customWeeklyBudget ?? defaultBudget;
-    // Scale spent proportionally or reset to 25% of new budget
-    const spentThisWeek = Math.round(weeklyBudget * 0.32);
+    // Preserve actual logged spend, never fabricate a mock spend
+    const spentThisWeek = currentKitchenPass.spentThisWeek || 0;
 
     return this.updateKitchenPass({
       country: countryId,

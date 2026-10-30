@@ -41,25 +41,39 @@ export interface DailyEditPayload {
   makeNowMeal: {
     id: string;
     title: string;
+    subtitle?: string;
     timeMinutes: number;
+    cookTimeMinutes?: number;
     ingredientsCount: number;
     description: string;
+    estimatedCost?: number;
     imagePrompt: string;
+    imageUrl?: string;
     tags: string[];
+    steps?: string[];
+    ingredients?: { name: string; amount: string }[];
   };
-  tonightDinner: {
+  tonightDinner?: {
     id: string;
     title: string;
+    subtitle?: string;
     timeMinutes: number;
+    cookTimeMinutes?: number;
     description: string;
+    estimatedCost?: number;
     imagePrompt: string;
+    imageUrl?: string;
+    tags?: string[];
+    steps?: string[];
+    ingredients?: { name: string; amount: string }[];
   };
-  eatingOutRecommendation: {
+  eatingOutRecommendation?: {
     spotName: string;
     dishName: string;
     distance: string;
     price: string;
     vibe: string;
+    estimatedCost?: number;
   };
 }
 
@@ -126,71 +140,226 @@ Always output valid JSON strictly matching:
 
   /**
    * Generate curated Daily Edit options based on what's currently in the kitchen
+   * Acts as the client's culinary advisor: 1 Winner + 1 Alternative
    */
   static async generateDailyEdit(
     pantryItems: string[],
     pass?: {
+      country?: string;
+      countryName?: string;
+      currencyCode?: string;
+      currencySymbol?: string;
+      weeklyBudget?: number;
       cuisineAnchor?: string;
+      cuisineLabel?: string;
       cookingGear?: string;
+      cookingGearLabel?: string;
       timeLimitMinutes?: number;
+      stapleBase?: string;
       spiceLevel?: string;
+      dietaryRestrictions?: string[];
     }
   ): Promise<DailyEditPayload> {
-    const cuisine = pass?.cuisineAnchor || 'African & Caribbean comfort';
-    const gear = pass?.cookingGear || '1 pan on a single burner';
+    const cuisine = pass?.cuisineLabel || pass?.cuisineAnchor || 'African & Caribbean comfort';
+    const gear = pass?.cookingGearLabel || pass?.cookingGear || '1 pan on a single burner';
     const maxTime = pass?.timeLimitMinutes || 12;
-    const spice = pass?.spiceLevel || 'warm kick';
+    const country = pass?.countryName || 'Nigeria';
+    const currency = pass?.currencySymbol || '₦';
+    const isAfrican = pass?.country === 'NG' || pass?.cuisineAnchor === 'african_caribbean' || !pass?.cuisineAnchor;
+    const isAsian = pass?.cuisineAnchor === 'asian_comfort';
 
-    const fallback: DailyEditPayload = {
-      curatorNote: "Long day? Don't stress. A warm 1-pan dinner with eggs and rice will set you right.",
-      makeNowMeal: {
-        id: 'make-now-1',
-        title: 'Sizzled Pepper Egg & Onion Rice',
-        timeMinutes: 9,
-        ingredientsCount: 4,
-        description: 'Crisped eggs folded into warm rice with fragrant caramelized onions and gentle chili warmth.',
-        imagePrompt: 'Top-down editorial culinary photograph of golden crispy fried eggs and caramelized onions over steamed rice in a shallow earthenware bowl, natural warm lighting, cinematic food photography.',
-        tags: ['1-Pan', '9 Minutes', 'Comfort'],
-      },
-      tonightDinner: {
-        id: 'tonight-1',
-        title: 'Spiced Tomato & Pepper Egg Skillet',
-        timeMinutes: 12,
-        description: 'Rich slow-simmered tomato and pepper sauce with velvety eggs, perfect for dipping warm crusty bread.',
-        imagePrompt: 'Close up editorial photograph of savory red tomato and bell pepper stew with soft poached eggs in a cast iron skillet, chopped parsley, warm rustic bread on the side.',
-      },
-      eatingOutRecommendation: {
-        spotName: 'Koyo Izakaya & Bowls',
-        dishName: 'Smoked Garlic Paitan Ramen',
-        distance: '0.4 mi away',
-        price: '$$',
-        vibe: 'Warm timber counter, zero wait',
-      },
-    };
+    const fallback: DailyEditPayload = isAfrican
+      ? {
+          curatorNote: "Long day? Don't stress. A warm 1-pan dinner with plantains and eggs will set you right.",
+          makeNowMeal: {
+            id: 'make-now-af',
+            title: 'Sizzled Pepper Eggs & Golden Plantains',
+            subtitle: 'Sweet fried dodo paired with loose curds of scotch bonnet peppered eggs.',
+            timeMinutes: 9,
+            cookTimeMinutes: 9,
+            ingredientsCount: 4,
+            description: 'Crisped golden plantains folded alongside loose curds of peppered eggs with gentle ata rodo warmth.',
+            estimatedCost: 1.8,
+            imagePrompt: 'Top-down editorial culinary photograph of golden fried ripe plantain slices and soft scrambled eggs with chopped tomatoes and peppers in a shallow terracotta bowl, warm lighting.',
+            tags: ['1-Pan', '9 Minutes', 'Comfort'],
+            steps: [
+              'Slice ripe plantains into bite-sized rounds.',
+              'Shallow-fry plantains in a hot skillet until caramelized and golden (4 mins).',
+              'Whisk 2 eggs with a pinch of salt and diced pepper; pour into the pan beside plantains and fold gently for 2 minutes.',
+              'Slide onto a plate and enjoy steaming hot.',
+            ],
+            ingredients: [
+              { name: 'Ripe Plantain', amount: '1 medium' },
+              { name: 'Eggs', amount: '2 large' },
+              { name: 'Scotch Bonnet / Pepper', amount: '1 small diced' },
+              { name: 'Vegetable Oil', amount: '2 tbsp' },
+            ],
+          },
+          tonightDinner: {
+            id: 'tonight-af',
+            title: 'Smoky Tomato & Pepper Egg Skillet Rice',
+            subtitle: 'Quick 1-pan jollof-scented rice with runny poached eggs.',
+            timeMinutes: 14,
+            cookTimeMinutes: 14,
+            description: 'Rich slow-simmered tomato and pepper base stirred into warm rice with runny eggs folded in at the end.',
+            estimatedCost: 2.2,
+            imagePrompt: 'Culinary editorial photograph of savory red tomato and pepper rice with soft fried eggs in a cast iron pan, chopped fresh herbs, warm ambient lighting.',
+            tags: ['Rich Flavor', '14 Minutes'],
+            steps: [
+              'Sauté sliced onions and tomato paste in 1 tbsp oil until fragrant (3 mins).',
+              'Stir in cooked rice, pinch of curry and thyme, and splash of water until deeply coated.',
+              'Create two wells, crack eggs directly inside, cover pan for 3 minutes until whites are set.',
+            ],
+            ingredients: [
+              { name: 'Cooked Rice', amount: '1.5 cups' },
+              { name: 'Tomato Paste', amount: '2 tbsp' },
+              { name: 'Eggs', amount: '2' },
+              { name: 'Onion & Pepper', amount: '1/2 diced' },
+            ],
+          },
+        }
+      : isAsian
+      ? {
+          curatorNote: "Tired evening? Sizzling garlic, eggs, and warm rice cure everything.",
+          makeNowMeal: {
+            id: 'make-now-as',
+            title: 'Crispy Garlic Fried Egg Rice',
+            subtitle: 'Golden sizzled egg over warm rice with sesame and scallions.',
+            timeMinutes: 7,
+            cookTimeMinutes: 7,
+            ingredientsCount: 4,
+            description: 'Fragrant garlic sizzled in sesame oil with golden fried eggs over warm jasmine rice.',
+            estimatedCost: 1.6,
+            imagePrompt: 'Top-down editorial culinary photograph of golden crispy fried eggs over steamed jasmine rice with sliced scallions and toasted sesame seeds, dark ceramic bowl.',
+            tags: ['1-Pan', '7 Minutes', 'Pantry Staple'],
+            steps: [
+              'Crisp minced garlic in sesame oil until fragrant (1 min).',
+              'Add warm rice, toss to coat in hot oil.',
+              'Crack egg in the center, cover for 2 minutes and serve.',
+            ],
+            ingredients: [
+              { name: 'Cooked Rice', amount: '1.5 cups' },
+              { name: 'Eggs', amount: '2' },
+              { name: 'Garlic & Scallions', amount: '2 cloves, 1 stalk' },
+              { name: 'Soy Sauce & Sesame Oil', amount: '1 tbsp each' },
+            ],
+          },
+          tonightDinner: {
+            id: 'tonight-as',
+            title: 'Sweet Soy & Ginger Scallion Noodles',
+            subtitle: 'Fast 1-pan saucy noodles with fried egg topping.',
+            timeMinutes: 10,
+            cookTimeMinutes: 10,
+            description: 'Chewy noodles tossed in dark soy sauce, fresh ginger, and topped with a crispy-edged fried egg.',
+            estimatedCost: 2.0,
+            imagePrompt: 'Editorial photograph of glossy sauced noodles with sliced spring onions and a fried egg with runny yolk in a matte black ceramic bowl.',
+            tags: ['Comfort', '10 Minutes'],
+            steps: [
+              'Boil noodles for 3 minutes; drain.',
+              'In hot skillet, fry sliced ginger and scallions in oil for 1 min, add soy sauce and sugar.',
+              'Toss noodles in sauce and top with a fried egg.',
+            ],
+            ingredients: [
+              { name: 'Noodles', amount: '1 pack' },
+              { name: 'Egg', amount: '1 large' },
+              { name: 'Soy Sauce', amount: '1.5 tbsp' },
+              { name: 'Ginger & Scallions', amount: '1 tbsp' },
+            ],
+          },
+        }
+      : {
+          curatorNote: "Long day? Don't stress. A warm 1-pan dinner will set you right.",
+          makeNowMeal: {
+            id: 'make-now-std',
+            title: 'Melted Cheddar & Herb Soft Scramble',
+            subtitle: 'Velvety eggs with sharp cheddar over toasted sourdough.',
+            timeMinutes: 8,
+            cookTimeMinutes: 8,
+            ingredientsCount: 4,
+            description: 'Soft, creamy scrambled eggs folded with aged cheddar over golden butter-toasted bread.',
+            estimatedCost: 1.7,
+            imagePrompt: 'Close up editorial photograph of golden buttery scrambled eggs with melted cheddar on toasted crusty sourdough bread on a rustic wooden board.',
+            tags: ['1-Pan', '8 Minutes', 'Comfort'],
+            steps: [
+              'Butter bread and toast in hot skillet until golden (2 mins); transfer to plate.',
+              'Lower heat, pour in whisked eggs with a knob of butter, gently folding into loose curds (2 mins).',
+              'Fold in shredded cheddar, remove from heat, and spoon over toast.',
+            ],
+            ingredients: [
+              { name: 'Eggs', amount: '3 large' },
+              { name: 'Cheddar Cheese', amount: '30g shredded' },
+              { name: 'Crusty Bread', amount: '2 slices' },
+              { name: 'Butter', amount: '1 tbsp' },
+            ],
+          },
+          tonightDinner: {
+            id: 'tonight-std',
+            title: 'Garlic Butter & Parmesan Skillet Pasta',
+            subtitle: 'Silky 1-pan pasta with toasted garlic and cracked pepper.',
+            timeMinutes: 12,
+            cookTimeMinutes: 12,
+            description: 'Tender pasta tossed in sizzled garlic butter with plenty of parmesan and fresh black pepper.',
+            estimatedCost: 2.2,
+            imagePrompt: 'Top-down culinary photograph of glossy spaghetti with golden garlic chips, grated parmesan, and cracked black pepper in a shallow bowl.',
+            tags: ['1-Pan', '12 Minutes'],
+            steps: [
+              'Cook pasta in salted water until al dente.',
+              'In a skillet, gently sizzle sliced garlic in butter and olive oil until fragrant.',
+              'Toss drained pasta directly into the garlic butter with parmesan and black pepper.',
+            ],
+            ingredients: [
+              { name: 'Pasta', amount: '150g' },
+              { name: 'Garlic', amount: '3 cloves' },
+              { name: 'Butter & Olive Oil', amount: '1 tbsp each' },
+              { name: 'Parmesan', amount: '30g grated' },
+            ],
+          },
+        };
 
-    const systemPrompt = `You are Mama's head culinary editor.
-Generate today's curated daily edit for an exhausted bachelor/worker.
-Strict constraints:
-- User's cultural palate: ${cuisine}
-- Available cooking gear: ${gear} (NEVER suggest oven if 1-pan)
-- Hard cook time limit: under ${maxTime} minutes!
-- Spice level: ${spice}
-- Max ingredients: 3-5 pantry staples
-Tone: Warm, calm, reassuring, zero robotic jargon.
-Include:
-1. curatorNote (1 short reassuring sentence)
-2. makeNowMeal (fastest comfort meal under ${maxTime} min, 1 pan)
-3. tonightDinner (satisfying alternative)
-4. eatingOutRecommendation (nearby calm comfort spot when too exhausted to cook)
+    const systemPrompt = `You are Mama, a top-tier personal culinary advisor.
+Your job is not to show 40 recipe links, but to DECIDE FOR THE USER by eliminating noise and presenting:
+1. "makeNowMeal" (The One Winner): The fastest, most satisfying home-cooked dinner matching their culinary brief.
+2. "tonightDinner" (The One Alternative): A smart, comforting backup option that also respects the brief.
+
+User's Brief:
+- Location & Currency: ${country} (${currency})
+- Flavor & Cultural Style: ${cuisine}
+- Available Kitchen Gear: ${gear} (NEVER suggest oven if 1-pan)
+- Hard Cook Time Limit: under ${maxTime} minutes!
+- Available Ingredients: ${pantryItems.join(', ')}
+
+Tone: Warm, calm, decisive, reassuring.
 Output strictly as JSON matching:
 {
   "curatorNote": string,
-  "makeNowMeal": { "id": string, "title": string, "timeMinutes": number, "ingredientsCount": number, "description": string, "imagePrompt": string, "tags": string[] },
-  "tonightDinner": { "id": string, "title": string, "timeMinutes": number, "description": string, "imagePrompt": string },
-  "eatingOutRecommendation": { "spotName": string, "dishName": string, "distance": string, "price": string, "vibe": string }
+  "makeNowMeal": {
+    "id": string,
+    "title": string,
+    "subtitle": string,
+    "timeMinutes": number,
+    "ingredientsCount": number,
+    "description": string,
+    "estimatedCost": number,
+    "imagePrompt": string,
+    "tags": string[],
+    "steps": string[],
+    "ingredients": [{ "name": string, "amount": string }]
+  },
+  "tonightDinner": {
+    "id": string,
+    "title": string,
+    "subtitle": string,
+    "timeMinutes": number,
+    "description": string,
+    "estimatedCost": number,
+    "imagePrompt": string,
+    "tags": string[],
+    "steps": string[],
+    "ingredients": [{ "name": string, "amount": string }]
+  }
 }`;
 
-    const userPrompt = `Pantry items available: ${pantryItems.join(', ')}.`;
+    const userPrompt = `Pantry items available: ${pantryItems.join(', ')}. Produce the winner and alternative.`;
 
     return this.executeStructuredPrompt<DailyEditPayload>(systemPrompt, userPrompt, fallback);
   }

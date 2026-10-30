@@ -19,10 +19,10 @@ export type RootStackParamList = {
   WhatsInYourKitchen: undefined;
 
   // 07 - Pantry Review Group
-  ConfirmYourPantry: undefined;
+  ConfirmYourPantry: { items?: string[] } | undefined;
 
   // 08 - Kitchen Recipes Group
-  AlreadyInYourKitchen: undefined;
+  AlreadyInYourKitchen: { items?: string[] } | undefined;
 
   // 09 - Meal Details Group
   AtHomeMealDetails:

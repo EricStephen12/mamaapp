@@ -17,22 +17,25 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { MamaCharacter } from '../../components/common/MamaCharacter';
 import { TactileToast } from '../../components/common/TactileToast';
-import { preferencesStore, convertMealCost } from '../../services/preferencesStore';
+import { preferencesStore } from '../../services/preferencesStore';
+import { savedMealsService } from '../../services/api/savedMealsService';
+import { decisionsService } from '../../services/api/decisionsService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EatingOutMealDetails'>;
 
 export const EatingOutMealDetails: React.FC<Props> = ({ navigation, route }) => {
   const params = route.params || {};
-  const pass = preferencesStore.getKitchenPass();
 
-  const dishName = params.dishName || 'Smoked Garlic Paitan Ramen';
-  const spotName = params.spotName || 'Koyo Izakaya & Bowls';
-  const distance = params.distance || '0.4 mi away';
-  const price = params.price || convertMealCost(14, pass.currencyCode, pass.currencySymbol);
-  const vibe = params.vibe || 'Warm timber counter, zero wait';
-  const image =
-    params.image ||
-    'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=800&q=80';
+  const dishName = params.dishName || '';
+  const spotName = params.spotName || '';
+  const distance = params.distance || '';
+  const price = params.price || '';
+  const vibe = params.vibe || '';
+  // Use API-provided image only — never fall back to a hardcoded third-party URL
+  const image = params.image || undefined;
+  const slug = dishName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'dish';
+  const spotSlug = spotName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'spot';
+  const mealId = `takeout-${spotSlug}-${slug}`;
 
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -46,10 +49,12 @@ export const EatingOutMealDetails: React.FC<Props> = ({ navigation, route }) => 
       Animated.timing(contentFade, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.timing(contentY, { toValue: 0, duration: 400, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [contentFade, contentY]);
 
   const handleChooseForToday = () => {
     preferencesStore.recordMealDecision(dishName, 'cooked', 14);
+    decisionsService.log(mealId, `${spotName} · ${dishName}`, 'cooked', 14);
+
     setToastMessage(`Mama: "Enjoy your dinner at ${spotName}! Rest your feet."`);
     setTimeout(() => {
       navigation.navigate('YourDailyEdit');
@@ -59,7 +64,23 @@ export const EatingOutMealDetails: React.FC<Props> = ({ navigation, route }) => 
   const handleSaveToggle = () => {
     const nextState = !isBookmarked;
     setIsBookmarked(nextState);
-    setToastMessage(nextState ? 'Saved spot to your collection!' : 'Removed from collection');
+    if (nextState) {
+      savedMealsService.saveMeal({
+        mealId,
+        title: dishName,
+        type: 'eating_out',
+        cookTime: distance,
+        cost: price,
+        costNumeric: 14,
+        imageUrl: image,
+        spotName,
+        vibe,
+      });
+      setToastMessage('Saved spot to your collection!');
+    } else {
+      savedMealsService.removeMeal(mealId);
+      setToastMessage('Removed from collection');
+    }
   };
 
   return (
@@ -97,7 +118,13 @@ export const EatingOutMealDetails: React.FC<Props> = ({ navigation, route }) => 
         <Animated.View style={[styles.container, { opacity: contentFade, transform: [{ translateY: contentY }] }]}>
           {/* Hero Image */}
           <View style={styles.heroWrap}>
-            <Image source={{ uri: image }} style={styles.heroImage} resizeMode="cover" />
+            {image ? (
+              <Image source={{ uri: image }} style={styles.heroImage} resizeMode="cover" />
+            ) : (
+              <View style={styles.placeholderHero}>
+                <Ionicons name="restaurant-outline" size={48} color={colors.primary} />
+              </View>
+            )}
             <View style={styles.distanceTag}>
               <Ionicons name="location-outline" size={12} color={colors.primary} />
               <Text style={styles.distanceTagText}>{distance}</Text>
@@ -212,6 +239,13 @@ const styles = StyleSheet.create({
   heroImage: {
     width: '100%',
     height: '100%',
+  },
+  placeholderHero: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.sand,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   distanceTag: {
     position: 'absolute',

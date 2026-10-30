@@ -1,13 +1,15 @@
 import { Router, Request, Response } from 'express';
-import { GroqService } from '../services/groq.service.js';
-import { ImageService } from '../services/image.service.js';
 import { prisma } from '../db/prisma.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
+
+// Note: /api/health, /api/daily-edit, /api/kitchen/analyze, /api/recipes/generate,
+// and /api/images/generate are public routes defined in server/src/index.ts
+// (no auth required for AI generation endpoints).
 
 export const apiRouter = Router();
 
 /**
- * Helper to identify the active user (authenticated or active default session)
+ * Helper to identify the authenticated user from the JWT
  */
 async function getTargetUser(req: Request) {
   const userId = (req as AuthRequest).userId;
@@ -18,9 +20,8 @@ async function getTargetUser(req: Request) {
     });
     if (user) return user;
   }
-  let defaultUser = await prisma.user.findFirst({
-    include: { tasteProfile: true },
-  });
+  // Fallback: first user in DB (dev mode only)
+  let defaultUser = await prisma.user.findFirst({ include: { tasteProfile: true } });
   if (!defaultUser) {
     defaultUser = await prisma.user.create({
       data: {
@@ -37,113 +38,6 @@ async function getTargetUser(req: Request) {
   }
   return defaultUser;
 }
-
-/**
- * Health Check & Status
- */
-apiRouter.get('/health', (_req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    groqConfigured: !!process.env.GROQ_API_KEY,
-    cloudflareConfigured: !!(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN),
-    dbConfigured: !!process.env.DATABASE_URL,
-    providers: {
-      llm: 'Groq (openai/gpt-oss-120b)',
-      images: process.env.CLOUDFLARE_ACCOUNT_ID ? 'Cloudflare Workers AI (FLUX.1)' : 'Curated Michelin CDN',
-    },
-  });
-});
-
-/**
- * Analyze ingredients currently in the kitchen/pantry
- * POST /api/kitchen/analyze
- */
-apiRouter.post('/kitchen/analyze', async (req: Request, res: Response) => {
-  try {
-    const items = (req.body?.items as string[]) || [];
-    if (!items || items.length === 0) {
-      res.status(400).json({ error: 'Please provide a non-empty array of items.' });
-      return;
-    }
-
-    const analysis = await GroqService.analyzePantry(items);
-    res.json(analysis);
-  } catch (error) {
-    console.error('[API] /kitchen/analyze error:', error);
-    res.status(500).json({ error: 'Failed to analyze pantry ingredients' });
-  }
-});
-
-/**
- * Generate Curated Daily Edit for the user's home screen
- * POST /api/daily-edit
- */
-apiRouter.post('/daily-edit', async (req: Request, res: Response) => {
-  try {
-    const pantryItems = (req.body?.pantryItems as string[]) || ['Eggs', 'Tomatoes', 'Rice', 'Scallions'];
-    const kitchenPass = req.body?.kitchenPass;
-
-    const dailyEdit = await GroqService.generateDailyEdit(pantryItems, kitchenPass);
-
-    if (dailyEdit.makeNowMeal?.imagePrompt) {
-      const imgResult = await ImageService.generateFoodImage(dailyEdit.makeNowMeal.imagePrompt, 'rice');
-      // @ts-expect-error adding generated image url to response
-      dailyEdit.makeNowMeal.imageUrl = imgResult.imageUrl;
-    }
-
-    res.json(dailyEdit);
-  } catch (error) {
-    console.error('[API] /daily-edit error:', error);
-    res.status(500).json({ error: 'Failed to generate daily edit' });
-  }
-});
-
-/**
- * Generate a complete recipe on demand
- * POST /api/recipes/generate
- */
-apiRouter.post('/recipes/generate', async (req: Request, res: Response) => {
-  try {
-    const ingredients = (req.body?.availableIngredients as string[]) || ['Eggs', 'Tomatoes', 'Rice'];
-    const title = req.body?.titleSuggestion as string | undefined;
-
-    const recipe = await GroqService.generateRecipe(ingredients, title);
-
-    if (recipe.imagePrompt) {
-      const imageResult = await ImageService.generateFoodImage(recipe.imagePrompt);
-      // @ts-expect-error adding generated image url
-      recipe.imageUrl = imageResult.imageUrl;
-    }
-
-    res.json(recipe);
-  } catch (error) {
-    console.error('[API] /recipes/generate error:', error);
-    res.status(500).json({ error: 'Failed to generate recipe' });
-  }
-});
-
-/**
- * Cloudflare Workers AI / Fal Image Generation
- * POST /api/images/generate
- */
-apiRouter.post('/images/generate', async (req: Request, res: Response) => {
-  try {
-    const prompt = req.body?.prompt as string;
-    const mealType = req.body?.mealType as string;
-
-    if (!prompt) {
-      res.status(400).json({ error: 'Prompt is required' });
-      return;
-    }
-
-    const result = await ImageService.generateFoodImage(prompt, mealType);
-    res.json(result);
-  } catch (error) {
-    console.error('[API] /images/generate error:', error);
-    res.status(500).json({ error: 'Failed to generate image' });
-  }
-});
 
 /**
  * User Profile & Preferences
@@ -293,7 +187,7 @@ apiRouter.post('/saved-meals', async (req: Request, res: Response) => {
         cookTime,
         cost,
         costNumeric: Number(costNumeric) || 2.5,
-        imageUrl: imageUrl || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        imageUrl: imageUrl || null,
         recipeSteps: Array.isArray(recipeSteps) ? recipeSteps : [],
         ingredients: ingredients ? (typeof ingredients === 'string' ? JSON.parse(ingredients) : ingredients) : undefined,
         spotName: spotName || null,

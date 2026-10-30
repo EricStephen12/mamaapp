@@ -61,7 +61,7 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
     ]).start(() => {
       setTimeout(() => {
         setIsScanning(false);
-        navigation.navigate('ConfirmYourPantry');
+        navigation.navigate('ConfirmYourPantry', { items: selectedQuickItems });
       }, 300);
     });
   };

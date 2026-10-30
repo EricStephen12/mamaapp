@@ -4,12 +4,18 @@ import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
 
 interface ConfirmedPantrySummaryCardProps {
+  items?: string[];
   onEditPantry?: () => void;
 }
 
 export const ConfirmedPantrySummaryCard: React.FC<
   ConfirmedPantrySummaryCardProps
-> = ({ onEditPantry }) => {
+> = ({ items, onEditPantry }) => {
+  const summaryCopy =
+    items && items.length > 0
+      ? `${items.join(' · ')}\nBasic seasonings & cooking oil confirmed. Zero shopping required.`
+      : `Tomatoes · Eggs · Rice · Onions\nOlive oil, salt & pepper confirmed. No extra groceries required.`;
+
   return (
     <View style={styles.container}>
       {/* Header Row */}
@@ -21,9 +27,7 @@ export const ConfirmedPantrySummaryCard: React.FC<
       </View>
 
       {/* Summary Copy */}
-      <Text style={styles.summaryText}>
-        {`4 tomatoes · 4 eggs · 200g dry rice · 2 onions\nOlive oil, salt & cumin confirmed. No pepper assumed.`}
-      </Text>
+      <Text style={styles.summaryText}>{summaryCopy}</Text>
     </View>
   );
 };

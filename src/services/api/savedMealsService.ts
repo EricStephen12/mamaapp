@@ -13,7 +13,7 @@ export interface ApiSavedMeal {
   cookTime: string;
   cost: string;
   costNumeric: number;
-  imageUrl: string;
+  imageUrl?: string | null;
   recipeSteps: string[];
   ingredients?: { name: string; amount: string }[] | null;
   spotName?: string | null;
@@ -28,7 +28,7 @@ export interface SaveMealPayload {
   cookTime: string;
   cost: string;
   costNumeric: number;
-  imageUrl: string;
+  imageUrl?: string | null;
   recipeSteps?: string[];
   ingredients?: { name: string; amount: string }[];
   spotName?: string;

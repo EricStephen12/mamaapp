@@ -6,29 +6,46 @@ import { typography } from '../../../theme/typography';
 
 interface WeeklyBudgetCardProps {
   amount?: number;
+  currencySymbol?: string;
+  currencyCode?: string;
   period?: string;
   onAmountChange?: (amount: number) => void;
 }
 
-const BUDGET_PRESETS = [
-  { val: 65, label: 'Light' },
-  { val: 85, label: 'Balanced' },
-  { val: 110, label: 'Generous' },
-  { val: 140, label: 'Gourmet' },
-];
-
 export const WeeklyBudgetCard: React.FC<WeeklyBudgetCardProps> = ({
   amount = 85,
-  period = 'USD / week',
+  currencySymbol = '$',
+  currencyCode = 'USD',
+  period = 'per week',
   onAmountChange,
 }) => {
   const [currentAmount, setCurrentAmount] = useState(amount);
+  const [prevAmount, setPrevAmount] = useState(amount);
+
+  if (prevAmount !== amount) {
+    setPrevAmount(amount);
+    setCurrentAmount(amount);
+  }
+
+  const step = currentAmount >= 5000 ? 1000 : currentAmount >= 1000 ? 250 : 5;
+  const minVal = currentAmount >= 5000 ? 5000 : 15;
+  const maxVal = currentAmount >= 5000 ? 500000 : 2000;
 
   const handleDelta = (delta: number) => {
-    const next = Math.max(30, Math.min(300, currentAmount + delta));
+    const next = Math.max(minVal, Math.min(maxVal, currentAmount + delta * step));
     setCurrentAmount(next);
     onAmountChange?.(next);
   };
+
+  const presets = [
+    { multiplier: 0.75, label: 'Light' },
+    { multiplier: 1.0, label: 'Balanced' },
+    { multiplier: 1.3, label: 'Generous' },
+    { multiplier: 1.65, label: 'Gourmet' },
+  ].map((p) => {
+    const val = Math.round((amount * p.multiplier) / (amount >= 1000 ? 500 : 5)) * (amount >= 1000 ? 500 : 5);
+    return { val: Math.max(minVal, val), label: p.label };
+  });
 
   const handleSelectPreset = (val: number) => {
     setCurrentAmount(val);
@@ -41,15 +58,17 @@ export const WeeklyBudgetCard: React.FC<WeeklyBudgetCardProps> = ({
 
       <View style={styles.amountRow}>
         <View style={styles.amountBlock}>
-          <Text style={styles.amount}>${currentAmount}</Text>
-          <Text style={styles.period}>{period}</Text>
+          <Text style={styles.amount}>
+            {currencySymbol}{currentAmount.toLocaleString()}
+          </Text>
+          <Text style={styles.period}>{currencyCode} · {period}</Text>
         </View>
 
         {/* Tactile Adjuster Steppers */}
         <View style={styles.stepperContainer}>
           <TouchableOpacity
             style={styles.stepperButton}
-            onPress={() => handleDelta(-5)}
+            onPress={() => handleDelta(-1)}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
@@ -57,7 +76,7 @@ export const WeeklyBudgetCard: React.FC<WeeklyBudgetCardProps> = ({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.stepperButton}
-            onPress={() => handleDelta(5)}
+            onPress={() => handleDelta(1)}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
@@ -67,43 +86,33 @@ export const WeeklyBudgetCard: React.FC<WeeklyBudgetCardProps> = ({
       </View>
 
       {/* Preset Budget Chips */}
-      <View style={styles.presetsRow}>
-        {BUDGET_PRESETS.map((p) => {
-          const isSelected = currentAmount === p.val;
+      <View style={styles.presetRow}>
+        {presets.map((p) => {
+          const isSelected = Math.abs(currentAmount - p.val) < (amount >= 1000 ? 250 : 3);
           return (
             <TouchableOpacity
-              key={p.val}
-              style={[
-                styles.presetChip,
-                isSelected && styles.presetChipActive,
-              ]}
+              key={p.label}
+              style={[styles.presetChip, isSelected && styles.presetChipSelected]}
               onPress={() => handleSelectPreset(p.val)}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.presetChipText,
-                  isSelected && styles.presetChipTextActive,
+                  isSelected && styles.presetChipTextSelected,
                 ]}
               >
-                ${p.val} · {p.label}
+                {p.label} ({currencySymbol}{p.val.toLocaleString()})
               </Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
-      <View style={styles.divider} />
-
-      <View style={styles.scopeRow}>
-        <Ionicons
-          name="calendar-outline"
-          size={16}
-          color={colors.primary}
-          style={styles.calendarIcon}
-        />
-        <Text style={styles.supportingCopy}>
-          For one person · groceries + eating out{'\n'}Resets every Monday
+      <View style={styles.tipBlock}>
+        <Ionicons name="information-circle-outline" size={14} color={colors.primary} />
+        <Text style={styles.tipText}>
+          Mama balances smart home cooking and treats within this target.
         </Text>
       </View>
     </View>
@@ -112,114 +121,104 @@ export const WeeklyBudgetCard: React.FC<WeeklyBudgetCardProps> = ({
 
 const styles = StyleSheet.create({
   card: {
+    backgroundColor: colors.surface,
     borderRadius: 20,
-    backgroundColor: colors.snow100,
     borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
-    paddingHorizontal: 22,
-    paddingVertical: 20,
-    gap: 14,
-    width: '100%',
-    shadowColor: colors.text.primary,
+    borderColor: 'rgba(235, 230, 222, 0.85)',
+    padding: 20,
+    gap: 16,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 2,
   },
   eyebrow: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: '500',
-    color: colors.text.secondary,
+    fontSize: 10,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    color: colors.primary,
+    fontWeight: '700',
   },
   amountRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   amountBlock: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 10,
+    gap: 2,
   },
   amount: {
-    fontSize: 54,
-    fontFamily: typography.fontFamily.serif,
+    fontSize: 28,
+    fontWeight: '800',
     color: colors.text.primary,
-    fontWeight: '400',
-    lineHeight: 60,
+    fontFamily: typography.fontFamily.serif,
   },
   period: {
     fontSize: 12,
-    color: colors.text.secondary,
-    fontWeight: '500',
+    color: colors.text.muted,
   },
   stepperContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.snow200,
-    borderRadius: 99,
-    padding: 3,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
+    gap: 8,
+    backgroundColor: colors.sand,
+    borderRadius: 14,
+    padding: 4,
   },
   stepperButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.white,
-    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
     alignItems: 'center',
-    shadowColor: colors.text.primary,
-    shadowOffset: { width: 0, height: 1 },
+    justifyContent: 'center',
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
-    shadowRadius: 2,
+    shadowRadius: 4,
     elevation: 1,
   },
-  presetsRow: {
+  presetRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
   },
   presetChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 99,
-    backgroundColor: colors.snow200,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: colors.sand,
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  presetChipActive: {
-    backgroundColor: colors.linen100,
+  presetChipSelected: {
+    backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
   presetChipText: {
-    fontSize: 11,
-    color: colors.text.secondary,
-    fontWeight: '500',
-  },
-  presetChipTextActive: {
-    color: colors.primary,
+    fontSize: 12,
     fontWeight: '600',
+    color: colors.text.secondary,
   },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    width: '100%',
+  presetChipTextSelected: {
+    color: colors.white,
+    fontWeight: '700',
   },
-  scopeRow: {
+  tipBlock: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    backgroundColor: 'rgba(217, 107, 74, 0.06)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
   },
-  calendarIcon: {
-    marginTop: 2,
-  },
-  supportingCopy: {
+  tipText: {
     flex: 1,
-    fontSize: typography.fontSize.reassurance,
-    lineHeight: 17,
+    fontSize: 12,
     color: colors.text.secondary,
+    lineHeight: 16,
   },
 });
 

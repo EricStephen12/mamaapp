@@ -54,43 +54,14 @@ export interface GeneratedRecipePayload {
 
 export const kitchenService = {
   /**
-   * Fetch today's curated daily edit recommendations from Groq
+   * Fetch today's curated daily edit recommendations from Groq AI.
+   * Throws on failure — callers should handle the error state themselves.
    */
-  async fetchDailyEdit(pantryItems: string[] = ['Eggs', 'Tomatoes', 'Rice']): Promise<GeneratedDailyEdit> {
-    try {
-      return await apiClient<GeneratedDailyEdit>('/api/daily-edit', {
-        method: 'POST',
-        body: JSON.stringify({ pantryItems }),
-      });
-    } catch {
-      // Offline fallback
-      return {
-        curatorNote: "Crisp evening. Let's make something comforting with the eggs and rice in your kitchen.",
-        makeNowMeal: {
-          id: 'make-now-1',
-          title: 'Warm Ginger & Scallion Fried Rice',
-          timeMinutes: 14,
-          ingredientsCount: 5,
-          description: 'Fragrant crisp rice folded with whipped eggs and sizzled scallions.',
-          imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
-          tags: ['Pantry Friendly', 'One-Pan'],
-        },
-        tonightDinner: {
-          id: 'tonight-1',
-          title: 'Silky Tomato Egg Rice Bowl',
-          timeMinutes: 18,
-          description: 'Slow-simmered vine tomatoes melted into soft curds over hot short-grain rice.',
-          imageUrl: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=800&q=80',
-        },
-        eatingOutRecommendation: {
-          spotName: 'Koyo Ramen & Izakaya',
-          dishName: 'Smoked Garlic Paitan',
-          distance: '0.6 mi away',
-          price: '$$',
-          vibe: 'Warm timber counter, quiet jazz',
-        },
-      };
-    }
+  async fetchDailyEdit(pantryItems: string[]): Promise<GeneratedDailyEdit> {
+    return apiClient<GeneratedDailyEdit>('/api/daily-edit', {
+      method: 'POST',
+      body: JSON.stringify({ pantryItems }),
+    });
   },
 
   /**

@@ -15,6 +15,8 @@ export const colors = {
   primary: '#66704A',
   secondary: '#727568',
   border: '#DAD8CC', // Gainsboro fine divider
+  sand: '#EDE6DA',
+  shadow: '#242820',
   white: '#FFFFFF',
 } as const;
 

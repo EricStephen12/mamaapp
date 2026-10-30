@@ -7,6 +7,9 @@ import { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { MamaKitchenLogo } from '../../components/common/MamaKitchenLogo';
 
+import { tokenStore } from '../../services/api/tokenStore';
+import { preferencesStore } from '../../services/preferencesStore';
+
 type Props = NativeStackScreenProps<RootStackParamList, 'MamaKitchenSplash'>;
 
 export const MamaKitchenSplash: React.FC<Props> = ({ navigation }) => {
@@ -28,9 +31,18 @@ export const MamaKitchenSplash: React.FC<Props> = ({ navigation }) => {
       }),
     ]).start();
 
-    // Smoothly advance to SignIn after displaying the full brand
+    // Route to appropriate screen based on session and onboarding status
     const advanceTimer = setTimeout(() => {
-      navigation.replace('MamaKitchenSignIn');
+      if (tokenStore.isLoggedIn()) {
+        const pass = preferencesStore.getKitchenPass();
+        if (pass.hasCompletedOnboarding) {
+          navigation.replace('YourDailyEdit');
+        } else {
+          navigation.replace('MakeItYours');
+        }
+      } else {
+        navigation.replace('MamaKitchenSignIn');
+      }
     }, 1800);
 
     return () => clearTimeout(advanceTimer);
