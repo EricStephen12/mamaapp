@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from './types';
 import { preferencesStore } from '../services/preferencesStore';
 import { userPreferencesService } from '../services/api/userPreferencesService';
+import { wakeBackendServer } from '../services/api/client';
 
 // Group 01 - Onboarding
 import { MamaKitchenSplash } from '../screens/01_onboarding';
@@ -13,8 +14,8 @@ import { MamaKitchenSignIn, MamaKitchenSignUp } from '../screens/02_auth';
 // Group 03 - Personalization & Preferences
 import { MakeItYours } from '../screens/03_preferences';
 
-// Group 04 - Daily Edit (Home Feed)
-import { YourDailyEdit } from '../screens/04_daily_edit';
+// Group 04 - Main Persistent Tabs Hub (Hosts Home, Kitchen, Discover, Saved with Fixed Liquid Tab Bar)
+import { MainTabsScreen } from './MainTabsScreen';
 
 // Group 05 - Discover
 import { DiscoverYourNextMeal } from '../screens/05_discover';
@@ -40,8 +41,9 @@ import { YourCollection } from '../screens/10_collection';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator: React.FC = () => {
-  // Hydrate preferencesStore from Neon DB on every app launch
+  // Hydrate preferencesStore from Neon DB on every app launch & pre-warm Render backend
   useEffect(() => {
+    wakeBackendServer();
     userPreferencesService.fetchFromDb().then((saved) => {
       if (saved) {
         preferencesStore.updateKitchenPass(saved as any);
@@ -81,10 +83,10 @@ export const RootNavigator: React.FC = () => {
         component={MakeItYours}
       />
 
-      {/* 04 - Daily Edit (Home Feed) Group - Primary Tab */}
+      {/* 04 - Daily Edit (Persistent Main Tabs Hub) */}
       <Stack.Screen
         name="YourDailyEdit"
-        component={YourDailyEdit}
+        component={MainTabsScreen}
         options={{ animation: 'fade' }}
       />
 

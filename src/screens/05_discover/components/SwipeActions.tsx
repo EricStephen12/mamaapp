@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
-import { typography } from '../../../theme/typography';
 
 interface SwipeActionsProps {
   onPass: () => void;
@@ -28,7 +27,8 @@ export const SwipeActions: React.FC<SwipeActionsProps> = ({
     Animated.spring(anim, {
       toValue: 0.95,
       useNativeDriver: true,
-      friction: 5,
+      tension: 220,
+      friction: 10,
     }).start();
   };
 
@@ -36,54 +36,46 @@ export const SwipeActions: React.FC<SwipeActionsProps> = ({
     Animated.spring(anim, {
       toValue: 1,
       useNativeDriver: true,
-      friction: 4,
+      tension: 160,
+      friction: 7,
     }).start();
   };
 
   return (
     <View style={styles.container}>
-      {/* Primary Action Buttons */}
       <View style={styles.actionsRow}>
-        {/* Not Today (Pass) */}
-        <Animated.View style={[{ transform: [{ scale: passScale }] }, styles.actionFlex]}>
+        {/* Pass Button */}
+        <Animated.View style={[{ transform: [{ scale: passScale }] }, styles.passFlex]}>
           <TouchableOpacity
-            style={styles.notTodayButton}
+            style={styles.passButton}
             onPress={onPass}
             onPressIn={() => handlePressIn(passScale)}
             onPressOut={() => handlePressOut(passScale)}
-            activeOpacity={0.8}
+            activeOpacity={0.9}
           >
-            <Ionicons name="arrow-back" size={16} color={colors.text.secondary} />
-            <Text style={styles.notTodayText}>Not today</Text>
+            <Text style={styles.passText}>Pass</Text>
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Like & Save */}
-        <Animated.View style={[{ transform: [{ scale: saveScale }] }, styles.actionFlex]}>
+        {/* Save Button */}
+        <Animated.View style={[{ transform: [{ scale: saveScale }] }, styles.saveFlex]}>
           <TouchableOpacity
-            style={styles.likeAndSaveButton}
+            style={styles.saveButton}
             onPress={onLikeAndSave}
             onPressIn={() => handlePressIn(saveScale)}
             onPressOut={() => handlePressOut(saveScale)}
-            activeOpacity={0.8}
+            activeOpacity={0.9}
           >
             <Ionicons
-              name={isSaved ? 'heart' : 'heart-outline'}
+              name={isSaved ? 'bookmark' : 'bookmark-outline'}
               size={16}
-              color={colors.white}
+              color={colors.snow100}
             />
-            <Text style={styles.likeAndSaveText}>
-              {isSaved ? 'Saved!' : 'Like & save'}
+            <Text style={styles.saveText}>
+              {isSaved ? 'Saved' : 'Save to collection'}
             </Text>
-            <Ionicons name="arrow-forward" size={16} color={colors.white} />
           </TouchableOpacity>
         </Animated.View>
-      </View>
-
-      {/* Gesture Hints */}
-      <View style={styles.gestureHintsRow}>
-        <Text style={styles.hintText}>Swipe left to pass</Text>
-        <Text style={styles.hintText}>Swipe right to keep</Text>
       </View>
     </View>
   );
@@ -91,61 +83,46 @@ export const SwipeActions: React.FC<SwipeActionsProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 12,
     width: '100%',
+    paddingTop: 8,
   },
   actionsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     width: '100%',
   },
-  actionFlex: {
+  passFlex: {
     flex: 1,
   },
-  notTodayButton: {
+  saveFlex: {
+    flex: 2,
+  },
+  passButton: {
     height: 52,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 26,
-    backgroundColor: colors.background,
-    flexDirection: 'row',
+    borderRadius: 16,
+    backgroundColor: '#ECEAE2',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
   },
-  notTodayText: {
-    fontSize: typography.fontSize.sub,
+  passText: {
+    fontSize: 14,
+    fontWeight: '600',
     color: colors.text.primary,
-    fontFamily: typography.fontFamily.medium,
   },
-  likeAndSaveButton: {
+  saveButton: {
     height: 52,
-    borderRadius: 26,
+    borderRadius: 16,
     backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  likeAndSaveText: {
-    fontSize: typography.fontSize.sub,
-    color: colors.white,
-    fontFamily: typography.fontFamily.regular,
-    fontWeight: '500',
-  },
-  gestureHintsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-  },
-  hintText: {
-    fontSize: typography.fontSize.label,
-    color: colors.text.secondary,
-  },
-  reassuranceText: {
-    fontSize: typography.fontSize.reassurance,
-    lineHeight: 17,
-    color: colors.text.secondary,
+  saveText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.snow100,
+    letterSpacing: 0.2,
   },
 });
 

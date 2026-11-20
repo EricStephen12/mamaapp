@@ -4,7 +4,8 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
+  TextInput,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -29,72 +30,64 @@ interface DetectedIngredientsSectionProps {
 
 export const DetectedIngredientsSection: React.FC<
   DetectedIngredientsSectionProps
-> = ({ onRetakePhoto, items = INITIAL_ITEMS, onItemsChange }) => {
-  const [ingredientList, setIngredientList] = useState<DetectedItemData[]>(items);
+> = ({ onRetakePhoto, items, onItemsChange }) => {
+  const [localFallbackList, setLocalFallbackList] = useState<DetectedItemData[]>(INITIAL_ITEMS);
+  const [newItemName, setNewItemName] = useState('');
+
+  const ingredientList = items ?? localFallbackList;
 
   const handleQuantityChange = (id: string, newQuantity: string) => {
     const updated = ingredientList.map((item) =>
       item.id === id ? { ...item, quantity: newQuantity } : item
     );
-    setIngredientList(updated);
+    if (!items) {
+      setLocalFallbackList(updated);
+    }
     if (onItemsChange) onItemsChange(updated);
   };
 
   const handleRemove = (id: string) => {
     const updated = ingredientList.filter((item) => item.id !== id);
-    setIngredientList(updated);
+    if (!items) {
+      setLocalFallbackList(updated);
+    }
     if (onItemsChange) onItemsChange(updated);
   };
 
-  const handleAddMissed = () => {
-    if (Alert.prompt) {
-      Alert.prompt(
-        'Add Missed Ingredient',
-        'Enter ingredient name and quantity:',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Add',
-            onPress: (name?: string) => {
-              if (name && name.trim()) {
-                const newItem: DetectedItemData = {
-                  id: `ing-${Date.now()}`,
-                  name: name.trim(),
-                  quantity: '1 portion',
-                };
-                const updated = [...ingredientList, newItem];
-                setIngredientList(updated);
-                if (onItemsChange) onItemsChange(updated);
-              }
-            },
-          },
-        ]
-      );
-    } else {
-      const newItem: DetectedItemData = {
-        id: `ing-${Date.now()}`,
-        name: 'Garlic cloves',
-        quantity: '3 cloves',
-      };
-      const updated = [...ingredientList, newItem];
-      setIngredientList(updated);
-      if (onItemsChange) onItemsChange(updated);
+  const handleAddInlineItem = () => {
+    const trimmed = newItemName.trim();
+    if (!trimmed) return;
+    const formatted = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    if (ingredientList.some((i) => i.name.toLowerCase() === formatted.toLowerCase())) {
+      setNewItemName('');
+      Keyboard.dismiss();
+      return;
     }
+    const updated: DetectedItemData[] = [
+      ...ingredientList,
+      { id: `ing-${Date.now()}`, name: formatted, quantity: '1 portion' },
+    ];
+    if (!items) {
+      setLocalFallbackList(updated);
+    }
+    if (onItemsChange) onItemsChange(updated);
+    setNewItemName('');
+    Keyboard.dismiss();
   };
 
   return (
     <View style={styles.container}>
       {/* Section Header Row */}
       <View style={styles.sectionHeadingRow}>
-        <Text style={styles.title}>We think we see</Text>
+        <Text style={styles.title}>In your kitchen</Text>
         <TouchableOpacity onPress={onRetakePhoto} activeOpacity={0.7}>
-          <Text style={styles.retakeAction}>Retake photo</Text>
+          <Text style={styles.retakeAction}>Full kitchen studio</Text>
         </TouchableOpacity>
       </View>
 
       {/* Instructional Copy */}
       <Text style={styles.supportingCopy}>
-        Tap to edit quantities or remove items.
+        Tap to adjust quantities, remove items, or add anything else on hand.
       </Text>
 
       {/* Ingredients List */}
@@ -109,15 +102,25 @@ export const DetectedIngredientsSection: React.FC<
         ))}
       </View>
 
-      {/* Add Missed Ingredient Action */}
-      <TouchableOpacity
-        style={styles.addMissedRow}
-        onPress={handleAddMissed}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="add" size={18} color={colors.primary} />
-        <Text style={styles.addMissedLabel}>Add a missed ingredient</Text>
-      </TouchableOpacity>
+      {/* Inline Add Missed Ingredient Input */}
+      <View style={styles.inlineAddRow}>
+        <TextInput
+          value={newItemName}
+          onChangeText={setNewItemName}
+          onSubmitEditing={handleAddInlineItem}
+          returnKeyType="done"
+          placeholder="Add another ingredient (e.g. Plantains, Garlic)..."
+          placeholderTextColor={colors.text.muted}
+          style={styles.inlineAddInput}
+        />
+        <TouchableOpacity
+          style={styles.inlineAddBtn}
+          onPress={handleAddInlineItem}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={18} color={colors.snow100} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -165,6 +168,31 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontFamily: typography.fontFamily.medium,
     color: colors.primary,
+  },
+  inlineAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+  },
+  inlineAddInput: {
+    flex: 1,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: colors.snow100,
+    borderWidth: 1,
+    borderColor: 'rgba(36, 40, 32, 0.1)',
+    paddingHorizontal: 12,
+    fontSize: 13,
+    color: colors.text.primary,
+  },
+  inlineAddBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

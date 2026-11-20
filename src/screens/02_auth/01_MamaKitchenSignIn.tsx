@@ -8,6 +8,7 @@ import {
   ScrollView,
   Platform,
   Animated,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -18,6 +19,7 @@ import { typography } from '../../theme/typography';
 import { MamaKitchenLogo } from '../../components/common/MamaKitchenLogo';
 import { InputField } from '../../components/common/InputField';
 import { PrimaryButton } from '../../components/common/PrimaryButton';
+import { preferencesStore } from '../../services/preferencesStore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MamaKitchenSignIn'>;
 
@@ -59,7 +61,7 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
       ]),
       Animated.timing(footerFade, { toValue: 1, duration: 400, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [headerFade, headerY, introFade, introY, formFade, formY, footerFade]);
 
   const triggerErrorShake = () => {
     Animated.sequence([
@@ -100,12 +102,38 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
   };
 
 
-  const handleForgotPassword = () => {
-    // Navigation to forgot password when added
+  const handleForgotPassword = async () => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      Alert.alert(
+        'Reset Password',
+        'Enter your email address above first, then tap Forgot password so we know which account to help you recover.'
+      );
+      return;
+    }
+    try {
+      const { authService } = await import('../../services/api/authService');
+      await authService.forgotPassword(trimmedEmail);
+    } catch {
+      // Non-blocking: show standard recovery notice even if offline
+    }
+    Alert.alert(
+      'Password Recovery',
+      `If an account exists for ${trimmedEmail}, we have sent a password recovery code to that email address.`
+    );
   };
 
   const handleCreateAccount = () => {
     navigation.navigate('MamaKitchenSignUp');
+  };
+
+  const handleSkip = () => {
+    const pass = preferencesStore.getKitchenPass();
+    if (pass.hasCompletedOnboarding) {
+      navigation.replace('YourDailyEdit');
+    } else {
+      navigation.replace('MakeItYours');
+    }
   };
 
   return (
@@ -120,6 +148,24 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Top Skip Bar */}
+          <View style={{ alignItems: 'flex-end', paddingHorizontal: 24, paddingTop: 8 }}>
+            <TouchableOpacity
+              onPress={handleSkip}
+              activeOpacity={0.7}
+              style={{
+                paddingHorizontal: 14,
+                paddingVertical: 6,
+                borderRadius: 16,
+                backgroundColor: colors.snow200,
+              }}
+            >
+              <Text style={{ fontSize: 13, color: colors.text.primary, fontWeight: '600' }}>
+                Skip
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Brand Header */}
           <Animated.View
             style={[
@@ -130,7 +176,7 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
               },
             ]}
           >
-            <MamaKitchenLogo width={216} height={162} />
+            <MamaKitchenLogo width={150} height={110} />
           </Animated.View>
 
           {/* Sign In Content */}
@@ -145,10 +191,7 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
                 },
               ]}
             >
-              <Text style={styles.heading}>Welcome back.</Text>
-              <Text style={styles.supportingCopy}>
-                Your daily edit is waiting. Let’s find something good for your table.
-              </Text>
+              <Text style={styles.heading}>Sign in</Text>
             </Animated.View>
 
             {/* Error Banner */}
@@ -172,7 +215,7 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
               ]}
             >
               <InputField
-                label="EMAIL ADDRESS"
+                label="EMAIL"
                 placeholder="you@example.com"
                 value={email}
                 onChangeText={setEmail}
@@ -206,9 +249,6 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
                   loading={loading}
                   showArrow
                 />
-                <Text style={styles.reassurance}>
-                  Good food. Your taste. Your budget.
-                </Text>
               </View>
             </Animated.View>
           </View>
@@ -226,8 +266,8 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
               activeOpacity={0.7}
               style={styles.createAccountRow}
             >
-              <Text style={styles.newToMama}>New to Mama Kitchen? </Text>
-              <Text style={styles.createAccountLink}>Create an account</Text>
+              <Text style={styles.newToMama}>New here? </Text>
+              <Text style={styles.createAccountLink}>Create account</Text>
             </TouchableOpacity>
           </Animated.View>
         </ScrollView>

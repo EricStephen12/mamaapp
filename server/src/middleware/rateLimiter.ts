@@ -1,15 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
 
 const WINDOW_MS = 60_000; // 1 minute
-const MAX_REQUESTS = 30;
+const MAX_REQUESTS = 200; // Generous ceiling for mobile swiping and media loading
 
 const ipMap = new Map<string, { count: number; resetAt: number }>();
 
 /**
- * Simple in-memory rate limiter.
- * For production with multiple instances, swap for redis-based limiter.
+ * In-memory rate limiter with media route exemptions to prevent card swiping throttling.
  */
 export function rateLimiter(req: Request, res: Response, next: NextFunction) {
+  // Allow health checks and static media requests without consuming rate limit quota
+  if (req.path === '/api/health' || req.path.startsWith('/api/videos') || req.path.startsWith('/api/images')) {
+    next();
+    return;
+  }
+
   const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
   const now = Date.now();
   const entry = ipMap.get(ip);

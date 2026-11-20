@@ -1,11 +1,19 @@
-import React, { useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+  Dimensions,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 
-export type NavTab = 'edit' | 'discover' | 'collection';
+export type NavTab = 'edit' | 'kitchen' | 'discover' | 'collection';
 
 interface BottomNavigationProps {
   activeTab?: NavTab;
@@ -20,6 +28,8 @@ interface NavItemProps {
   onPress: () => void;
 }
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 const NavItem: React.FC<NavItemProps> = ({
   label,
   iconName,
@@ -27,51 +37,86 @@ const NavItem: React.FC<NavItemProps> = ({
   isActive,
   onPress,
 }) => {
-  const scale = useRef(new Animated.Value(1)).current;
+  // Spring animations for the liquid bubble elevation & scale
+  const translateY = useRef(new Animated.Value(isActive ? -14 : 0)).current;
+  const scale = useRef(new Animated.Value(isActive ? 1.08 : 1)).current;
+  const dotOpacity = useRef(new Animated.Value(isActive ? 1 : 0)).current;
 
-  const handlePressIn = () => {
-    Animated.spring(scale, {
-      toValue: 0.9,
-      useNativeDriver: true,
-      friction: 5,
-    }).start();
-  };
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(translateY, {
+        toValue: isActive ? -14 : 0,
+        tension: 130,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scale, {
+        toValue: isActive ? 1.08 : 1,
+        tension: 140,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.timing(dotOpacity, {
+        toValue: isActive ? 1 : 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [isActive, translateY, scale, dotOpacity]);
 
-  const handlePressOut = () => {
-    Animated.spring(scale, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 4,
-    }).start();
+  const handlePress = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
+    onPress();
   };
 
   return (
-    <Animated.View style={[{ transform: [{ scale }] }, styles.itemWrapper]}>
-      <TouchableOpacity
-        style={styles.navItem}
-        onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        activeOpacity={0.8}
-        hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+    <TouchableOpacity
+      style={styles.navItem}
+      onPress={handlePress}
+      activeOpacity={0.88}
+      hitSlop={{ top: 12, bottom: 8, left: 10, right: 10 }}
+    >
+      {/* Floating Liquid Bubble (Elevates out of the straight line when active) */}
+      <Animated.View
+        style={[
+          styles.iconBubble,
+          isActive ? styles.iconBubbleActive : styles.iconBubbleInactive,
+          {
+            transform: [{ translateY }, { scale }],
+          },
+        ]}
       >
-        <View style={[styles.iconContainer, isActive && styles.iconContainerActive]}>
-          <Ionicons
-            name={isActive ? activeIconName : iconName}
-            size={20}
-            color={isActive ? colors.primary : colors.text.secondary}
-          />
-        </View>
-        <Text
-          style={[
-            styles.itemLabel,
-            isActive ? styles.itemLabelActive : styles.itemLabelInactive,
-          ]}
-        >
-          {label}
-        </Text>
-      </TouchableOpacity>
-    </Animated.View>
+        <Ionicons
+          name={isActive ? activeIconName : iconName}
+          size={isActive ? 22 : 20}
+          color={isActive ? '#FFFFFF' : colors.text.secondary}
+        />
+      </Animated.View>
+
+      {/* Liquid Bead Dot (Anchor below the elevated bubble) */}
+      <Animated.View
+        style={[
+          styles.liquidDot,
+          {
+            opacity: dotOpacity,
+            transform: [{ scale: dotOpacity }],
+          },
+        ]}
+      />
+
+      {/* Label */}
+      <Text
+        style={[
+          styles.itemLabel,
+          isActive ? styles.itemLabelActive : styles.itemLabelInactive,
+        ]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 };
 
@@ -80,16 +125,25 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   onTabChange,
 }) => {
   const insets = useSafeAreaInsets();
+  const bottomMargin = Math.max(insets.bottom, 10);
 
   return (
-    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-      <View style={styles.tabRow}>
+    <View style={[styles.outerWrapper, { paddingBottom: bottomMargin }]}>
+      {/* Floating Organic Island Bar (Not a straight flat edge) */}
+      <View style={styles.floatingCapsule}>
         <NavItem
-          label="Your edit"
-          iconName="home-outline"
-          activeIconName="home"
+          label="Home"
+          iconName="restaurant-outline"
+          activeIconName="restaurant"
           isActive={activeTab === 'edit'}
           onPress={() => onTabChange && onTabChange('edit')}
+        />
+        <NavItem
+          label="Kitchen"
+          iconName="basket-outline"
+          activeIconName="basket"
+          isActive={activeTab === 'kitchen'}
+          onPress={() => onTabChange && onTabChange('kitchen')}
         />
         <NavItem
           label="Discover"
@@ -99,7 +153,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
           onPress={() => onTabChange && onTabChange('discover')}
         />
         <NavItem
-          label="Collection"
+          label="Saved"
           iconName="bookmark-outline"
           activeIconName="bookmark"
           isActive={activeTab === 'collection'}
@@ -111,51 +165,80 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: colors.snow100,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(36, 40, 32, 0.06)',
-    paddingTop: 12,
-    paddingHorizontal: 24,
+  outerWrapper: {
     width: '100%',
-    shadowColor: colors.text.primary,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
-  tabRow: {
+  floatingCapsule: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-  },
-  itemWrapper: {
-    flex: 1,
+    width: Math.min(SCREEN_WIDTH - 32, 420),
+    height: 64,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 32,
+    borderWidth: 1.2,
+    borderColor: 'rgba(36, 40, 32, 0.08)',
+    shadowColor: '#242820',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 8,
+    paddingHorizontal: 8,
   },
   navItem: {
-    alignItems: 'center',
-    gap: 3,
-  },
-  iconContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    borderRadius: 16,
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    height: '100%',
+    position: 'relative',
+    paddingTop: 4,
   },
-  iconContainerActive: {
-    backgroundColor: colors.linen100,
+  iconBubble: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 1,
+  },
+  iconBubbleActive: {
+    backgroundColor: colors.primary,
+    borderWidth: 2.5,
+    borderColor: '#FFFFFF',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.42,
+    shadowRadius: 10,
+    elevation: 9,
+  },
+  iconBubbleInactive: {
+    backgroundColor: 'transparent',
+  },
+  liquidDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.primary,
+    marginBottom: 2,
+    marginTop: -2,
   },
   itemLabel: {
-    fontSize: typography.fontSize.label,
+    fontSize: 10.5,
     fontFamily: typography.fontFamily.regular,
+    letterSpacing: -0.2,
   },
   itemLabelActive: {
     color: colors.primary,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   itemLabelInactive: {
     color: colors.text.secondary,
+    fontWeight: '500',
   },
 });
 

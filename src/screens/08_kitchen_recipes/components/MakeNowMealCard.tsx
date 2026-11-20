@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
+import { MealVideoPlayer } from '../../../components/MealVideoPlayer';
+import { VideoService, MealVideoData } from '../../../services/videoService';
 
 interface MakeNowMealCardProps {
   title?: string;
@@ -17,8 +19,15 @@ interface MakeNowMealCardProps {
   cookTime?: string;
   cost?: string;
   image?: string;
+  videoUrl?: string;
+  videoAuthor?: {
+    nickname: string;
+    unique_id: string;
+    avatar?: string;
+  };
   reason?: string;
   ingredientsSummary?: string;
+  isLoading?: boolean;
   onPass?: () => void;
   onLikeAndSave?: () => void;
   onChooseToCook?: () => void;
@@ -30,16 +39,37 @@ export const MakeNowMealCard: React.FC<MakeNowMealCardProps> = ({
   cookTime = '',
   cost = '',
   image,
+  videoUrl: propVideoUrl,
+  videoAuthor: propVideoAuthor,
   reason = '',
   ingredientsSummary = '',
+  isLoading = false,
   onPass,
   onLikeAndSave,
   onChooseToCook,
 }) => {
   const [isSaved, setIsSaved] = useState(false);
+  const [resolvedVideo, setResolvedVideo] = useState<MealVideoData | null>(null);
   const passScale = useRef(new Animated.Value(1)).current;
   const saveScale = useRef(new Animated.Value(1)).current;
   const cookScale = useRef(new Animated.Value(1)).current;
+
+  // Resolve video for the featured dish
+  useEffect(() => {
+    if (!title || propVideoUrl) return;
+    let isMounted = true;
+    VideoService.resolveCookingVideo(title)
+      .then((data) => {
+        if (isMounted) setResolvedVideo(data);
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [title, propVideoUrl]);
+
+  const activeVideoUrl = propVideoUrl || resolvedVideo?.videoUrl;
+  const activeVideoAuthor = propVideoAuthor || resolvedVideo?.author;
 
   const handlePressIn = (anim: Animated.Value) => {
     Animated.spring(anim, {
@@ -62,7 +92,24 @@ export const MakeNowMealCard: React.FC<MakeNowMealCardProps> = ({
     if (onLikeAndSave) onLikeAndSave();
   };
 
-  if (!title) return null;
+  if (!title && !isLoading) return null;
+
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.eyebrow}>Mama AI is matching your kitchen...</Text>
+        <View style={[styles.mealCard, { padding: 24, alignItems: 'center', gap: 10 }]}>
+          <Ionicons name="sparkles-outline" size={26} color={colors.primary} />
+          <Text style={[styles.mealHeading, { textAlign: 'center' }]}>
+            Crafting a fresh recipe...
+          </Text>
+          <Text style={[styles.mealSubtitle, { textAlign: 'center' }]}>
+            Wait a moment while Mama balances your ingredients and cook time.
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -70,14 +117,23 @@ export const MakeNowMealCard: React.FC<MakeNowMealCardProps> = ({
 
       {/* Featured Meal Card */}
       <View style={styles.mealCard}>
-        {/* Meal Photograph with Preparation Badge */}
-        {image ? (
+        {/* Meal Photograph or Live Video with Preparation Badge */}
+        {image || activeVideoUrl ? (
           <View style={styles.imageWrapper}>
-            <Image
-              source={{ uri: image }}
-              style={styles.mealImage}
-              resizeMode="cover"
-            />
+            {activeVideoUrl ? (
+              <MealVideoPlayer
+                videoUrl={activeVideoUrl}
+                posterUrl={image}
+                isActive={true}
+                creator={activeVideoAuthor}
+              />
+            ) : (
+              <Image
+                source={{ uri: image }}
+                style={styles.mealImage}
+                resizeMode="cover"
+              />
+            )}
             {cookTime ? (
               <View style={styles.mealBadge}>
                 <Text style={styles.badgeLabel}>{cookTime}</Text>
@@ -157,7 +213,7 @@ export const MakeNowMealCard: React.FC<MakeNowMealCardProps> = ({
             onPressOut={() => handlePressOut(cookScale)}
             activeOpacity={0.8}
           >
-            <Text style={styles.cookButtonText}>Cook this</Text>
+            <Text style={styles.cookButtonText}>Check recipe</Text>
             <Ionicons name="arrow-forward" size={16} color={colors.white} />
           </TouchableOpacity>
         </Animated.View>
@@ -193,6 +249,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     height: 220,
     backgroundColor: colors.sand,
+    overflow: 'hidden',
   },
   mealImage: {
     width: '100%',

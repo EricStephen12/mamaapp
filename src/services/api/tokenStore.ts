@@ -10,8 +10,23 @@ import { Platform } from 'react-native';
 const TOKEN_KEY = 'mama_auth_jwt_token';
 const USER_KEY = 'mama_auth_user_profile';
 
+export interface AuthUser {
+  id: string;
+  email: string | null;
+  name: string;
+}
+
 let _token: string | null = null;
-let _user: { id: string; email: string | null; name: string } | null = null;
+let _user: AuthUser | null = null;
+const _listeners = new Set<(user: AuthUser | null) => void>();
+
+function notifyListeners() {
+  _listeners.forEach((fn) => fn(_user));
+}
+
+function sanitizeScopeId(rawId: string): string {
+  return rawId.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64);
+}
 
 async function storageSet(key: string, value: string): Promise<void> {
   if (Platform.OS === 'web') {
@@ -23,9 +38,10 @@ async function storageSet(key: string, value: string): Promise<void> {
     return;
   }
   try {
-    await SecureStore.setItemAsync(key, value, {
-      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-    });
+    const options = Platform.OS === 'ios'
+      ? { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }
+      : undefined;
+    await SecureStore.setItemAsync(key, value, options);
   } catch (err) {
     console.warn('[tokenStore] SecureStore write error:', err);
   }
@@ -76,11 +92,13 @@ export const tokenStore = {
       _token = null;
       _user = null;
     }
+    notifyListeners();
   },
 
-  async setSession(token: string, user: { id: string; email: string | null; name: string }): Promise<void> {
+  async setSession(token: string, user: AuthUser): Promise<void> {
     _token = token;
     _user = user;
+    notifyListeners();
     await storageSet(TOKEN_KEY, token);
     await storageSet(USER_KEY, JSON.stringify(user));
   },
@@ -88,6 +106,7 @@ export const tokenStore = {
   async clearSession(): Promise<void> {
     _token = null;
     _user = null;
+    notifyListeners();
     await storageDelete(TOKEN_KEY);
     await storageDelete(USER_KEY);
   },
@@ -96,11 +115,29 @@ export const tokenStore = {
     return _token;
   },
 
-  getUser(): { id: string; email: string | null; name: string } | null {
+  getUser(): AuthUser | null {
     return _user;
   },
 
   isLoggedIn(): boolean {
-    return !!_token;
+    return !!_token && !!_user;
+  },
+
+  /**
+   * Returns a safe per-user storage namespace ('user_<id>' or 'guest')
+   * so each user has their own isolated local data bank on the device.
+   */
+  getActiveScope(): string {
+    if (_user?.id) {
+      return `user_${sanitizeScopeId(_user.id)}`;
+    }
+    return 'guest';
+  },
+
+  subscribe(listener: (user: AuthUser | null) => void): () => void {
+    _listeners.add(listener);
+    return () => {
+      _listeners.delete(listener);
+    };
   },
 };

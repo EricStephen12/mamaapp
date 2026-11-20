@@ -5,12 +5,12 @@ import {
   StyleSheet,
   ScrollView,
   Animated,
-  Pressable,
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
@@ -18,26 +18,34 @@ import { typography } from '../../theme/typography';
 
 import { ConfirmedPantrySummaryCard } from './components/ConfirmedPantrySummaryCard';
 import { MakeNowMealCard } from './components/MakeNowMealCard';
-import { AlternativeMealCard } from './components/AlternativeMealCard';
-import { SaveForLaterMealCard } from './components/SaveForLaterMealCard';
-import { BalancedMealGuidanceCard } from './components/BalancedMealGuidanceCard';
 import { TactileToast } from '../../components/common/TactileToast';
 import { MamaCharacter, MamaPose } from '../../components/common/MamaCharacter';
-import { WeeklyBalanceCard } from '../04_daily_edit/components/WeeklyBalanceCard';
 import { preferencesStore, convertMealCost } from '../../services/preferencesStore';
 import { CountryCurrencyModal } from '../../components/common/CountryCurrencyModal';
 import { MamaDialogueService } from '../../services/mamaDialogueService';
-import { AiMamaService } from '../../services/aiMamaService';
+import {
+  AiMamaService,
+  buildIntelligentPantryRecipe,
+  sanitizeDishTitle,
+} from '../../services/aiMamaService';
 import { savedMealsService } from '../../services/api/savedMealsService';
-import { decisionsService } from '../../services/api/decisionsService';
 import { apiClient } from '../../services/api/client';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AlreadyInYourKitchen'>;
 
-const PASS_REASONS = ['Too much effort', 'Not my taste', 'Save ingredients'];
+interface KitchenDynamicRecipe {
+  title: string;
+  subtitle: string;
+  cookTime: string;
+  costNumeric: number;
+  cost: string;
+  image?: string;
+  steps: string[];
+  ingredients: { name: string; amount: string }[];
+  chefTip?: string;
+}
 
 export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation, route }) => {
-  const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [pass, setPass] = useState(preferencesStore.getKitchenPass());
@@ -45,20 +53,25 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation, route }) => 
   const passedItems = route.params?.items || ['Eggs', 'Tomatoes', 'Onions', 'Rice'];
 
   const [mamaQuote, setMamaQuote] = useState<string>(
-    `I looked at what you have: ${passedItems.slice(0, 3).join(', ')}. In 10 minutes we can make this warm comfort bowl!`
+    `I looked at what you have: ${passedItems.slice(0, 3).join(', ')}. Let's make a simple, delicious meal right now.`
   );
   const [mamaPose, setMamaPose] = useState<MamaPose>('cooking');
+  const [isGeneratingAi, setIsGeneratingAi] = useState<boolean>(true);
 
-  // Dynamic AI-generated recipe based on actual ingredients
-  const [dynamicRecipe, setDynamicRecipe] = useState({
-    title: `${passedItems[0] || ''} Skillet Bowl`,
-    subtitle: 'Generating your personalised recipe...',
-    cookTime: '10 min',
-    costNumeric: 1.8,
-    cost: convertMealCost(1.8, pass.currencyCode, pass.currencySymbol),
-    image: undefined as string | undefined,
-    steps: [] as string[],
-    ingredients: passedItems.map((item) => ({ name: item, amount: '1 portion' })),
+  // Dynamic recipe based on actual ingredients — instant intelligent fallback + AI enhancement
+  const [dynamicRecipe, setDynamicRecipe] = useState<KitchenDynamicRecipe>(() => {
+    const init = buildIntelligentPantryRecipe(passedItems, pass);
+    return {
+      title: init.title,
+      subtitle: init.subtitle,
+      cookTime: init.cookTime,
+      costNumeric: 1.8,
+      cost: init.estCost,
+      image: undefined as string | undefined,
+      steps: init.steps,
+      ingredients: init.ingredients,
+      chefTip: init.chefTip,
+    };
   });
 
   // Entrance animations
@@ -72,6 +85,45 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation, route }) => 
       Animated.timing(contentY, { toValue: 0, duration: 450, useNativeDriver: true }),
     ]).start();
 
+    const fallbackToAiMama = () => {
+      AiMamaService.generateRecipeFromPantry(passedItems, pass)
+        .then((aiRes) => {
+          if (aiRes) {
+            const costNum = 2.0;
+            setDynamicRecipe({
+              title: aiRes.title,
+              subtitle: aiRes.subtitle,
+              cookTime: aiRes.cookTime,
+              costNumeric: costNum,
+              cost: convertMealCost(costNum, pass.currencyCode, pass.currencySymbol),
+              image: undefined,
+              steps: aiRes.steps,
+              ingredients: aiRes.ingredients,
+              chefTip: aiRes.chefTip,
+            });
+            if (aiRes.chefTip) {
+              setMamaQuote(`"${aiRes.chefTip}"`);
+            }
+          }
+        })
+        .catch(() => {
+          setDynamicRecipe((prev) => ({
+            ...prev,
+            title: sanitizeDishTitle(`${passedItems.slice(0, 2).join(' & ')} Stir-Fry`),
+            subtitle: `Quick meal made with your kitchen ingredients`,
+            cookTime: '12 min',
+            steps: [
+              `Heat 1 tbsp cooking oil in a pan on medium heat.`,
+              `Add ${passedItems.join(', ')} and cook until tender.`,
+              `Season with salt, pepper, and spices; serve warm.`,
+            ],
+          }));
+        })
+        .finally(() => {
+          setIsGeneratingAi(false);
+        });
+    };
+
     // Call backend to generate custom recipe with these exact ingredients
     apiClient<any>('/api/recipes/generate', {
       method: 'POST',
@@ -82,38 +134,86 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation, route }) => 
       .then((res) => {
         if (res && res.title) {
           const costNum = typeof res.estimatedCost === 'number' ? res.estimatedCost : 1.8;
+          const mappedSteps =
+            Array.isArray(res.steps) && res.steps.length > 0
+              ? res.steps
+              : Array.isArray(res.instructions) && res.instructions.length > 0
+              ? res.instructions.map((s: any) =>
+                  typeof s === 'string' ? s : s.instruction || ''
+                ).filter(Boolean)
+              : [
+                  `Warm your pan with cooking oil on medium heat.`,
+                  `Add ${passedItems.join(', ')} and cook until tender and fragrant.`,
+                  `Season to taste and serve hot.`,
+                ];
+          const mappedIngredients =
+            Array.isArray(res.ingredients) && res.ingredients.length > 0
+              ? res.ingredients.map((i: any) =>
+                  typeof i === 'string' ? { name: i, amount: '1 portion' } : i
+                )
+              : Array.isArray(res.ingredientsUsed) && res.ingredientsUsed.length > 0
+              ? res.ingredientsUsed.map((i: string) => ({ name: i, amount: '1 portion' }))
+              : passedItems.map((name) => ({ name, amount: '1 portion' }));
+
           setDynamicRecipe({
-            title: res.title,
+            title: sanitizeDishTitle(res.title),
             subtitle: res.subtitle || `Easy · Uses ${passedItems.slice(0, 2).join(' & ')}`,
             cookTime: `${res.cookTimeMinutes || 12} min`,
             costNumeric: costNum,
             cost: convertMealCost(costNum, pass.currencyCode, pass.currencySymbol),
             image: res.imageUrl || undefined,
-            steps: Array.isArray(res.steps) && res.steps.length > 0 ? res.steps : [
-              `Warm your skillet with cooking oil on medium heat.`,
-              `Add ${passedItems.join(', ')} and cook until tender and fragrant.`,
-              `Season to taste and serve hot.`,
-            ],
-            ingredients: Array.isArray(res.ingredients) && res.ingredients.length > 0
-              ? res.ingredients.map((i: any) => typeof i === 'string' ? { name: i, amount: '1 portion' } : i)
-              : passedItems.map((name) => ({ name, amount: '1 portion' })),
+            steps: mappedSteps,
+            ingredients: mappedIngredients,
+            chefTip: res.mamaTip || res.chefTip || 'Cook on medium heat so all the flavors meld together.',
           });
           if (res.mamaVoiceLine) {
             setMamaQuote(res.mamaVoiceLine);
           }
+          setIsGeneratingAi(false);
+        } else {
+          fallbackToAiMama();
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        fallbackToAiMama();
+      });
 
     return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleTapMama = () => {
-    const local = MamaDialogueService.getRandomInteractiveLine(pass);
-    setMamaQuote(local.quote);
-    setMamaPose(local.pose);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
 
-    AiMamaService.getLiveMamaDialogue(pass, 'pantry')
+    const voice = MamaDialogueService.getSyncedMamaVoice({
+      timeOfDay: 'dinner',
+      pass,
+      pantryItems: passedItems,
+      activeDish: {
+        title: dynamicRecipe.title,
+        cookTimeMinutes: parseInt(dynamicRecipe.cookTime, 10) || 12,
+        estCost: dynamicRecipe.costNumeric,
+        gear: pass.cookingGearLabel,
+      },
+      actionHint: 'tap_advice',
+    });
+    setMamaQuote(voice.quote);
+    setMamaPose(voice.pose);
+
+    AiMamaService.getLiveMamaDialogue({
+      timeOfDay: 'dinner',
+      pass,
+      pantryItems: passedItems,
+      activeDish: {
+        title: dynamicRecipe.title,
+        cookTimeMinutes: parseInt(dynamicRecipe.cookTime, 10) || 12,
+        estCost: dynamicRecipe.costNumeric,
+        gear: pass.cookingGearLabel,
+      },
+      actionHint: 'tap_advice',
+    })
       .then((aiQuote) => {
         if (aiQuote && aiQuote.length > 5) {
           setMamaQuote(aiQuote);
@@ -122,10 +222,82 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation, route }) => 
       .catch(() => {});
   };
 
-  const handleToggleReason = (reason: string) => {
-    setSelectedReasons((prev) =>
-      prev.includes(reason) ? prev.filter((r) => r !== reason) : [...prev, reason]
-    );
+  const handlePassRecipe = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
+    const rotatedItems =
+      passedItems.length > 1 ? [...passedItems.slice(1), passedItems[0]] : passedItems;
+    const nextFallback = buildIntelligentPantryRecipe(rotatedItems, pass);
+    setIsGeneratingAi(true);
+    setMamaQuote(`Let me think of another quick idea using your ${rotatedItems.slice(0, 2).join(' and ')}...`);
+    AiMamaService.generateRecipeFromPantry(rotatedItems, pass)
+      .then((aiRes) => {
+        if (aiRes && aiRes.title !== dynamicRecipe.title) {
+          setDynamicRecipe({
+            title: aiRes.title,
+            subtitle: aiRes.subtitle,
+            cookTime: aiRes.cookTime,
+            costNumeric: 2.0,
+            cost: convertMealCost(2.0, pass.currencyCode, pass.currencySymbol),
+            image: undefined,
+            steps: aiRes.steps,
+            ingredients: aiRes.ingredients,
+            chefTip: aiRes.chefTip,
+          });
+          if (aiRes.chefTip) {
+            setMamaQuote(`"${aiRes.chefTip}"`);
+          }
+        } else {
+          setDynamicRecipe({
+            title: nextFallback.title,
+            subtitle: nextFallback.subtitle,
+            cookTime: nextFallback.cookTime,
+            costNumeric: 1.8,
+            cost: nextFallback.estCost,
+            image: undefined,
+            steps: nextFallback.steps,
+            ingredients: nextFallback.ingredients,
+            chefTip: nextFallback.chefTip,
+          });
+        }
+      })
+      .catch(() => {
+        setDynamicRecipe({
+          title: nextFallback.title,
+          subtitle: nextFallback.subtitle,
+          cookTime: nextFallback.cookTime,
+          costNumeric: 1.8,
+          cost: nextFallback.estCost,
+          image: undefined,
+          steps: nextFallback.steps,
+          ingredients: nextFallback.ingredients,
+          chefTip: nextFallback.chefTip,
+        });
+      })
+      .finally(() => {
+        setIsGeneratingAi(false);
+      });
+  };
+
+  const handleSaveRecipe = () => {
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {}
+    const mealId = `pantry-${dynamicRecipe.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    savedMealsService.saveMeal({
+      mealId,
+      title: dynamicRecipe.title,
+      type: 'home',
+      cookTime: dynamicRecipe.cookTime,
+      cost: dynamicRecipe.cost,
+      costNumeric: dynamicRecipe.costNumeric,
+      imageUrl: dynamicRecipe.image,
+      recipeSteps: dynamicRecipe.steps,
+      ingredients: dynamicRecipe.ingredients,
+    });
+    preferencesStore.recordMealDecision(mealId, 'saved', dynamicRecipe.costNumeric);
+    setToastMessage(`Saved ${dynamicRecipe.title} to your collection`);
   };
 
   return (
@@ -134,15 +306,30 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation, route }) => 
 
       {/* Screen Masthead Header */}
       <View style={styles.masthead}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="arrow-back" size={18} color={colors.text.primary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => {
+              if (navigation.canGoBack()) navigation.goBack();
+              else navigation.navigate('YourDailyEdit');
+            }}
+            style={styles.backButton}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="arrow-back" size={18} color={colors.text.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('YourDailyEdit')}
+            style={styles.backButton}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="home-outline" size={16} color={colors.text.primary} />
+          </TouchableOpacity>
+        </View>
+
         <Text style={styles.brandTitle}>Mama Kitchen</Text>
+
         <TouchableOpacity
           style={styles.countryBtn}
           onPress={() => setCountryModalVisible(true)}
@@ -185,36 +372,25 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation, route }) => 
             </View>
           </TouchableOpacity>
 
-          {/* Section 2: Weekly Balance Summary */}
-          <WeeklyBalanceCard
-            remainingAmount={pass.weeklyBudget - pass.spentThisWeek}
-            remainingDays={pass.remainingDaysInWeek}
-            spentAmount={pass.spentThisWeek}
-            totalBudget={pass.weeklyBudget}
-            currencySymbol={pass.currencySymbol}
-            currencyCode={pass.currencyCode}
-            countryName={pass.countryName}
-            onPressManage={() => setCountryModalVisible(true)}
-          />
-
-          {/* Section 3: Confirmed Pantry Summary */}
+          {/* Section 2: Confirmed Pantry Summary */}
           <ConfirmedPantrySummaryCard
             items={passedItems}
-            onEditPantry={() => navigation.navigate('ConfirmYourPantry', { items: passedItems })}
+            onEditPantry={() => navigation.navigate('WhatsInYourKitchen')}
           />
 
-          {/* Section 4: Make Now Meal Card */}
+          {/* Section 3: Make Now Meal Card */}
           <MakeNowMealCard
+            isLoading={isGeneratingAi}
             title={dynamicRecipe.title}
             subtitle={dynamicRecipe.subtitle}
             cookTime={dynamicRecipe.cookTime}
             cost={dynamicRecipe.cost}
             image={dynamicRecipe.image}
-            ingredientsSummary={`Confirmed ingredients: ${dynamicRecipe.ingredients.map((i) => i.name).join(', ')}.`}
+            ingredientsSummary={`Uses: ${dynamicRecipe.ingredients.map((i) => i.name).join(', ')}.`}
+            onPass={handlePassRecipe}
+            onLikeAndSave={handleSaveRecipe}
             onChooseToCook={() => {
               const mealId = `pantry-${Date.now()}`;
-              // Log decision + save to collection (fire-and-forget to Neon DB)
-              decisionsService.log(mealId, dynamicRecipe.title, 'cooked', dynamicRecipe.costNumeric);
               savedMealsService.saveMeal({
                 mealId,
                 title: dynamicRecipe.title,
@@ -226,7 +402,7 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation, route }) => 
                 recipeSteps: dynamicRecipe.steps,
                 ingredients: dynamicRecipe.ingredients,
               });
-              preferencesStore.recordMealDecision(mealId, 'cooked', dynamicRecipe.costNumeric);
+              preferencesStore.recordMealDecision(mealId, 'saved', dynamicRecipe.costNumeric);
               navigation.navigate('AtHomeMealDetails', {
                 id: mealId,
                 title: dynamicRecipe.title,
@@ -238,75 +414,10 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation, route }) => 
                 image: dynamicRecipe.image,
                 steps: dynamicRecipe.steps,
                 ingredients: dynamicRecipe.ingredients,
+                mamaTip: dynamicRecipe.chefTip,
               });
             }}
           />
-
-          {/* Section 5: Optional Pass Reasons */}
-          <View style={styles.reasonsBlock}>
-            <Text style={styles.prompt}>Not feeling this one? Tell Mama why:</Text>
-            <View style={styles.reasonsRow}>
-              {PASS_REASONS.map((reason) => {
-                const isSelected = selectedReasons.includes(reason);
-                return (
-                  <Pressable
-                    key={reason}
-                    onPress={() => handleToggleReason(reason)}
-                    style={[
-                      styles.reasonChip,
-                      isSelected && styles.reasonChipSelected,
-                    ]}
-                  >
-                    {isSelected && (
-                      <Ionicons
-                        name="checkmark"
-                        size={12}
-                        color={colors.snow100}
-                        style={styles.checkIcon}
-                      />
-                    )}
-                    <Text
-                      style={[
-                        styles.reasonLabel,
-                        isSelected && styles.reasonLabelSelected,
-                      ]}
-                    >
-                      {reason}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Section 6: Alternative Meal (from API second suggestion, if available) */}
-          {dynamicRecipe.ingredients.length > 2 && (
-            <AlternativeMealCard
-              title={`${passedItems.slice(0, 2).join(' & ')} stir-fry variation`}
-              subtitle={`15 min · ${passedItems.length} ingredients`}
-              image={undefined}
-              onViewRecipe={() =>
-                navigation.navigate('AtHomeMealDetails', {
-                  id: 'alt-meal-1',
-                  title: `${passedItems.slice(0, 2).join(' & ')} Stir-fry`,
-                  subtitle: `A quick variation using your confirmed pantry.`,
-                  cookTime: '15 min',
-                  gear: '1 Skillet',
-                  estCost: convertMealCost(1.4, pass.currencyCode, pass.currencySymbol),
-                  costNumeric: 1.4,
-                  image: undefined,
-                  steps: dynamicRecipe.steps,
-                  ingredients: dynamicRecipe.ingredients,
-                })
-              }
-            />
-          )}
-
-          {/* Section 7: Save for Later Option */}
-          <SaveForLaterMealCard />
-
-          {/* Section 8: Dietary / Balanced Guidance */}
-          <BalancedMealGuidanceCard />
         </Animated.View>
       </ScrollView>
 

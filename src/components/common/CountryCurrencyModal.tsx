@@ -11,16 +11,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { MamaCharacter, MamaPose } from './MamaCharacter';
 import {
   preferencesStore,
   SUPPORTED_COUNTRIES,
   SUPPORTED_CURRENCIES,
   SupportedCountry,
-  formatCurrency,
 } from '../../services/preferencesStore';
 
 interface CountryCurrencyModalProps {
@@ -39,10 +37,7 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
   const [selectedCountryId, setSelectedCountryId] = useState(currentPass.country || 'NG');
   const [selectedCurrencyCode, setSelectedCurrencyCode] = useState(currentPass.currencyCode || 'NGN');
   const [weeklyBudgetString, setWeeklyBudgetString] = useState(String(currentPass.weeklyBudget || fallbackBudget));
-  const [customCountryName, setCustomCountryName] = useState('');
-  const [customCurrencySymbol, setCustomCurrencySymbol] = useState('');
-  const [mamaNote, setMamaNote] = useState<string>("Choose your country so I can price meals and match local staples.");
-  const [mamaPose, setMamaPose] = useState<MamaPose>('thinking');
+  const [spentThisWeek, setSpentThisWeek] = useState<number>(currentPass.spentThisWeek || 0);
 
   useEffect(() => {
     if (visible) {
@@ -51,11 +46,7 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
       setSelectedCountryId(pass.country);
       setSelectedCurrencyCode(pass.currencyCode);
       setWeeklyBudgetString(String(pass.weeklyBudget || fallbackBudget));
-      const found = SUPPORTED_COUNTRIES.find((c) => c.id === pass.country);
-      if (found) {
-        setMamaNote(found.mamaGreeting);
-        setMamaPose('delighted');
-      }
+      setSpentThisWeek(pass.spentThisWeek || 0);
     }
   }, [visible, fallbackBudget]);
 
@@ -63,29 +54,16 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
     setSelectedCountryId(country.id);
     setSelectedCurrencyCode(country.currencyCode);
     setWeeklyBudgetString(String(country.defaultWeeklyBudget));
-    setMamaNote(country.mamaGreeting);
-    setMamaPose('delighted');
   };
 
   const handleSave = () => {
     const budgetNum = parseFloat(weeklyBudgetString.replace(/[^0-9.]/g, '')) || fallbackBudget;
     
-    if (selectedCountryId === 'custom' && customCountryName.trim()) {
-      preferencesStore.updateKitchenPass({
-        country: 'custom',
-        countryName: customCountryName.trim(),
-        currencyCode: selectedCurrencyCode,
-        currencySymbol: customCurrencySymbol.trim() || '$',
-        weeklyBudget: budgetNum,
-        spentThisWeek: currentPass.spentThisWeek || 0,
-      });
-    } else {
-      preferencesStore.updateCountryAndCurrency(
-        selectedCountryId,
-        selectedCurrencyCode,
-        budgetNum
-      );
-    }
+    preferencesStore.updateCountryAndCurrency(
+      selectedCountryId,
+      selectedCurrencyCode,
+      budgetNum
+    );
 
     onClose();
   };
@@ -108,18 +86,11 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
               {/* Header */}
               <View style={styles.sheetHeader}>
                 <View style={styles.headerLeft}>
-                  <Text style={styles.sheetTitle}>Country & Currency</Text>
-                  <Text style={styles.sheetSubtitle}>Mama adapts meal costs & local pantry staples</Text>
+                  <Text style={styles.sheetTitle}>Country & Budget</Text>
                 </View>
                 <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Ionicons name="close" size={20} color={colors.text.secondary} />
                 </TouchableOpacity>
-              </View>
-
-              {/* Mama Voice Bar */}
-              <View style={styles.mamaBanner}>
-                <MamaCharacter pose={mamaPose} size={42} isSpeaking={true} />
-                <Text style={styles.mamaBannerText}>&ldquo;{mamaNote}&rdquo;</Text>
               </View>
 
               <ScrollView style={styles.bodyScroll} showsVerticalScrollIndicator={false}>
@@ -157,7 +128,6 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
                         style={[styles.currPill, isSelected && styles.currPillSelected]}
                         onPress={() => {
                           setSelectedCurrencyCode(curr.code);
-                          setMamaPose('writing');
                         }}
                       >
                         <Text style={[styles.currSymbol, isSelected && styles.currSymbolSelected]}>
@@ -185,9 +155,22 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
                   />
                   <Text style={styles.budgetSuffix}>/ week</Text>
                 </View>
-                <Text style={styles.budgetTip}>
-                  Mama keeps track of cooking vs takeout so you never overspend.
-                </Text>
+                {spentThisWeek > 0 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      preferencesStore.updateKitchenPass({ spentThisWeek: 0 });
+                      setSpentThisWeek(0);
+                    }}
+                    style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 5 }}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="refresh-outline" size={14} color={colors.primary} />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
+                      Reset this week&apos;s spend ({activeCurrency.symbol}
+                      {Math.round(spentThisWeek)}) to 0
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </ScrollView>
 
               {/* Action Button */}

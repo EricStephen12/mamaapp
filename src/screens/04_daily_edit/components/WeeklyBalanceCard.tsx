@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
 import { formatCurrency } from '../../../services/preferencesStore';
@@ -13,60 +13,49 @@ interface WeeklyBalanceCardProps {
   currencySymbol?: string;
   currencyCode?: string;
   countryName?: string;
+  mealsCookedCount?: number;
   onPressManage?: () => void;
 }
 
 export const WeeklyBalanceCard: React.FC<WeeklyBalanceCardProps> = ({
   remainingAmount = 0,
-  remainingDays = 1,
   spentAmount = 0,
   totalBudget = 0,
   currencySymbol = '₦',
   currencyCode = 'NGN',
-  countryName = 'Nigeria',
   onPressManage,
 }) => {
   const safeBudget = Math.max(1, totalBudget);
-  const progressPercent = totalBudget > 0 ? Math.min(100, Math.max(0, (spentAmount / safeBudget) * 100)) : 0;
+  const progressPercent =
+    totalBudget > 0 ? Math.min(100, Math.max(0, (spentAmount / safeBudget) * 100)) : 0;
 
-  const formattedRemaining = formatCurrency(remainingAmount, currencySymbol, currencyCode);
-  const formattedSpent = formatCurrency(spentAmount, currencySymbol, currencyCode);
+  const safeRemaining = Math.max(0, remainingAmount);
+  const formattedRemaining = formatCurrency(safeRemaining, currencySymbol, currencyCode);
   const formattedTotal = formatCurrency(totalBudget, currencySymbol, currencyCode);
 
   return (
     <TouchableOpacity
       style={styles.card}
       onPress={onPressManage}
-      activeOpacity={0.8}
+      activeOpacity={0.85}
     >
-      {/* Top Row: Country Tag + Update Button */}
-      <View style={styles.topRow}>
-        <View style={styles.countryTag}>
-          <Ionicons name="location" size={12} color={colors.primary} />
-          <Text style={styles.countryText}>{countryName} · {currencySymbol}</Text>
+      <View style={styles.mainMetricRow}>
+        <View style={styles.budgetLeftBlock}>
+          <Text style={styles.countryText}>WEEKLY BUDGET</Text>
+          <Text style={styles.remainingValue}>
+            {formattedRemaining}{' '}
+            <Text style={styles.leftLabel}>left of {formattedTotal}</Text>
+          </Text>
         </View>
 
         <View style={styles.updatePill}>
-          <Text style={styles.updateText}>Budget</Text>
-          <Feather name="chevron-down" size={12} color={colors.primary} />
+          <Text style={styles.updateText}>Edit</Text>
+          <Feather name="chevron-right" size={12} color={colors.primary} />
         </View>
       </View>
 
-      {/* Main Number Row */}
-      <View style={styles.mainNumberRow}>
-        <Text style={styles.remainingValue}>{formattedRemaining}</Text>
-        <Text style={styles.leftLabel}>left</Text>
-      </View>
-
-      {/* Thin Sleek Progress Line */}
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
-      </View>
-
-      {/* Bottom Summary: Spent vs Total */}
-      <View style={styles.bottomRow}>
-        <Text style={styles.subMetric}>{formattedSpent} spent of {formattedTotal}</Text>
-        <Text style={styles.subMetric}>{remainingDays} days left</Text>
       </View>
     </TouchableOpacity>
   );
@@ -74,81 +63,73 @@ export const WeeklyBalanceCard: React.FC<WeeklyBalanceCardProps> = ({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
-    backgroundColor: colors.snow100,
+    borderRadius: 20,
+    backgroundColor: colors.snow200,
     borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
-    paddingHorizontal: 18,
+    borderColor: 'rgba(36, 40, 32, 0.06)',
+    paddingHorizontal: 16,
     paddingVertical: 14,
-    gap: 8,
+    gap: 10,
     width: '100%',
-  },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  countryTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
   countryText: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
     color: colors.primary,
+    letterSpacing: 0.6,
   },
   updatePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.snow200,
+    gap: 2,
+    backgroundColor: colors.snow100,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(36, 40, 32, 0.06)',
   },
   updateText: {
-    fontSize: typography.fontSize.xs,
+    fontSize: 11,
     fontWeight: '600',
     color: colors.primary,
   },
-  mainNumberRow: {
+  mainMetricRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  budgetLeftBlock: {
+    gap: 2,
   },
   remainingValue: {
-    fontSize: 34,
-    lineHeight: 38,
+    fontSize: 20,
+    lineHeight: 24,
     fontFamily: typography.fontFamily.serif,
-    color: colors.text.primary,
     fontWeight: '700',
+    color: colors.text.primary,
+    letterSpacing: -0.4,
   },
   leftLabel: {
-    fontSize: typography.fontSize.sub,
-    color: colors.text.muted,
+    fontSize: 12,
+    fontFamily: typography.fontFamily.regular,
+    fontWeight: '500',
+    color: colors.text.secondary,
   },
   progressTrack: {
-    height: 4,
+    height: 6,
     backgroundColor: 'rgba(36, 40, 32, 0.08)',
-    borderRadius: 2,
+    borderRadius: 999,
     overflow: 'hidden',
-    width: '100%',
   },
   progressFill: {
     height: '100%',
     backgroundColor: colors.primary,
-    borderRadius: 2,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  subMetric: {
-    fontSize: typography.fontSize.xs,
-    color: colors.text.muted,
+    borderRadius: 999,
   },
 });
-
-export default WeeklyBalanceCard;

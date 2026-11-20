@@ -116,6 +116,7 @@ export const MamaKitchenLogo: React.FC<MamaKitchenLogoProps> = ({
     return () => {
       drawAnim.removeListener(listenerId);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animated]);
 
   // Stroke Dash Lengths for Line Drawing

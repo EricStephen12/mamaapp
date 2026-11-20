@@ -8,6 +8,7 @@ import {
   ScrollView,
   Platform,
   Animated,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -18,6 +19,7 @@ import { typography } from '../../theme/typography';
 import { MamaKitchenLogo } from '../../components/common/MamaKitchenLogo';
 import { InputField } from '../../components/common/InputField';
 import { PrimaryButton } from '../../components/common/PrimaryButton';
+import { preferencesStore } from '../../services/preferencesStore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MamaKitchenSignUp'>;
 
@@ -59,7 +61,7 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
       ]),
       Animated.timing(footerFade, { toValue: 1, duration: 400, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [headerFade, headerY, introFade, introY, formFade, formY, footerFade]);
 
   const triggerErrorShake = () => {
     Animated.sequence([
@@ -94,7 +96,12 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
     try {
       const { authService } = await import('../../services/api/authService');
       await authService.signUp({ name: name.trim(), email: email.trim(), password });
-      navigation.replace('MakeItYours');
+      const pass = preferencesStore.getKitchenPass();
+      if (pass.hasCompletedOnboarding) {
+        navigation.replace('YourDailyEdit');
+      } else {
+        navigation.replace('MakeItYours');
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to create account. Please try again.');
       triggerErrorShake();
@@ -107,12 +114,27 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
     navigation.navigate('MamaKitchenSignIn');
   };
 
+  const handleSkip = () => {
+    const pass = preferencesStore.getKitchenPass();
+    if (pass.hasCompletedOnboarding) {
+      navigation.replace('YourDailyEdit');
+    } else {
+      navigation.replace('MakeItYours');
+    }
+  };
+
   const handleTerms = () => {
-    // Open terms modal or link
+    Alert.alert(
+      'Terms of Service',
+      'Mama Kitchen provides personalized home cooking suggestions and budget planning tools for informational use. You are responsible for verifying food allergies, ingredient safety, and proper cooking temperatures in your kitchen.'
+    );
   };
 
   const handlePrivacy = () => {
-    // Open privacy modal or link
+    Alert.alert(
+      'Privacy Policy',
+      'We store only your name, email, kitchen preferences, saved recipes, and pantry items to personalize your meals. We never sell your personal data. You can permanently delete your account and all data at any time from Kitchen Pass > Account.'
+    );
   };
 
   return (
@@ -127,6 +149,24 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Top Skip Bar */}
+          <View style={{ alignItems: 'flex-end', paddingHorizontal: 24, paddingTop: 8 }}>
+            <TouchableOpacity
+              onPress={handleSkip}
+              activeOpacity={0.7}
+              style={{
+                paddingHorizontal: 14,
+                paddingVertical: 6,
+                borderRadius: 16,
+                backgroundColor: colors.snow200,
+              }}
+            >
+              <Text style={{ fontSize: 13, color: colors.text.primary, fontWeight: '600' }}>
+                Skip
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Brand Header */}
           <Animated.View
             style={[
@@ -137,7 +177,7 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
               },
             ]}
           >
-            <MamaKitchenLogo width={216} height={162} />
+            <MamaKitchenLogo width={150} height={110} />
           </Animated.View>
 
           {/* Sign Up Content */}
@@ -152,10 +192,7 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
                 },
               ]}
             >
-              <Text style={styles.heading}>A place at the table.</Text>
-              <Text style={styles.supportingCopy}>
-                Create your account. Then we’ll get to know your tastes, your needs and your budget.
-              </Text>
+              <Text style={styles.heading}>Create account</Text>
             </Animated.View>
 
             {/* Error Banner */}
@@ -179,7 +216,7 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
               ]}
             >
               <InputField
-                label="YOUR NAME"
+                label="NAME"
                 placeholder="First name"
                 value={name}
                 onChangeText={setName}
@@ -188,7 +225,7 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
               />
 
               <InputField
-                label="EMAIL ADDRESS"
+                label="EMAIL"
                 placeholder="you@example.com"
                 value={email}
                 onChangeText={setEmail}
@@ -198,11 +235,10 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
 
               <InputField
                 label="PASSWORD"
-                placeholder="Create a password"
+                placeholder="8+ characters"
                 value={password}
                 onChangeText={setPassword}
                 isPassword
-                helperText="Use at least 8 characters."
                 autoComplete="new-password"
               />
 
@@ -217,11 +253,11 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
 
                 {/* Terms and Privacy Policy Note */}
                 <Text style={styles.termsAndPrivacy}>
-                  By creating an account, you agree to our{' '}
+                  By continuing, you agree to our{' '}
                   <Text onPress={handleTerms} style={styles.linkText}>
                     Terms
                   </Text>{' '}
-                  and{' '}
+                  &{' '}
                   <Text onPress={handlePrivacy} style={styles.linkText}>
                     Privacy Policy
                   </Text>
@@ -244,7 +280,7 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
               activeOpacity={0.7}
               style={styles.signInRow}
             >
-              <Text style={styles.alreadyAtThe}>Already at the table? </Text>
+              <Text style={styles.alreadyAtThe}>Have an account? </Text>
               <Text style={styles.signInLink}>Sign in</Text>
             </TouchableOpacity>
           </Animated.View>

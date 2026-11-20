@@ -11,44 +11,36 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { PrimaryButton, TactileToast } from '../../components/common';
+import { TactileToast } from '../../components/common';
 import { BottomNavigation, NavTab } from '../../components/navigation/BottomNavigation';
-import { MamaCharacter, MamaPose } from '../../components/common/MamaCharacter';
+import { useTabNavigation } from '../../context/TabNavigationContext';
 import { CountryCurrencyModal } from '../../components/common/CountryCurrencyModal';
+import { KitchenPassModal } from '../../components/common/KitchenPassModal';
 import {
   preferencesStore,
   UserKitchenPass,
   convertMealCost,
 } from '../../services/preferencesStore';
-import { MamaDialogueService } from '../../services/mamaDialogueService';
-import { apiClient } from '../../services/api/client';
 import { savedMealsService } from '../../services/api/savedMealsService';
-
-import {
-  SavedMealCard,
-  SavedMealItem,
-} from './components/SavedMealCard';
-import {
-  CollectionFilters,
-  CollectionFilterType,
-} from './components/CollectionFilters';
-import { TasteLearningCard } from './components/TasteLearningCard';
-import { YourEssentialsSection } from './components/YourEssentialsSection';
+import { MealImageService } from '../../services/mealImageService';
+import { SavedMealCard, SavedMealItem } from './components/SavedMealCard';
+import * as Haptics from 'expo-haptics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'YourCollection'>;
 
 interface BaseMealEntry {
   id: string;
   title: string;
+  subtitle?: string;
   type: 'home' | 'eating_out';
   cookTimeOrDistance: string;
   baseCostUsd: number;
-  imageUrl: string;
+  imageUrl?: string;
   targetScreen: 'AtHomeMealDetails' | 'EatingOutMealDetails';
   steps?: string[];
   ingredients?: { name: string; amount: string }[];
@@ -56,203 +48,143 @@ interface BaseMealEntry {
   vibe?: string;
 }
 
-
-
 export const YourCollection: React.FC<Props> = ({ navigation }) => {
+  const { isInsideTabs, setActiveTab, setInjectedDailyMeal } = useTabNavigation();
   const [kitchenPass, setKitchenPass] = useState<UserKitchenPass>(
     preferencesStore.getKitchenPass()
   );
-  const [selectedFilter, setSelectedFilter] =
-    useState<CollectionFilterType>('all');
-  const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [countryModalVisible, setCountryModalVisible] = useState(false);
+  const [passModalVisible, setPassModalVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [toastAction, setToastAction] = useState<
-    { label: string; onPress: () => void } | undefined
-  >(undefined);
+  const [aiPhotosMap, setAiPhotosMap] = useState<Record<string, string>>({});
 
-  // Real data from Neon DB — starts empty, populated from API
+  // Real data from Neon DB
   const [apiMeals, setApiMeals] = useState<BaseMealEntry[]>([]);
-  const [loadingMeals, setLoadingMeals] = useState(true); // true until first API response
+  const [loadingMeals, setLoadingMeals] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    let isMounted = true;
-    const loadMeals = async () => {
-      try {
-        const meals = await apiClient<any[]>('/api/saved-meals');
-        if (!isMounted) return;
-        // Always replace with real DB data — even if empty, never show mocks
-        const mapped: BaseMealEntry[] = Array.isArray(meals)
-          ? meals.map((m) => ({
-              id: m.id || m.mealId,
-              title: m.title,
-              type: m.type === 'eating_out' ? 'eating_out' : 'home',
-              cookTimeOrDistance: m.cookTime || '15 MIN',
-              baseCostUsd: typeof m.costNumeric === 'number' ? m.costNumeric : 2.5,
-              imageUrl: m.imageUrl || undefined,
-              targetScreen: m.type === 'eating_out' ? 'EatingOutMealDetails' : 'AtHomeMealDetails',
-              steps: m.recipeSteps,
-              ingredients: Array.isArray(m.ingredients) ? m.ingredients : undefined,
-              spotName: m.spotName,
-              vibe: m.vibe,
-            }))
-          : [];
-        setApiMeals(mapped);
-      } catch {
-        // Network failure — leave empty, user can pull-to-refresh
-        setApiMeals([]);
-      } finally {
-        if (isMounted) setLoadingMeals(false);
-      }
-    };
-
-    loadMeals();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      const meals = await apiClient<any[]>('/api/saved-meals');
-      if (Array.isArray(meals) && meals.length > 0) {
-        const mapped: BaseMealEntry[] = meals.map((m) => ({
-          id: m.id || m.mealId,
-          title: m.title,
-          type: m.type === 'eating_out' ? 'eating_out' : 'home',
-          cookTimeOrDistance: m.cookTime || '15 MIN',
-          baseCostUsd: typeof m.costNumeric === 'number' ? m.costNumeric : 2.5,
-          imageUrl: m.imageUrl || undefined,
-          targetScreen: m.type === 'eating_out' ? 'EatingOutMealDetails' : 'AtHomeMealDetails',
-          steps: m.recipeSteps,
-          ingredients: Array.isArray(m.ingredients) ? m.ingredients : undefined,
-          spotName: m.spotName,
-          vibe: m.vibe,
-        }));
-        setApiMeals(mapped);
-      }
-    } catch {
-      // Keep active list on network error
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
-
-  // Mama voice interaction
-  const [mamaQuote, setMamaQuote] = useState<string>(
-    "Look at your collection! Every meal here was chosen by you."
-  );
-  const [mamaPose, setMamaPose] = useState<MamaPose>('delighted');
-  const mamaBounceAnim = useRef(new Animated.Value(1)).current;
 
   // Entrance animations
   const contentFade = useRef(new Animated.Value(0)).current;
-  const contentY = useRef(new Animated.Value(20)).current;
+  const contentY = useRef(new Animated.Value(15)).current;
+
+  // Format compact budget remaining (e.g. ₦35k or $42)
+  const remainingBudget = kitchenPass.weeklyBudget - kitchenPass.spentThisWeek;
+  const formattedBudget = useMemo(() => {
+    if (remainingBudget >= 1000) {
+      const kVal = Math.round(remainingBudget / 1000);
+      return `${kitchenPass.currencySymbol}${kVal}k`;
+    }
+    return `${kitchenPass.currencySymbol}${Math.max(0, Math.round(remainingBudget))}`;
+  }, [remainingBudget, kitchenPass.currencySymbol]);
 
   useEffect(() => {
-    const unsubscribe = preferencesStore.subscribe((pass) => {
-      setKitchenPass(pass);
-    });
-    return unsubscribe;
+    const unsub = preferencesStore.subscribe((updated) => setKitchenPass(updated));
+    return unsub;
   }, []);
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(contentFade, {
         toValue: 1,
-        duration: 450,
+        duration: 350,
         useNativeDriver: true,
       }),
       Animated.timing(contentY, {
         toValue: 0,
-        duration: 450,
+        duration: 350,
         useNativeDriver: true,
       }),
     ]).start();
+  }, [contentFade, contentY]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const unsub = savedMealsService.subscribe((meals) => {
+      if (!isMounted) return;
+      const mapped: BaseMealEntry[] = meals.map((m) => ({
+        id: m.id || m.mealId,
+        title: m.title,
+        type: m.type === 'eating_out' ? 'eating_out' : 'home',
+        cookTimeOrDistance: m.cookTime || '15 MIN',
+        baseCostUsd: typeof m.costNumeric === 'number' ? m.costNumeric : 2.5,
+        imageUrl: m.imageUrl || undefined,
+        targetScreen: m.type === 'eating_out' ? 'EatingOutMealDetails' : 'AtHomeMealDetails',
+        steps: m.recipeSteps,
+        ingredients: Array.isArray(m.ingredients) ? m.ingredients : undefined,
+        spotName: m.spotName || undefined,
+        vibe: m.vibe || undefined,
+      }));
+      setApiMeals(mapped);
+      setLoadingMeals(false);
+    });
+
+    savedMealsService.fetchAll();
+
+    return () => {
+      isMounted = false;
+      unsub();
+    };
   }, []);
 
-  const triggerMamaBounce = () => {
-    Animated.sequence([
-      Animated.timing(mamaBounceAnim, {
-        toValue: 0.94,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.spring(mamaBounceAnim, {
-        toValue: 1,
-        friction: 4,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await savedMealsService.fetchAll();
+    setRefreshing(false);
+  }, []);
 
-  const handleTapMama = () => {
-    triggerMamaBounce();
-    const interactive = MamaDialogueService.getRandomInteractiveLine(kitchenPass);
-    setMamaQuote(interactive.quote);
-    setMamaPose(interactive.pose);
-  };
+  // Active entries from savedMealsService
+  const activeEntries = apiMeals;
 
-  // Build active saved meals list from API (real data) with currency localization
-  const activeEntries = useMemo(() => {
-    return apiMeals.filter((item) => !removedIds.includes(item.id));
-  }, [apiMeals, removedIds]);
+  // Auto-hydrate saved meal cards with real dish-accurate AI photography if they lack one
+  useEffect(() => {
+    let cancelled = false;
+    activeEntries.slice(0, 6).forEach((entry) => {
+      if (aiPhotosMap[entry.title] || (entry.imageUrl && !MealImageService.isCatalogImage(entry.imageUrl))) {
+        return;
+      }
+      MealImageService.generateMealImage(
+        entry.title,
+        entry.ingredients,
+        kitchenPass.cuisineAnchor
+      )
+        .then((url) => {
+          if (!cancelled && url && !MealImageService.isCatalogImage(url)) {
+            setAiPhotosMap((prev) => ({ ...prev, [entry.title]: url }));
+          }
+        })
+        .catch(() => {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeEntries, kitchenPass.cuisineAnchor, aiPhotosMap]);
 
   const savedMeals: SavedMealItem[] = useMemo(() => {
-    return activeEntries.map((item: BaseMealEntry) => {
-      const localCost = convertMealCost(
-        item.baseCostUsd,
+    const deckPhotos = MealImageService.getCarouselDeckImages(
+      activeEntries.map((e) => ({ title: e.title, ingredients: e.ingredients })),
+      kitchenPass.cuisineAnchor
+    );
+    return activeEntries.map((entry, idx) => {
+      const costStr = convertMealCost(
+        entry.baseCostUsd,
         kitchenPass.currencyCode,
         kitchenPass.currencySymbol
       );
-      const typeLabel =
-        item.type === 'home'
-          ? `AT HOME · ${item.cookTimeOrDistance}`
-          : `EATING OUT · ${item.cookTimeOrDistance}`;
 
       return {
-        id: item.id,
-        title: item.title,
-        type: item.type,
-        typeLabel,
-        cost: `${localCost} est. / ${item.type === 'home' ? 'serving' : 'meal'}`,
-        imageUrl: item.imageUrl,
-        targetScreen: item.targetScreen || (item.type === 'home' ? 'AtHomeMealDetails' : 'EatingOutMealDetails'),
+        id: entry.id,
+        title: entry.title,
+        type: entry.type,
+        typeLabel: entry.cookTimeOrDistance,
+        cost: costStr,
+        imageUrl: aiPhotosMap[entry.title] || entry.imageUrl || deckPhotos[idx],
+        targetScreen: entry.targetScreen,
       };
     });
-  }, [activeEntries, kitchenPass.currencyCode, kitchenPass.currencySymbol]);
-
-  const counts = {
-    all: savedMeals.length,
-    home: savedMeals.filter((m) => m.type === 'home').length,
-    eating_out: savedMeals.filter((m) => m.type === 'eating_out').length,
-  };
-
-  const filteredMeals = savedMeals.filter((meal) => {
-    if (selectedFilter === 'all') return true;
-    return meal.type === selectedFilter;
-  });
+  }, [aiPhotosMap, activeEntries, kitchenPass.currencyCode, kitchenPass.currencySymbol, kitchenPass.cuisineAnchor]);
 
   const handleUnsave = (item: SavedMealItem) => {
-    triggerMamaBounce();
-    // Optimistically remove from UI
-    setRemovedIds((prev) => [...prev, item.id]);
-    setMamaQuote(`Removed "${item.title}". No problem, keep only what you love!`);
-    setMamaPose('writing');
-    setToastMessage(`Removed "${item.title}"`);
-    setToastAction({
-      label: 'Undo',
-      onPress: () => {
-        // Undo: restore locally (we already deleted from DB, but this gives instant feedback)
-        setRemovedIds((prev) => prev.filter((id) => id !== item.id));
-        setMamaQuote("Restored! It's right back in your collection.");
-        setMamaPose('delighted');
-      },
-    });
-    // Delete from Neon DB (fire-and-forget)
+    setToastMessage(`Removed from collection`);
     savedMealsService.removeMeal(item.id);
   };
 
@@ -260,72 +192,133 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
     const raw = activeEntries.find((e) => e.id === item.id);
     if (!raw) return;
 
-    if (raw.type === 'eating_out') {
+    if (raw.type === 'eating_out' || raw.targetScreen === 'EatingOutMealDetails') {
       navigation.navigate('EatingOutMealDetails', {
-        spotName: raw.spotName || 'Local Kitchen Pick',
         dishName: raw.title,
+        spotName: raw.spotName || 'Local spot',
         distance: raw.cookTimeOrDistance,
-        price: item.cost.split(' est.')[0] || '$8.50',
-        vibe: raw.vibe || 'Cozy neighborhood kitchen within your budget.',
-        image: raw.imageUrl,
+        price: item.cost,
+        vibe: raw.vibe || 'Cozy neighbourhood spot',
+        image: item.imageUrl || raw.imageUrl,
       });
+      return;
+    }
+
+    navigation.navigate('AtHomeMealDetails', {
+      id: raw.id,
+      title: raw.title,
+      subtitle: 'From your saved collection',
+      cookTime: raw.cookTimeOrDistance,
+      gear: kitchenPass.cookingGearLabel || '1 Pan',
+      estCost: item.cost.split(' est.')[0] || '$2.50',
+      costNumeric: raw.baseCostUsd,
+      image: item.imageUrl || raw.imageUrl,
+      steps: raw.steps || [
+        'Warm your pan over medium heat with cooking oil.',
+        'Cook ingredients until golden and fragrant.',
+        'Plate warm and enjoy.',
+      ],
+      ingredients: raw.ingredients || [
+        { name: 'Core staple', amount: '1 portion' },
+        { name: 'Seasonings', amount: 'To taste' },
+      ],
+      mamaTip: `One of your saved favorites! Let's get your ${kitchenPass.cookingGearLabel || '1 pan'} sizzling.`,
+    });
+  };
+
+  const handleRollToday = (item: SavedMealItem) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    const raw = activeEntries.find((e) => e.id === item.id);
+
+    const meal = {
+      id: item.id,
+      title: item.title,
+      subtitle: raw?.subtitle || 'From your saved collection',
+      cookTime: raw?.cookTimeOrDistance || '20 min',
+      gear: kitchenPass.cookingGearLabel || '1 Pan',
+      costNumeric: raw?.baseCostUsd || 2.5,
+      imageUrl: item.imageUrl,
+      steps: raw?.steps || [
+        'Warm your pan over medium heat with cooking oil.',
+        'Cook ingredients until golden and fragrant.',
+        'Plate warm and enjoy.',
+      ],
+      ingredients: raw?.ingredients || [
+        { name: 'Core staple', amount: '1 portion' },
+        { name: 'Seasonings', amount: 'To taste' },
+      ],
+      mamaTip: `Pulled from your saved collection. Perfect choice for today.`,
+    };
+
+    if (isInsideTabs) {
+      setInjectedDailyMeal(meal);
+      setActiveTab('edit');
     } else {
-      navigation.navigate('AtHomeMealDetails', {
-        id: raw.id,
-        title: raw.title,
-        subtitle: 'From your personal recipe collection.',
-        cookTime: raw.cookTimeOrDistance,
-        gear: '1 Pan & Skillet',
-        estCost: item.cost.split(' est.')[0] || '$2.50',
-        costNumeric: raw.baseCostUsd,
-        image: raw.imageUrl,
-        steps: raw.steps || [
-          'Warm your skillet on medium heat with cooking oil.',
-          'Cook all ingredients until golden and fragrant.',
-          'Plate warm and enjoy your homemade comfort.',
-        ],
-        ingredients: raw.ingredients || [
-          { name: 'Core staple', amount: '1 portion' },
-          { name: 'Seasonings', amount: 'To taste' },
-        ],
-      });
+      navigation.navigate('YourDailyEdit', { injectedMeal: meal });
     }
   };
 
   const handleTabChange = (tab: NavTab) => {
-    if (tab === 'edit') {
-      navigation.navigate('YourDailyEdit');
-    } else if (tab === 'discover') {
-      navigation.navigate('DiscoverYourNextMeal');
+    if (isInsideTabs) {
+      setActiveTab(tab);
+    } else {
+      if (tab === 'edit') {
+        navigation.navigate('YourDailyEdit');
+      } else if (tab === 'kitchen') {
+        navigation.navigate('WhatsInYourKitchen');
+      } else if (tab === 'discover') {
+        navigation.navigate('DiscoverYourNextMeal');
+      }
     }
   };
 
-  // Group filtered meals in pairs for 2-column grid
+  // Group meals in pairs for 2-column grid
   const mealPairs: SavedMealItem[][] = [];
-  for (let i = 0; i < filteredMeals.length; i += 2) {
-    mealPairs.push(filteredMeals.slice(i, i + 2));
+  for (let i = 0; i < savedMeals.length; i += 2) {
+    mealPairs.push(savedMeals.slice(i, i + 2));
   }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar style="dark" />
 
-      {/* Screen Masthead with Country Switcher */}
-      <View style={styles.masthead}>
+      {/* 1. UNIFIED STATUS TOP BAR (Matches YourDailyEdit & Discover) */}
+      <View style={styles.topBar}>
         <View style={styles.brandGroup}>
-          <Ionicons name="leaf-outline" size={20} color={colors.primary} />
-          <Text style={styles.brandTitle}>MAMA KITCHEN</Text>
+          <Text style={styles.brandTitle}>Mama</Text>
+          <Text style={styles.periodPillText}>Collection</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.countryBadge}
-          onPress={() => setCountryModalVisible(true)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.countryBadgeFlag}>{kitchenPass.country}</Text>
-          <Text style={styles.countryBadgeCurrency}>{kitchenPass.currencySymbol}</Text>
-          <Feather name="chevron-down" size={13} color={colors.text.secondary} />
-        </TouchableOpacity>
+        <View style={styles.iconCluster}>
+          <TouchableOpacity
+            style={styles.headerChip}
+            onPress={() => setCountryModalVisible(true)}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="wallet-outline" size={13} color={colors.primary} />
+            <Text style={styles.headerChipText}>{formattedBudget}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.headerChip}
+            onPress={() => {
+              if (isInsideTabs) setActiveTab('kitchen');
+              else navigation.navigate('WhatsInYourKitchen');
+            }}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="basket-outline" size={13} color={colors.primary} />
+            <Text style={styles.headerChipText}>Kitchen</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.headerChip}
+            onPress={() => setPassModalVisible(true)}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="options-outline" size={14} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Main Scroll Content */}
@@ -350,62 +343,14 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
             },
           ]}
         >
-          {/* Section 1: Collection Introduction */}
-          <View style={styles.introBlock}>
-            <Text style={styles.eyebrow}>
-              GOOD IDEAS, KEPT CLOSE · {kitchenPass.countryName.toUpperCase()}
-            </Text>
-            <Text style={styles.heading}>Your collection.</Text>
-            <Text style={styles.supportingCopy}>
-              Saved meals, ready when you are.
-            </Text>
-          </View>
-
-          {/* Section 2: Mama Live Voice Coaching Banner */}
-          <TouchableOpacity
-            style={styles.mamaGreetingCard}
-            onPress={handleTapMama}
-            activeOpacity={0.85}
-          >
-            <MamaCharacter
-              pose={mamaPose}
-              size={54}
-              isSpeaking={true}
-              onPress={handleTapMama}
-            />
-
-            <View style={styles.mamaBubbleWrap}>
-              <View style={styles.mamaBadgeRow}>
-                <Text style={styles.mamaName}>Mama</Text>
-                <View style={styles.tapPill}>
-                  <Ionicons name="chatbubble-ellipses-outline" size={11} color={colors.primary} />
-                  <Text style={styles.tapPillText}>Tap to chat</Text>
-                </View>
-              </View>
-
-              <Animated.View style={{ transform: [{ scale: mamaBounceAnim }] }}>
-                <Text style={styles.mamaBubbleText}>&ldquo;{mamaQuote}&rdquo;</Text>
-              </Animated.View>
-            </View>
-          </TouchableOpacity>
-
           {loadingMeals ? (
             <View style={styles.loadingWrap}>
               <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={{ marginTop: 8, fontSize: 12, color: colors.text.muted }}>Loading your collection…</Text>
+              <Text style={styles.loadingText}>Loading your collection...</Text>
             </View>
           ) : (
             <>
-              {/* Section 3: Collection Filter Chips — only show when we have meals */}
-              {apiMeals.length > 0 && (
-                <CollectionFilters
-                  selectedFilter={selectedFilter}
-                  onSelectFilter={setSelectedFilter}
-                  counts={counts}
-                />
-              )}
-
-              {/* Section 4: Saved Meals Grid */}
+              {/* Saved Meals 2-Column Grid */}
               <View style={styles.savedMealsContainer}>
                 {mealPairs.length > 0 ? (
                   mealPairs.map((pair, rowIndex) => (
@@ -416,6 +361,7 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
                           item={meal}
                           onPress={() => handleOpenMeal(meal)}
                           onUnsave={() => handleUnsave(meal)}
+                          onRollToday={() => handleRollToday(meal)}
                         />
                       ))}
                       {pair.length === 1 && <View style={styles.spacer} />}
@@ -423,64 +369,56 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
                   ))
                 ) : (
                   <View style={styles.emptyState}>
-                    <Ionicons name="bookmark-outline" size={36} color={colors.text.secondary} />
-                    <Text style={styles.emptyTitle}>
-                      {apiMeals.length === 0
-                        ? 'Your collection is empty'
-                        : 'No meals in this filter'}
-                    </Text>
+                    <Ionicons name="bookmark-outline" size={36} color={colors.text.muted} />
+                    <Text style={styles.emptyTitle}>No saved meals yet</Text>
                     <Text style={styles.emptySubtitle}>
-                      {apiMeals.length === 0
-                        ? 'Swipe right on meals in Discover or Daily Edit to save them here.'
-                        : 'Try switching filters to see your other saved meals.'}
+                      Roll or discover meals you love to keep them in your kitchen pass.
                     </Text>
+                    <TouchableOpacity
+                      style={styles.rollButton}
+                      onPress={() => {
+                        if (isInsideTabs) setActiveTab('edit');
+                        else navigation.navigate('YourDailyEdit');
+                      }}
+                      activeOpacity={0.88}
+                    >
+                      <Text style={styles.rollButtonText}>Roll a meal</Text>
+                      <Ionicons name="arrow-forward" size={16} color={colors.snow100} />
+                    </TouchableOpacity>
                   </View>
                 )}
               </View>
             </>
           )}
-
-          <View style={styles.divider} />
-
-          {/* Section 5: Taste Learning Card */}
-          <TasteLearningCard />
-
-          {/* Section 6: Profile Essentials */}
-          <YourEssentialsSection
-            onEdit={() => navigation.navigate('MakeItYours')}
-          />
-
-          {/* Section 7: Action Button */}
-          <PrimaryButton
-            title="Discover more meals"
-            onPress={() => navigation.navigate('DiscoverYourNextMeal')}
-          />
         </Animated.View>
       </ScrollView>
 
-      {/* Country & Currency Switcher Modal */}
+      {/* Country Modal */}
       <CountryCurrencyModal
         visible={countryModalVisible}
         onClose={() => setCountryModalVisible(false)}
       />
 
-      {/* Floating In-App Toast */}
+      {/* Kitchen Pass Modal */}
+      <KitchenPassModal
+        visible={passModalVisible}
+        onClose={() => setPassModalVisible(false)}
+      />
+
+      {/* Tactile Toast */}
       <TactileToast
         visible={!!toastMessage}
         message={toastMessage || ''}
-        actionLabel={toastAction?.label}
-        onAction={toastAction?.onPress}
-        onDismiss={() => {
-          setToastMessage(null);
-          setToastAction(undefined);
-        }}
+        onDismiss={() => setToastMessage(null)}
       />
 
-      {/* Bottom Navigation */}
-      <BottomNavigation
-        activeTab="collection"
-        onTabChange={handleTabChange}
-      />
+      {/* Bottom Navigation (rendered only when screen is standalone) */}
+      {!isInsideTabs && (
+        <BottomNavigation
+          activeTab="collection"
+          onTabChange={handleTabChange}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -490,173 +428,116 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  masthead: {
-    height: 56,
-    paddingHorizontal: 24,
+  topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   brandGroup: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
+  brandTitle: {
+    fontSize: 22,
+    fontFamily: typography.fontFamily.serif,
+    fontWeight: '700',
+    color: colors.text.primary,
+    letterSpacing: -0.3,
+  },
+  periodPillText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.text.muted,
+  },
+  iconCluster: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  brandTitle: {
-    fontSize: 24,
-    fontFamily: typography.fontFamily.serif,
-    fontWeight: '600',
-    color: colors.text.primary,
-    letterSpacing: 1,
-  },
-  countryBadge: {
+  headerChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
+    backgroundColor: 'rgba(36, 40, 32, 0.06)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 20,
-    backgroundColor: colors.snow100,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  countryBadgeFlag: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
-    letterSpacing: 0.5,
-  },
-  countryBadgeCurrency: {
+  headerChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.text.primary,
+    color: colors.primary,
   },
   scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 28,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 100,
   },
   animatedContainer: {
-    gap: 20,
+    gap: 16,
   },
-  introBlock: {
-    gap: 6,
-  },
-  eyebrow: {
-    fontSize: typography.fontSize.label,
-    fontWeight: '600',
-    color: colors.primary,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  heading: {
-    fontSize: 40,
-    lineHeight: 44,
-    fontFamily: typography.fontFamily.serif,
-    color: colors.text.primary,
-    fontWeight: '500',
-  },
-  supportingCopy: {
-    fontSize: typography.fontSize.sub,
-    lineHeight: 20,
-    color: colors.text.secondary,
-  },
-
-  // Mama Live Voice Coaching Card
-  mamaGreetingCard: {
-    flexDirection: 'row',
+  loadingWrap: {
+    paddingVertical: 48,
     alignItems: 'center',
-    backgroundColor: colors.snow100,
-    borderRadius: 18,
-    padding: 14,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
+    gap: 10,
   },
-  mamaBubbleWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  mamaBadgeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  mamaName: {
-    fontSize: 12,
-    fontFamily: typography.fontFamily.serif,
-    fontWeight: '700',
-    color: colors.primary,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  tapPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.linen100,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  tapPillText: {
-    fontSize: 10,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  mamaBubbleText: {
+  loadingText: {
     fontSize: 13,
-    lineHeight: 18,
-    fontFamily: typography.fontFamily.regular,
-    fontStyle: 'italic',
-    color: colors.text.primary,
+    color: colors.text.muted,
   },
-
   savedMealsContainer: {
-    gap: 24,
-    width: '100%',
+    gap: 14,
   },
   mealRow: {
     flexDirection: 'row',
-    gap: 16,
-    width: '100%',
+    gap: 12,
   },
   spacer: {
     flex: 1,
   },
   emptyState: {
-    paddingVertical: 48,
-    paddingHorizontal: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(36, 40, 32, 0.08)',
+    padding: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    backgroundColor: colors.snow100,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
+    gap: 8,
+    marginTop: 30,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontFamily: typography.fontFamily.serif,
+    fontWeight: '600',
     color: colors.text.primary,
-    fontWeight: '500',
-    textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: typography.fontSize.reassurance,
-    lineHeight: 18,
+    fontSize: 13,
     color: colors.text.secondary,
     textAlign: 'center',
+    lineHeight: 19,
+    maxWidth: 240,
   },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    width: '100%',
-  },
-  loadingWrap: {
-    paddingVertical: 16,
+  rollButton: {
+    marginTop: 12,
+    height: 52,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+  },
+  rollButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.snow100,
   },
 });
 

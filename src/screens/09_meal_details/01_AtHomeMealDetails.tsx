@@ -7,10 +7,13 @@ import {
   Image,
   Animated,
   TouchableOpacity,
+  Share,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
@@ -23,8 +26,59 @@ import {
 } from '../../services/preferencesStore';
 import { savedMealsService } from '../../services/api/savedMealsService';
 import { decisionsService } from '../../services/api/decisionsService';
+import { pantryService } from '../../services/api/pantryService';
+import { MamaDialogueService } from '../../services/mamaDialogueService';
+import { AiMamaService } from '../../services/aiMamaService';
+import { getCurrentTimeOfDay } from '../../services/api/rollService';
+import { MealImageService } from '../../services/mealImageService';
+import {
+  InteractiveCookModal,
+  DishRewardModal,
+} from './components/InteractiveCookModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AtHomeMealDetails'>;
+
+const scaleIngredientAmount = (amount: string, portions: 1 | 2): string => {
+  if (portions === 1 || !amount) return amount;
+  if (/^1\/2\b/.test(amount.trim())) {
+    return amount.replace(/^1\/2/, '1');
+  }
+  if (/^1\/4\b/.test(amount.trim())) {
+    return amount.replace(/^1\/4/, '1/2');
+  }
+  return amount.replace(/(\d+(?:\.\d+)?)/, (match) => {
+    const val = parseFloat(match);
+    if (isNaN(val)) return match;
+    const doubled = val * 2;
+    return Number.isInteger(doubled) ? String(doubled) : doubled.toFixed(1);
+  });
+};
+
+const getIngredientSubstituteTip = (ingredientName: string): string => {
+  const lower = ingredientName.toLowerCase();
+  if (lower.includes('plantain') || lower.includes('dodo')) {
+    return 'No plantain? Boiled yam, sweet potato, or toasted bread works well on the side.';
+  }
+  if (lower.includes('egg')) {
+    return 'Out of eggs? Canned sardines, tuna, or diced tofu can step in for protein.';
+  }
+  if (lower.includes('tomato')) {
+    return 'No fresh tomatoes? A spoon of tomato paste with a splash of water works cleanly.';
+  }
+  if (lower.includes('pepper') || lower.includes('rodo')) {
+    return 'Out of fresh pepper? Dry chili flakes or Cameroon pepper gives that same warm kick.';
+  }
+  if (lower.includes('onion')) {
+    return 'No onion? A pinch of garlic powder or spring onion greens keeps the base savory.';
+  }
+  if (lower.includes('rice')) {
+    return 'Out of rice? Spaghetti, couscous, or boiled yam pieces work with the same base.';
+  }
+  if (lower.includes('butter')) {
+    return 'No butter? Regular vegetable or groundnut oil with a pinch of salt works just fine.';
+  }
+  return `Short on ${ingredientName.toLowerCase()}? Skip it or swap with whatever staple you have on hand.`;
+};
 
 interface CookingStepItem {
   id: number;
@@ -33,17 +87,117 @@ interface CookingStepItem {
   instruction: string;
 }
 
+interface ActiveTimer {
+  stepId: number;
+  totalSeconds: number;
+  remainingSeconds: number;
+  isRunning: boolean;
+}
+
+const extractMinutes = (text: string): number | null => {
+  if (!text) return null;
+  const match = text.match(/(\d+)(?:\s*(?:-|to)\s*\d+)?\s*(?:min|mins|minute|minutes)\b/i);
+  if (match && match[1]) {
+    const parsed = parseInt(match[1], 10);
+    if (!isNaN(parsed) && parsed > 0 && parsed <= 120) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const formatCountdown = (seconds: number): string => {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+};
+
 export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
   const params = route.params;
   const cookTime = params?.cookTime || '15 min';
+  const dishTitle = params?.title || '';
+  const initialTip = params?.mamaTip;
 
-  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState<boolean>(() => {
+    if (!dishTitle) return false;
+    const targetMealId = params?.id || `meal-${dishTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    return savedMealsService
+      .getCachedMeals()
+      .some((m) => m.mealId === targetMealId || m.id === targetMealId || m.title.toLowerCase() === dishTitle.toLowerCase());
+  });
+  const [portions, setPortions] = useState<1 | 2>(1);
+  const [isHealthyRemix, setIsHealthyRemix] = useState(false);
+  const [healthyUnlocked, setHealthyUnlocked] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
+  const [tossedIngredients, setTossedIngredients] = useState<string[]>([]);
+  const [cookModalVisible, setCookModalVisible] = useState(false);
+  const [activeCookStepIdx, setActiveCookStepIdx] = useState(0);
+  const [rewardModalVisible, setRewardModalVisible] = useState(false);
   const [mamaPose, setMamaPose] = useState<MamaPose>('cooking');
-  const [mamaNote, setMamaNote] = useState<string>(
-    `"You've got this! Follow my simple steps, and you'll be eating in ${cookTime}."`
-  );
+  const [mamaNote, setMamaNote] = useState<string>(() => {
+    if (initialTip) {
+      return `"${initialTip}"`;
+    }
+    const currentPass = preferencesStore.getKitchenPass();
+    const voice = MamaDialogueService.getSyncedMamaVoice({
+      timeOfDay: getCurrentTimeOfDay(),
+      pass: currentPass,
+      activeDish: {
+        title: dishTitle,
+        cookTimeMinutes: extractMinutes(cookTime) || 15,
+        gear: params?.gear || currentPass.cookingGearLabel,
+        mamaTip: initialTip,
+      },
+      actionHint: 'cook_start',
+    });
+    return `"${voice.quote}"`;
+  });
+  const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null);
+
+  // Countdown timer loop
+  useEffect(() => {
+    if (!activeTimer || !activeTimer.isRunning) return;
+
+    const interval = setInterval(() => {
+      setActiveTimer((prev) => {
+        if (!prev || !prev.isRunning) return prev;
+        if (prev.remainingSeconds <= 1) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          setToastMessage(`Step ${prev.stepId} timer finished!`);
+          setCompletedSteps((c) => (c.includes(prev.stepId) ? c : [...c, prev.stepId]));
+          return null;
+        }
+        return { ...prev, remainingSeconds: prev.remainingSeconds - 1 };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTimer?.isRunning]);
+
+  const handleToggleTimer = (stepId: number, mins: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    if (activeTimer?.stepId === stepId) {
+      setActiveTimer({
+        ...activeTimer,
+        isRunning: !activeTimer.isRunning,
+      });
+    } else {
+      setActiveTimer({
+        stepId,
+        totalSeconds: mins * 60,
+        remainingSeconds: mins * 60,
+        isRunning: true,
+      });
+      setToastMessage(`Timer started: ${mins} minutes for Step ${stepId}`);
+    }
+  };
+
+  const handleCancelTimer = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setActiveTimer(null);
+  };
 
   // Entrance animations
   const contentFade = useRef(new Animated.Value(0)).current;
@@ -56,6 +210,54 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
       Animated.timing(contentY, { toValue: 0, duration: 400, useNativeDriver: true }),
     ]).start();
   }, [contentFade, contentY]);
+
+  // Live Intelligence for dish-specific Mama tip in cooking mode (only if no initialTip was provided)
+  useEffect(() => {
+    if (!dishTitle || (initialTip && initialTip.length > 5)) return;
+    const currentPass = preferencesStore.getKitchenPass();
+    AiMamaService.getLiveMamaDialogue({
+      timeOfDay: getCurrentTimeOfDay(),
+      pass: currentPass,
+      activeDish: {
+        title: dishTitle,
+        gear: params?.gear || currentPass.cookingGearLabel,
+        cookTimeMinutes: extractMinutes(cookTime) || 15,
+      },
+      actionHint: 'cook_start',
+    })
+      .then((aiQuote) => {
+        if (aiQuote && aiQuote.length > 5) {
+          setMamaNote(`"${aiQuote}"`);
+        }
+      })
+      .catch(() => {});
+  }, [dishTitle, cookTime, params?.gear, initialTip]);
+
+  // On-demand AI Food Image Generation: triggers ONLY when user clicks "Check this food" to open details
+  const [aiGeneratedImageEntry, setAiGeneratedImageEntry] = useState<{
+    title: string;
+    url: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!dishTitle) return;
+    let isMounted = true;
+    const pass = preferencesStore.getKitchenPass();
+    MealImageService.generateMealImage(
+      dishTitle,
+      params?.ingredients,
+      pass.cuisineAnchor
+    )
+      .then((resolvedUrl) => {
+        if (isMounted && resolvedUrl) {
+          setAiGeneratedImageEntry({ title: dishTitle, url: resolvedUrl });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [dishTitle, params?.ingredients]);
 
   // Empty state guard: if screen opened without meal, don't invent mock egg data
   if (!params || !params.title) {
@@ -93,16 +295,27 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
   const title = params.title;
   const gear = params.gear || '1 Pan';
   const costNumeric = typeof params.costNumeric === 'number' ? params.costNumeric : 2.5;
-  // Use API-provided image only — never fall back to a hardcoded third-party URL
-  const image = params.image || undefined;
+  // Curated catalog photo shown immediately, upgraded to AI-generated dish photo once ready
+  const catalogFallbackImage =
+    params.image ||
+    MealImageService.getFallbackMealImage(
+      title,
+      params.ingredients,
+      currentPass.cuisineAnchor
+    );
+  const aiGeneratedImage =
+    aiGeneratedImageEntry && aiGeneratedImageEntry.title === title
+      ? aiGeneratedImageEntry.url
+      : null;
+  const image = aiGeneratedImage || catalogFallbackImage;
 
   const mealId = params.id || `meal-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
   const rawIngredients = params.ingredients;
   const rawSteps = params.steps;
 
-  // Dynamically resolve ingredients from params — no hardcoded eggs or mock ingredients
-  const resolvedIngredients =
+  // Dynamically resolve ingredients from params — with optional Healthy Remix (Low Oil & Greens)
+  const baseIngredients =
     rawIngredients && rawIngredients.length > 0
       ? rawIngredients.map((ing) => ({
           name: ing.name,
@@ -111,18 +324,47 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
         }))
       : [];
 
-  // Dynamically resolve steps from params — no hardcoded mock steps
+  const resolvedIngredients = isHealthyRemix
+    ? [
+        ...baseIngredients.map((ing) => {
+          const lower = ing.name.toLowerCase();
+          if (lower.includes('oil') || lower.includes('butter')) {
+            return { ...ing, amount: '1 tsp (Low-Oil)' };
+          }
+          return ing;
+        }),
+        ...(baseIngredients.some((i) =>
+          /spinach|greens|broccoli|kale|cabbage|vegetable/i.test(i.name)
+        )
+          ? []
+          : [{ name: 'Fresh Spinach / Greens', amount: '1 handful', inPantry: true }]),
+      ]
+    : baseIngredients;
+
+  // Dynamically resolve steps from params with distinct culinary phases
+  const STEP_PHASES = ['Prep & Season', 'Sauté & Sear', 'Simmer & Cook', 'Finish & Plate'];
   const resolvedSteps: CookingStepItem[] =
     rawSteps && rawSteps.length > 0
-      ? rawSteps.map((stepText, idx) => ({
-          id: idx + 1,
-          timeHint: `Step ${idx + 1}`,
-          title: stepText.length > 32 ? stepText.slice(0, 32).trim() + '…' : stepText,
-          instruction: stepText,
-        }))
+      ? rawSteps.map((stepText, idx) => {
+          const adaptedText = isHealthyRemix
+            ? stepText
+                .replace(/deep[- ]?fry/gi, 'light pan-sear')
+                .replace(/\b[23]\s*tbsp\b/gi, '1 tsp')
+            : stepText;
+          const detectedMins = extractMinutes(adaptedText);
+          const phase = STEP_PHASES[Math.min(idx, STEP_PHASES.length - 1)];
+          const timeHint = detectedMins ? `${detectedMins} mins` : `Step ${idx + 1}`;
+          return {
+            id: idx + 1,
+            timeHint,
+            title: phase,
+            instruction: adaptedText,
+          };
+        })
       : [];
 
   const toggleStep = (stepId: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     let updated: number[];
     if (completedSteps.includes(stepId)) {
       updated = completedSteps.filter((id) => id !== stepId);
@@ -131,41 +373,155 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
     }
     setCompletedSteps(updated);
 
+    if (activeTimer?.stepId === stepId) {
+      setActiveTimer(null);
+    }
+
     if (updated.length === 0) {
       setMamaPose('cooking');
-      setMamaNote(`"Let's get cooking! The pan is waiting."`);
+      setMamaNote(initialTip ? `"${initialTip}"` : `"Let's get cooking! The pan is waiting."`);
     } else if (updated.length === 1) {
       setMamaPose('writing');
       setMamaNote(`"Smells incredible already! Don't rush it, let the flavor build."`);
     } else if (updated.length === resolvedSteps.length) {
       setMamaPose('delighted');
-      setMamaNote(`"Magnificent! Dinner is served. Sit down, relax, and eat warm."`);
+      setMamaNote(`"Magnificent! ${dishTitle || 'Dinner'} is served. Sit down, relax, and eat warm."`);
     } else {
       setMamaPose('cooking');
       setMamaNote(`"Almost there! Just assembling your hot comfort bowl."`);
     }
   };
 
-  const handleMarkAsCooked = () => {
-    // 1. Update local preference store
-    preferencesStore.recordMealDecision(mealId, 'cooked', costNumeric);
-    // 2. Persist decision to Neon DB
-    decisionsService.log(mealId, title, 'cooked', costNumeric);
+  const handleTapMamaTip = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
 
-    setMamaPose('delighted');
-    setToastMessage(`Mama: "Well done! I logged this in your weekly budget."`);
+    const currentPass = preferencesStore.getKitchenPass();
+    const voice = MamaDialogueService.getSyncedMamaVoice({
+      timeOfDay: getCurrentTimeOfDay(),
+      pass: currentPass,
+      activeDish: {
+        title: dishTitle,
+        cookTimeMinutes: extractMinutes(cookTime) || 15,
+        gear: params?.gear || currentPass.cookingGearLabel,
+        mamaTip: params?.mamaTip,
+      },
+      actionHint: 'tap_advice',
+    });
+    setMamaNote(`"${voice.quote}"`);
+    setMamaPose(voice.pose);
+  };
 
+  const handleTapIngredient = (ingredientName: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setTossedIngredients((prev) =>
+      prev.includes(ingredientName)
+        ? prev.filter((item) => item !== ingredientName)
+        : [...prev, ingredientName]
+    );
+    setMamaPose('thinking');
+    setMamaNote(`"${getIngredientSubstituteTip(ingredientName)}"`);
+  };
+
+  const finishAndNavigateBack = () => {
     Animated.sequence([
       Animated.timing(finishScale, { toValue: 0.94, duration: 100, useNativeDriver: true }),
       Animated.timing(finishScale, { toValue: 1, duration: 150, useNativeDriver: true }),
     ]).start(() => {
       setTimeout(() => {
-        navigation.navigate('YourDailyEdit');
-      }, 900);
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('YourDailyEdit');
+        }
+      }, 350);
     });
   };
 
+  const handleMarkAsCooked = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    if (activeTimer) {
+      setActiveTimer(null);
+    }
+    setCookModalVisible(false);
+    const effectiveCost = costNumeric * portions;
+    // 1. Update local preference store with human-readable dish title
+    preferencesStore.recordMealDecision(title, 'cooked', effectiveCost);
+    // 2. Persist decision to Neon DB
+    decisionsService.log(mealId, title, 'cooked', effectiveCost);
+
+    setMamaPose('delighted');
+    setRewardModalVisible(true);
+  };
+
+  const handleClaimRewardAndExit = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setRewardModalVisible(false);
+
+    // Check if any non-basic pantry items were used and offer 1-tap cleanup
+    const stemToken = (w: string) =>
+      w
+        .toLowerCase()
+        .trim()
+        .replace(/ies$/, 'y')
+        .replace(/oes$/, 'o')
+        .replace(/s$/, '');
+    const basicStaples = ['oil', 'cooking oil', 'salt', 'water', 'pepper', 'onions', 'onion'];
+    const currentPantry = pantryService.getCachedPantry();
+    const usedIdsToClear = currentPantry
+      .filter((pItem) => {
+        const pLower = pItem.name.toLowerCase().trim();
+        if (basicStaples.includes(pLower)) return false;
+        const pStem = stemToken(pLower);
+        if (pStem.length < 3) return false;
+        return resolvedIngredients.some((rIng) => {
+          const rLower = rIng.name.toLowerCase();
+          const rWords = rLower.split(/[^a-z]+/).map(stemToken);
+          return rLower.includes(pStem) || rWords.includes(pStem);
+        });
+      })
+      .map((p) => p.id);
+
+    if (usedIdsToClear.length > 0) {
+      const usedNames = currentPantry
+        .filter((p) => usedIdsToClear.includes(p.id))
+        .map((p) => p.name)
+        .join(', ');
+      Alert.alert(
+        'Update Kitchen Pantry?',
+        `Did you finish your ${usedNames}, or do you still have some left?`,
+        [
+          {
+            text: 'Still have some',
+            style: 'cancel',
+            onPress: finishAndNavigateBack,
+          },
+          {
+            text: 'Finished — Remove',
+            style: 'destructive',
+            onPress: async () => {
+              const remaining = currentPantry.filter((p) => !usedIdsToClear.includes(p.id));
+              await pantryService.syncItems(
+                remaining.map((p) => ({
+                  name: p.name,
+                  category: p.category,
+                  quantity: p.quantity || undefined,
+                }))
+              );
+              finishAndNavigateBack();
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    finishAndNavigateBack();
+  };
+
   const handleToggleBookmark = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     const next = !isBookmarked;
     setIsBookmarked(next);
     if (next) {
@@ -184,21 +540,78 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
       setToastMessage('Saved to your personal collection!');
     } else {
       savedMealsService.removeMeal(mealId);
+      const matchingByTitle = savedMealsService
+        .getCachedMeals()
+        .filter((m) => m.title.toLowerCase() === title.toLowerCase());
+      matchingByTitle.forEach((m) => savedMealsService.removeMeal(m.id || m.mealId));
       setToastMessage('Removed from collection');
     }
   };
 
-  // Localized Costs
+  // Localized Cost (scaled by 1x / 2x portions)
   const homeCostFormatted = convertMealCost(
-    costNumeric,
+    costNumeric * portions,
     currentPass.currencyCode,
     currentPass.currencySymbol
   );
-  const takeoutCostFormatted = convertMealCost(
-    14.0,
-    currentPass.currencyCode,
-    currentPass.currencySymbol
-  );
+
+  const handleShareIngredients = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    const itemsText =
+      resolvedIngredients.length > 0
+        ? resolvedIngredients
+            .map((i) => `- ${i.name} (${scaleIngredientAmount(i.amount, portions)})`)
+            .join('\n')
+        : '- Standard kitchen staples & seasoning';
+    const message = `${title} (${portions}x · ${cookTime} · ${homeCostFormatted})\n\nIngredients:\n${itemsText}`;
+    try {
+      await Share.share({ message });
+    } catch {}
+  };
+
+  const handleShareRecipe = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    const itemsText =
+      resolvedIngredients.length > 0
+        ? resolvedIngredients
+            .map((i) => `- ${i.name} (${scaleIngredientAmount(i.amount, portions)})`)
+            .join('\n')
+        : '- Standard kitchen staples & seasoning';
+    const stepsText =
+      resolvedSteps.length > 0
+        ? resolvedSteps.map((s) => `${s.id}. ${s.instruction}`).join('\n')
+        : '';
+    const message = `${title} (${portions}x · ${cookTime} · ${homeCostFormatted})\n\nIngredients:\n${itemsText}${
+      stepsText ? `\n\nSteps:\n${stepsText}` : ''
+    }`;
+    try {
+      await Share.share({ message });
+    } catch {}
+  };
+
+  const handleConfirmNeverShow = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
+
+    Alert.alert(
+      `Never suggest ${title}?`,
+      `Mama won't suggest this dish again. You can unhide it anytime in your Kitchen Pass under Diet.`,
+      [
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Never show again',
+          style: 'destructive',
+          onPress: () => {
+            preferencesStore.addNeverShowDish(title);
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -217,93 +630,237 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
 
         <Text style={styles.headerTitle}>Cooking Guide</Text>
 
-        <TouchableOpacity
-          onPress={handleToggleBookmark}
-          style={styles.backButton}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={isBookmarked ? 'bookmark' : 'bookmark-outline'}
-            size={18}
-            color={isBookmarked ? colors.primary : colors.text.primary}
-          />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            onPress={handleConfirmNeverShow}
+            style={styles.backButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.7}
+            accessibilityLabel="Never suggest this dish"
+          >
+            <Ionicons name="eye-off-outline" size={18} color={colors.text.secondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleShareRecipe}
+            style={styles.backButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="share-outline" size={18} color={colors.text.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleToggleBookmark}
+            style={styles.backButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={isBookmarked ? 'bookmark' : 'bookmark-outline'}
+              size={18}
+              color={isBookmarked ? colors.primary : colors.text.primary}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Animated.View style={[styles.container, { opacity: contentFade, transform: [{ translateY: contentY }] }]}>
-          {/* Hero Image with cook time & gear badges */}
-          <View style={styles.heroWrap}>
-            {image ? (
-              <Image source={{ uri: image }} style={styles.heroImage} resizeMode="cover" />
-            ) : (
-              <View style={styles.placeholderHero}>
-                <Ionicons name="flame-outline" size={48} color={colors.primary} />
+          {/* Hero Photo Banner: instant catalog base layer + live AI-generated dish image */}
+          {image ? (
+            <View style={styles.heroWrap}>
+              <Image
+                source={{ uri: catalogFallbackImage }}
+                style={styles.heroImage}
+                resizeMode="cover"
+              />
+              {aiGeneratedImage && aiGeneratedImage !== catalogFallbackImage ? (
+                <Image
+                  source={{ uri: aiGeneratedImage }}
+                  style={styles.heroAiOverlayImage}
+                  resizeMode="cover"
+                />
+              ) : null}
+              <View style={styles.timeTag}>
+                <Ionicons name="time-outline" size={13} color={colors.primary} />
+                <Text style={styles.timeTagText}>{cookTime}</Text>
               </View>
-            )}
-            <View style={styles.timeTag}>
-              <Ionicons name="time-outline" size={13} color={colors.primary} />
-              <Text style={styles.timeTagText}>{cookTime}</Text>
+              <View style={styles.gearTag}>
+                <Ionicons name="disc-outline" size={13} color={colors.snow100} />
+                <Text style={styles.gearTagText}>{gear}</Text>
+              </View>
             </View>
-            <View style={styles.gearTag}>
-              <Ionicons name="disc-outline" size={13} color={colors.snow100} />
-              <Text style={styles.gearTagText}>{gear}</Text>
-            </View>
-          </View>
+          ) : null}
 
           {/* Dish Title & Price Row */}
           <View style={styles.titleRow}>
             <View style={styles.titleTextWrap}>
               <Text style={styles.mealTitle}>{title}</Text>
-              <Text style={styles.mealSubtitle}>{cookTime} · 1 Pan · Zero cleanup stress</Text>
+              <Text style={styles.mealSubtitle}>{cookTime} · {gear}</Text>
             </View>
             <View style={styles.pricePill}>
               <Text style={styles.priceValue}>{homeCostFormatted}</Text>
-              <Text style={styles.priceLabel}>homemade</Text>
+              <Text style={styles.priceLabel}>est. cost</Text>
             </View>
           </View>
 
           {/* Mama Cooking Coach Stage */}
-          <View style={styles.mamaCoachCard}>
+          <TouchableOpacity
+            style={styles.mamaCoachCard}
+            onPress={handleTapMamaTip}
+            activeOpacity={0.85}
+          >
             <MamaCharacter pose={mamaPose} size={56} isSpeaking={true} />
             <View style={styles.mamaCoachTextWrap}>
               <Text style={styles.mamaCoachName}>MAMA&apos;S TIP</Text>
               <Text style={styles.mamaCoachBody}>{mamaNote}</Text>
             </View>
-          </View>
+          </TouchableOpacity>
 
-          {/* Cost Savings vs Takeout Banner */}
-          <View style={styles.savingsCard}>
-            <View style={styles.savingsCol}>
-              <Text style={styles.savingsLabel}>Homemade</Text>
-              <Text style={styles.savingsValHome}>{homeCostFormatted}</Text>
-            </View>
-            <View style={styles.savingsDivider} />
-            <View style={styles.savingsCol}>
-              <Text style={styles.savingsLabel}>Takeout app</Text>
-              <Text style={styles.savingsValOut}>{takeoutCostFormatted}</Text>
-            </View>
-            <View style={styles.savingsBadge}>
-              <Ionicons name="trending-down" size={14} color={colors.snow100} />
-              <Text style={styles.savingsBadgeText}>Huge Saving</Text>
-            </View>
-          </View>
-
-          {/* Section: What You Need (Ingredients) */}
+          {/* Section: Minimal Tactile Ingredient Tiles */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionHeading}>Ingredients</Text>
-            <View style={styles.ingredientList}>
+            <View style={styles.stepsHeader}>
+              <Text style={styles.sectionHeading}>Ingredients</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    if (healthyUnlocked || preferencesStore.isMamaPlus()) {
+                      const nextVal = !isHealthyRemix;
+                      setHealthyUnlocked(true);
+                      setIsHealthyRemix(nextVal);
+                      if (nextVal && preferencesStore.isMamaPlus()) {
+                        setToastMessage('Mama Plus Healthy Remix applied! Low oil & fresh greens.');
+                      }
+                      return;
+                    }
+                    const spent = preferencesStore.spendXp(50);
+                    if (!spent) {
+                      setToastMessage('Need 50 XP! Cook a meal at home (+50 XP) or unlock Mama Plus.');
+                      return;
+                    }
+                    setHealthyUnlocked(true);
+                    setIsHealthyRemix(true);
+                    setToastMessage('Healthy Remix unlocked (-50 XP)! Low oil & fresh greens.');
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    borderRadius: 12,
+                    backgroundColor: isHealthyRemix ? '#15803D' : 'rgba(21, 128, 61, 0.1)',
+                  }}
+                  activeOpacity={0.78}
+                >
+                  <Ionicons
+                    name="leaf"
+                    size={12}
+                    color={isHealthyRemix ? '#FFFFFF' : '#15803D'}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '800',
+                      color: isHealthyRemix ? '#FFFFFF' : '#15803D',
+                    }}
+                  >
+                    {isHealthyRemix
+                      ? 'Healthy ✓'
+                      : healthyUnlocked || preferencesStore.isMamaPlus()
+                      ? 'Healthy · Plus'
+                      : 'Healthy · 50 XP'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setPortions((prev) => (prev === 1 ? 2 : 1));
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    borderRadius: 12,
+                    backgroundColor: portions === 2 ? colors.primary : colors.snow200,
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: portions === 2 ? colors.snow100 : colors.primary,
+                    }}
+                  >
+                    {portions === 1 ? '1x' : '2x'}
+                  </Text>
+                </TouchableOpacity>
+
+                {resolvedIngredients.length > 0 && (
+                  <TouchableOpacity
+                    onPress={handleShareIngredients}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="share-social-outline" size={14} color={colors.primary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+            <View style={styles.ingredientTileGrid}>
               {resolvedIngredients.length > 0 ? (
-                resolvedIngredients.map((item, idx) => (
-                  <View key={idx} style={styles.ingredientRow}>
-                    <View style={styles.ingredientBullet}>
-                      <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
-                    </View>
-                    <Text style={styles.ingredientName}>{item.name}</Text>
-                    <Text style={styles.ingredientAmount}>{item.amount}</Text>
-                  </View>
-                ))
+                resolvedIngredients.map((item, idx) => {
+                  const isTossed = tossedIngredients.includes(item.name);
+                  return (
+                    <TouchableOpacity
+                      key={idx}
+                      style={[
+                        styles.ingredientTile,
+                        isTossed && styles.ingredientTileTossed,
+                      ]}
+                      onPress={() => handleTapIngredient(item.name)}
+                      activeOpacity={0.82}
+                    >
+                      <View style={styles.ingredientTileTopRow}>
+                        <Text
+                          style={[
+                            styles.ingredientTileName,
+                            isTossed && styles.ingredientTileNameActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.name}
+                        </Text>
+                        <View
+                          style={[
+                            styles.ingredientTileCheck,
+                            isTossed && styles.ingredientTileCheckActive,
+                          ]}
+                        >
+                          <Ionicons
+                            name="checkmark"
+                            size={12}
+                            color={isTossed ? '#FFFFFF' : colors.primary}
+                          />
+                        </View>
+                      </View>
+                      <Text
+                        style={[
+                          styles.ingredientTileAmount,
+                          isTossed && styles.ingredientTileAmountActive,
+                        ]}
+                      >
+                        {scaleIngredientAmount(item.amount, portions)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })
               ) : (
                 <Text style={{ fontSize: 13, color: colors.text.secondary, fontStyle: 'italic', paddingVertical: 4 }}>
                   Uses your confirmed kitchen staples and seasoning to taste.
@@ -312,69 +869,186 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
             </View>
           </View>
 
-          {/* Section: Step-by-Step Cooking Guide with Interactive Checkboxes */}
-          <View style={styles.sectionCard}>
-            <View style={styles.stepsHeader}>
-              <Text style={styles.sectionHeading}>Cooking Steps</Text>
-              <Text style={styles.stepsCount}>
-                {completedSteps.length}/{resolvedSteps.length} done
-              </Text>
-            </View>
-
-            <View style={styles.stepsList}>
-              {resolvedSteps.length > 0 ? (
-                resolvedSteps.map((step) => {
+          {/* Section: Scannable Cooking Steps Preview on Page */}
+          {resolvedSteps.length > 0 && (
+            <View style={styles.sectionCard}>
+              <View style={styles.stepsHeader}>
+                <Text style={styles.sectionHeading}>How to Cook</Text>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.text.secondary }}>
+                  {completedSteps.length}/{resolvedSteps.length} done
+                </Text>
+              </View>
+              <View style={{ gap: 10 }}>
+                {resolvedSteps.map((step) => {
                   const isDone = completedSteps.includes(step.id);
                   return (
                     <TouchableOpacity
                       key={step.id}
-                      style={[styles.stepItem, isDone && styles.stepItemDone]}
                       onPress={() => toggleStep(step.id)}
-                      activeOpacity={0.8}
+                      activeOpacity={0.82}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'flex-start',
+                        gap: 12,
+                        padding: 12,
+                        borderRadius: 14,
+                        backgroundColor: isDone ? 'rgba(46, 61, 43, 0.08)' : colors.snow100,
+                        borderWidth: 1,
+                        borderColor: isDone ? colors.primary : 'rgba(36, 40, 32, 0.08)',
+                      }}
                     >
-                      <View style={[styles.stepCircle, isDone && styles.stepCircleDone]}>
+                      <View
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 12,
+                          backgroundColor: isDone ? colors.primary : colors.snow200,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginTop: 1,
+                        }}
+                      >
                         {isDone ? (
-                          <Ionicons name="checkmark" size={16} color={colors.snow100} />
+                          <Ionicons name="checkmark" size={14} color="#FFFFFF" />
                         ) : (
-                          <Text style={styles.stepNumText}>{step.id}</Text>
+                          <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primary }}>
+                            {step.id}
+                          </Text>
                         )}
                       </View>
-
-                      <View style={styles.stepBody}>
-                        <View style={styles.stepTopLine}>
-                          <Text style={[styles.stepTitle, isDone && styles.stepTitleDone]}>
-                            {step.title}
-                          </Text>
-                          <Text style={styles.stepTimeHint}>{step.timeHint}</Text>
-                        </View>
-                        <Text style={[styles.stepInstruction, isDone && styles.stepInstructionDone]}>
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: '700',
+                            color: colors.primary,
+                            textTransform: 'uppercase',
+                            letterSpacing: 0.4,
+                          }}
+                        >
+                          {step.title} · {step.timeHint}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            lineHeight: 20,
+                            color: colors.text.primary,
+                            textDecorationLine: isDone ? 'line-through' : 'none',
+                            opacity: isDone ? 0.65 : 1,
+                          }}
+                        >
                           {step.instruction}
                         </Text>
                       </View>
                     </TouchableOpacity>
                   );
-                })
-              ) : (
-                <Text style={{ fontSize: 13, color: colors.text.secondary, fontStyle: 'italic', paddingVertical: 4 }}>
-                  Follow Mama&apos;s cooking tips above to prepare this meal in your skillet.
-                </Text>
-              )}
+                })}
+              </View>
             </View>
-          </View>
+          )}
 
-          {/* Primary Action Button: "I Cooked This Tonight!" */}
-          <Animated.View style={{ transform: [{ scale: finishScale }] }}>
+          {/* Preserve timer helpers for future inline use */}
+          {false && (
+            <TouchableOpacity
+              onPress={() => {
+                handleToggleTimer(1, 5);
+                handleCancelTimer();
+              }}
+            >
+              <Text>{formatCountdown(0)}</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Primary Action: Launch Focus Mode Step-by-Step Cooking Guide or 1-Tap Log Cooked */}
+          <Animated.View style={{ transform: [{ scale: finishScale }], gap: 10 }}>
             <TouchableOpacity
               style={styles.cookedButton}
-              onPress={handleMarkAsCooked}
+              onPress={() => {
+                if (resolvedSteps.length > 0) {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                  setActiveCookStepIdx(0);
+                  setCookModalVisible(true);
+                } else {
+                  handleMarkAsCooked();
+                }
+              }}
               activeOpacity={0.88}
             >
-              <Ionicons name="checkmark-done" size={20} color={colors.snow100} />
-              <Text style={styles.cookedButtonText}>I Cooked This Tonight!</Text>
+              <Ionicons
+                name={resolvedSteps.length > 0 ? 'play' : 'checkmark-done'}
+                size={18}
+                color={colors.snow100}
+              />
+              <Text style={styles.cookedButtonText}>
+                {resolvedSteps.length > 0
+                  ? `Start Cooking Guide (${resolvedSteps.length} Steps)`
+                  : 'I Cooked This Tonight!'}
+              </Text>
             </TouchableOpacity>
+
+            {resolvedSteps.length > 0 && (
+              <TouchableOpacity
+                style={{
+                  height: 48,
+                  borderRadius: 16,
+                  backgroundColor: colors.snow100,
+                  borderWidth: 1.5,
+                  borderColor: colors.primary,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                }}
+                onPress={handleMarkAsCooked}
+                activeOpacity={0.82}
+              >
+                <Ionicons name="checkmark-done" size={18} color={colors.primary} />
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: '800',
+                    color: colors.primary,
+                  }}
+                >
+                  I Cooked This Tonight! (+{currentPass.planTier === 'plus' ? 100 : 50} XP)
+                </Text>
+              </TouchableOpacity>
+            )}
           </Animated.View>
         </Animated.View>
       </ScrollView>
+
+      {/* Interactive Step-by-Step Flashcard Cook-Along Pop-Up */}
+      <InteractiveCookModal
+        visible={cookModalVisible}
+        dishTitle={title}
+        steps={resolvedSteps}
+        currentStepIndex={activeCookStepIdx}
+        completedStepIds={completedSteps}
+        onSelectStepIndex={setActiveCookStepIdx}
+        onCompleteCurrentStep={() => {
+          const stepObj = resolvedSteps[activeCookStepIdx];
+          if (stepObj && !completedSteps.includes(stepObj.id)) {
+            toggleStep(stepObj.id);
+          }
+        }}
+        onFinishCooking={handleMarkAsCooked}
+        onClose={() => setCookModalVisible(false)}
+      />
+
+      {/* Celebratory Dish Mastered + Takeout Savings Trophy Pop-Up */}
+      <DishRewardModal
+        visible={rewardModalVisible}
+        dishTitle={title}
+        homeCostFormatted={homeCostFormatted}
+        savedVsTakeoutFormatted={convertMealCost(
+          Math.max(1.8, Number((costNumeric * portions * 1.6).toFixed(2))),
+          currentPass.currencyCode,
+          currentPass.currencySymbol
+        )}
+        mealsCookedCount={currentPass.likedDishes.length + 1}
+        onClaimReward={handleClaimRewardAndExit}
+      />
 
       {/* Tactile Toast */}
       <TactileToast
@@ -424,7 +1098,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   heroWrap: {
-    height: 220,
+    height: 250,
     borderRadius: 20,
     overflow: 'hidden',
     position: 'relative',
@@ -434,12 +1108,44 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  heroAiOverlayImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
   placeholderHero: {
     width: '100%',
     height: '100%',
     backgroundColor: colors.sand,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 20,
+    gap: 8,
+  },
+  placeholderIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(51, 83, 56, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  placeholderTitle: {
+    fontSize: 20,
+    fontFamily: typography.fontFamily.serif,
+    fontWeight: '700',
+    color: colors.text.primary,
+    textAlign: 'center',
+  },
+  placeholderSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.text.secondary,
+    textAlign: 'center',
   },
   timeTag: {
     position: 'absolute',
@@ -604,6 +1310,132 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text.primary,
   },
+  prepHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  prepCountBadge: {
+    backgroundColor: 'rgba(102, 112, 74, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  prepCountBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: 0.4,
+  },
+  ingredientTileGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  ingredientTile: {
+    width: '48%',
+    backgroundColor: colors.snow200,
+    borderRadius: 16,
+    padding: 12,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(36, 40, 32, 0.06)',
+  },
+  ingredientTileTossed: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+  },
+  ingredientTileTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  ingredientTileCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(102, 112, 74, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ingredientTileCheckActive: {
+    backgroundColor: '#15803D',
+  },
+  ingredientTileStatus: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.text.muted,
+    letterSpacing: 0.4,
+  },
+  ingredientTileStatusActive: {
+    color: '#15803D',
+  },
+  ingredientTileName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  ingredientTileNameActive: {
+    color: '#14532D',
+  },
+  ingredientTileAmount: {
+    fontSize: 11,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  ingredientTileAmountActive: {
+    color: '#166534',
+  },
+  launchCookModeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    padding: 14,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+  launchCookIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  launchCookTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  launchCookTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  launchCookSub: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontWeight: '500',
+  },
+  launchCookGoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  launchCookGoText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.primary,
+  },
   ingredientList: {
     gap: 10,
   },
@@ -699,6 +1531,42 @@ const styles = StyleSheet.create({
   },
   stepInstructionDone: {
     color: 'rgba(36, 40, 32, 0.6)',
+  },
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+  },
+  timerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F5ECE3',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(217, 85, 36, 0.2)',
+  },
+  timerPillActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  timerPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 0.2,
+  },
+  timerPillTextActive: {
+    color: colors.snow100,
+  },
+  timerCancelBtn: {
+    padding: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   cookedButton: {
     height: 52,

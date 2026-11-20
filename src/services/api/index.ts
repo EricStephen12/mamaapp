@@ -5,3 +5,4 @@ export * from './savedMealsService';
 export * from './decisionsService';
 export * from './userPreferencesService';
 export * from './pantryService';
+export * from './rollService';

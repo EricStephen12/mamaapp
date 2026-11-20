@@ -4,13 +4,15 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
+  Image,
   Animated,
   TouchableOpacity,
-  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
@@ -20,29 +22,24 @@ import {
   UserKitchenPass,
   convertMealCost,
 } from '../../services/preferencesStore';
-import { MamaDialogueService } from '../../services/mamaDialogueService';
-import { MamaCharacter, MamaPose } from '../../components/common/MamaCharacter';
 import { CountryCurrencyModal } from '../../components/common/CountryCurrencyModal';
-import { AiMamaService } from '../../services/aiMamaService';
+import { KitchenPassModal } from '../../components/common/KitchenPassModal';
 import { savedMealsService } from '../../services/api/savedMealsService';
-import { decisionsService } from '../../services/api/decisionsService';
-
-import { MealFilters, MealFilterType } from './components/MealFilters';
-import {
-  FeaturedDiscoveryCard,
-  DiscoveryItem,
-} from './components/FeaturedDiscoveryCard';
-import { SwipeActions } from './components/SwipeActions';
-import { OtherOptionsSection } from './components/OtherOptionsSection';
-import { MealOptionData } from './components/MealOptionRow';
 import { BottomNavigation } from '../../components/navigation/BottomNavigation';
+import { useTabNavigation } from '../../context/TabNavigationContext';
 import { TactileToast } from '../../components/common';
+import { AiMamaService, textMentionsPantryItem } from '../../services/aiMamaService';
+import { MealImageService } from '../../services/mealImageService';
+import { pantryService } from '../../services/api/pantryService';
+import { isMealDietCompliant } from '../../services/api/rollService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DiscoverYourNextMeal'>;
 
+type DiscoverFilterId = 'all' | 'clean_healthy' | 'high_protein' | 'light_night';
+
 interface RawDiscoveryItem {
   id: string;
-  categoryType: 'home' | 'eating_out';
+  categoryType: 'home';
   cookTimeOrDistance: string;
   title: string;
   nutrition: string;
@@ -50,721 +47,608 @@ interface RawDiscoveryItem {
   imageUrl: string;
   baseCostUsd: number;
   cuisineTags: string[];
-  spotName?: string;
   steps?: string[];
   ingredients?: { name: string; amount: string }[];
+  healthCategory?: DiscoverFilterId;
 }
 
-const RAW_DECK: RawDiscoveryItem[] = [
-  {
-    id: 'disc-1',
-    categoryType: 'home',
-    cookTimeOrDistance: '20 min',
-    title: 'Lemon chickpea & couscous bowl',
-    nutrition: 'Vegetarian Â· 540 kcal Â· 20g protein Â· 13g fibre*',
-    reason: 'Mediterranean flavours using pantry staples you already have.',
-    imageUrl:
-      '',
-    baseCostUsd: 2.8,
-    cuisineTags: ['mediterranean_european', 'comfort_classics'],
-    steps: [
-      'Toast couscous with olive oil in a skillet for 2 minutes.',
-      'Pour hot water or broth over couscous, cover and steam 5 minutes.',
-      'Rinse chickpeas and toss with lemon juice, salt, and cumin.',
-      'Fluff couscous, fold in chickpeas and fresh greens, and serve warm.',
-    ],
-    ingredients: [
-      { name: 'Couscous or quinoa', amount: '1 cup' },
-      { name: 'Canned chickpeas', amount: '1 can' },
-      { name: 'Lemon juice & olive oil', amount: '2 tbsp' },
-      { name: 'Fresh parsley or herbs', amount: 'Handful' },
-    ],
-  },
-  {
-    id: 'disc-2',
-    categoryType: 'home',
-    cookTimeOrDistance: '15 min',
-    title: 'Crispy tofu sesame noodle bowl',
-    nutrition: 'Vegan Â· 480 kcal Â· 18g protein Â· 7g fibre*',
-    reason: 'Fast, comforting, and uses soy sauce and sesame oil on hand.',
-    imageUrl:
-      '',
-    baseCostUsd: 3.1,
-    cuisineTags: ['asian_comfort'],
-    steps: [
-      'Boil quick noodles in salted water for 3 minutes and drain.',
-      'Sear cubed tofu in hot sesame oil until golden and crisp.',
-      'Whisk soy sauce, chili crisp, and a touch of vinegar in the pan.',
-      'Toss noodles directly into skillet, coat in glaze, and top with scallions.',
-    ],
-    ingredients: [
-      { name: 'Noodles of choice', amount: '1 bundle' },
-      { name: 'Firm tofu or protein', amount: '150g' },
-      { name: 'Soy sauce & sesame oil', amount: '2 tbsp' },
-      { name: 'Chili flakes or crisp', amount: '1 tsp' },
-    ],
-  },
-  {
-    id: 'disc-3',
-    categoryType: 'eating_out',
-    cookTimeOrDistance: '10 min walk',
-    title: 'Warm grain bowl with wild mushrooms',
-    nutrition: 'Vegetarian Â· 510 kcal Â· 16g protein Â· 9g fibre*',
-    reason: 'Handcrafted by Harvest Table nearby. Within your weekly balance.',
-    imageUrl:
-      '',
-    baseCostUsd: 9.2,
-    cuisineTags: ['mediterranean_european', 'comfort_classics'],
-    spotName: 'Harvest Table Cafe',
-  },
-  {
-    id: 'disc-4',
-    categoryType: 'home',
-    cookTimeOrDistance: '25 min',
-    title: 'Charred salmon & garlic greens',
-    nutrition: 'High Protein Â· 610 kcal Â· 36g protein Â· 8g fibre*',
-    reason: 'Rich in omega-3 and pairs beautifully with fresh citrus and leafy greens.',
-    imageUrl:
-      '',
-    baseCostUsd: 4.5,
-    cuisineTags: ['mediterranean_european', 'comfort_classics'],
-    steps: [
-      'Season salmon fillet with salt, black pepper, and garlic powder.',
-      'Sear skin-side down in a hot skillet for 5 minutes until crisp.',
-      'Flip salmon and toss in greens (spinach or kale) around the fillet.',
-      'Squeeze fresh lemon juice over everything and serve directly.',
-    ],
-    ingredients: [
-      { name: 'Salmon fillet', amount: '1 fillet (180g)' },
-      { name: 'Fresh leafy greens', amount: '2 cups' },
-      { name: 'Garlic cloves', amount: '2 minced' },
-      { name: 'Lemon wedge', amount: 'Half' },
-    ],
-  },
-  {
-    id: 'disc-5',
-    categoryType: 'home',
-    cookTimeOrDistance: '10 min',
-    title: 'Sizzled pepper eggs & sweet plantains',
-    nutrition: 'Comfort Â· 420 kcal Â· 22g protein Â· 5g fibre*',
-    reason: "Mama's signature combo â€” golden sweet plantains with velvety pepper eggs.",
-    imageUrl:
-      '',
-    baseCostUsd: 1.9,
-    cuisineTags: ['african_caribbean'],
-    steps: [
-      'Slice ripe plantains diagonally and pan-fry in hot oil until golden.',
-      'In the same pan, saute diced red onions and scotch bonnet / chili.',
-      'Pour in seasoned beaten eggs and fold gently into soft curds.',
-      'Plate sweet plantains with hot eggs and dig in immediately.',
-    ],
-    ingredients: [
-      { name: 'Ripe sweet plantain', amount: '1 whole' },
-      { name: 'Fresh eggs', amount: '2 large' },
-      { name: 'Red onion & pepper', amount: '1 small diced' },
-      { name: 'Vegetable oil', amount: '2 tbsp' },
-    ],
-  },
-  {
-    id: 'disc-6',
-    categoryType: 'eating_out',
-    cookTimeOrDistance: '5 min walk',
-    title: 'Smoky jollof rice with suya skewers',
-    nutrition: 'High Protein Â· 580 kcal Â· 28g protein Â· 6g fibre*',
-    reason: 'Authentic firewood aroma from a local kitchen. Pure nostalgia.',
-    imageUrl:
-      '',
-    baseCostUsd: 10.5,
-    cuisineTags: ['african_caribbean'],
-    spotName: 'Mama Boma West African Grill',
-  },
-  {
-    id: 'disc-7',
-    categoryType: 'home',
-    cookTimeOrDistance: '12 min',
-    title: 'Creamy garlic pasta with chili oil',
-    nutrition: 'Comfort Â· 560 kcal Â· 16g protein Â· 4g fibre*',
-    reason: 'Five ingredients, one pan, zero stress. The ultimate late-evening plate.',
-    imageUrl:
-      '',
-    baseCostUsd: 2.2,
-    cuisineTags: ['mediterranean_european', 'comfort_classics'],
-    steps: [
-      'Boil pasta in salted water for 8 minutes; reserve 1/4 cup pasta water.',
-      'Gently simmer minced garlic and chili flakes in olive oil until fragrant.',
-      'Toss drained pasta with reserved water, grated cheese, and butter.',
-      'Swirl vigorously until a glossy, creamy sauce wraps every noodle.',
-    ],
-    ingredients: [
-      { name: 'Spaghetti or rigatoni', amount: '120g' },
-      { name: 'Garlic cloves', amount: '4 sliced' },
-      { name: 'Parmesan or cheese', amount: '3 tbsp' },
-      { name: 'Chili oil or flakes', amount: '1 tsp' },
-    ],
-  },
-  {
-    id: 'disc-8',
-    categoryType: 'home',
-    cookTimeOrDistance: '8 min',
-    title: 'Soft chapati with spiced scrambled eggs',
-    nutrition: 'Comfort Â· 390 kcal Â· 19g protein Â· 3g fibre*',
-    reason: 'Warm flatbread rolled around spiced eggs and sweet sauteed onions.',
-    imageUrl:
-      '',
-    baseCostUsd: 1.6,
-    cuisineTags: ['african_caribbean'],
-    steps: [
-      'Warm chapati or flatbread in a dry skillet for 1 minute per side.',
-      'Crack eggs with diced tomato, onion, and a pinch of curry spice.',
-      'Scramble in hot butter until creamy and soft.',
-      'Spoon eggs onto the warm chapati, roll up, and enjoy.',
-    ],
-    ingredients: [
-      { name: 'Chapati or flatbread', amount: '1 piece' },
-      { name: 'Eggs', amount: '2 large' },
-      { name: 'Diced tomato & onion', amount: '2 tbsp' },
-      { name: 'Butter', amount: '1 tsp' },
-    ],
-  },
+interface FeedPostItem extends RawDiscoveryItem {
+  resolvedImage: string;
+  formattedCost: string;
+  matchingPantryCount: number;
+}
+
+const DISCOVER_FILTERS: {
+  id: DiscoverFilterId;
+  label: string;
+  icon: 'flame-outline' | 'leaf-outline' | 'barbell-outline' | 'moon-outline';
+}[] = [
+  { id: 'all', label: 'For You', icon: 'flame-outline' },
+  { id: 'clean_healthy', label: 'Clean & Healthy', icon: 'leaf-outline' },
+  { id: 'high_protein', label: 'High Protein', icon: 'barbell-outline' },
+  { id: 'light_night', label: 'Light (<400 cal)', icon: 'moon-outline' },
 ];
 
-const PASS_REASONS = [
-  'Too expensive',
-  'Too much effort',
-  "Don't like it",
-  'Not in the mood',
-  'Missing ingredients',
+const CURATED_HEALTHY_DECK: RawDiscoveryItem[] = [
+  {
+    id: 'healthy-grilled-tilapia-greens',
+    categoryType: 'home',
+    cookTimeOrDistance: '14 MIN',
+    title: 'Grilled Pepper Tilapia & Steamed Greens',
+    nutrition: 'LOW OIL · 340 KCAL',
+    reason: 'Lean fish seared with fresh pepper, onions, and crisp leafy greens.',
+    imageUrl: '',
+    baseCostUsd: 2.6,
+    cuisineTags: ['clean_healthy', 'high_protein'],
+    healthCategory: 'clean_healthy',
+    ingredients: [
+      { name: 'Tilapia / White Fish Fillet', amount: '1 fillet' },
+      { name: 'Fresh Spinach or Ugu', amount: '2 cups' },
+      { name: 'Scotch Bonnet & Onion', amount: '1/2 sliced' },
+      { name: 'Light Olive / Vegetable Oil', amount: '1 tsp' },
+    ],
+    steps: [
+      'Season fish fillet lightly with thyme, garlic, salt, and pepper.',
+      'Pan-sear with 1 tsp oil over medium-high heat for 4 mins per side until golden.',
+      'Toss fresh greens and sliced onions in the warm pan for 2 mins until tender-crisp.',
+    ],
+  },
+  {
+    id: 'protein-suya-chicken-beans-power',
+    categoryType: 'home',
+    cookTimeOrDistance: '15 MIN',
+    title: 'Suya-Spiced Chicken & Honey Beans',
+    nutrition: '42g PROTEIN · CURVES & MUSCLE',
+    reason: 'Double protein from smoky suya chicken breast and slow-energy honey beans.',
+    imageUrl: '',
+    baseCostUsd: 2.5,
+    cuisineTags: ['high_protein'],
+    healthCategory: 'high_protein',
+    ingredients: [
+      { name: 'Chicken Breast', amount: '200g cubed' },
+      { name: 'Cooked Honey / Black Beans', amount: '1 cup' },
+      { name: 'Suya Yaji Spice', amount: '1 tbsp' },
+      { name: 'Red Onion & Tomato', amount: '1/2 sliced' },
+    ],
+    steps: [
+      'Toss cubed chicken breast in suya spice and a pinch of salt.',
+      'Sear in a hot skillet for 7 mins until charred and juicy.',
+      'Warm the beans alongside and top with crisp raw red onion and tomato.',
+    ],
+  },
+  {
+    id: 'healthy-efo-spinach-chicken-bowl',
+    categoryType: 'home',
+    cookTimeOrDistance: '15 MIN',
+    title: 'Light Efo Spinach & Seared Chicken',
+    nutrition: 'CLEAN · 370 KCAL',
+    reason: 'Zero heavy palm oil—bright tomatoes, peppers, and iron-rich spinach with lean chicken.',
+    imageUrl: '',
+    baseCostUsd: 2.4,
+    cuisineTags: ['clean_healthy', 'high_protein'],
+    healthCategory: 'clean_healthy',
+    ingredients: [
+      { name: 'Chicken Breast Strips', amount: '180g' },
+      { name: 'Fresh Spinach', amount: '3 cups' },
+      { name: 'Plum Tomatoes & Bell Pepper', amount: '2 diced' },
+      { name: 'Onions & Garlic', amount: '1/2 bulb' },
+    ],
+    steps: [
+      'Sear seasoned chicken strips in a hot non-stick skillet for 6 mins until golden.',
+      'Add diced tomatoes, bell pepper, and onions; simmer 4 mins until saucy.',
+      'Fold in fresh spinach for 2 mins until wilted and serve warm.',
+    ],
+  },
+  {
+    id: 'light-catfish-pepper-soup',
+    categoryType: 'home',
+    cookTimeOrDistance: '15 MIN',
+    title: 'Aromatic Fish Pepper Soup',
+    nutrition: 'LIGHT · 280 KCAL',
+    reason: 'Zero oil, soothing warm spices, and lean fish—perfect for a light, bloat-free night.',
+    imageUrl: '',
+    baseCostUsd: 2.5,
+    cuisineTags: ['light_night', 'clean_healthy'],
+    healthCategory: 'light_night',
+    ingredients: [
+      { name: 'Fresh Fish Steaks', amount: '2 pieces' },
+      { name: 'Pepper Soup Spice', amount: '1 tbsp' },
+      { name: 'Scent Leaf / Parsley', amount: '1 handful' },
+      { name: 'Scotch Bonnet & Onion', amount: 'To taste' },
+    ],
+    steps: [
+      'Bring 2 cups of water to a boil with diced onions, pepper soup spice, and seasoning.',
+      'Gently lower fish pieces into the broth and simmer for 9 mins.',
+      'Scatter torn scent leaves on top and enjoy hot.',
+    ],
+  },
+  {
+    id: 'healthy-avocado-egg-plantain-plate',
+    categoryType: 'home',
+    cookTimeOrDistance: '12 MIN',
+    title: 'Roasted Plantain, Boiled Eggs & Avocado',
+    nutrition: 'GUT FRIENDLY · LOW OIL',
+    reason: 'Oven/air-charred sweet plantain paired with protein-rich boiled eggs and fresh avocado.',
+    imageUrl: '',
+    baseCostUsd: 1.9,
+    cuisineTags: ['clean_healthy'],
+    healthCategory: 'clean_healthy',
+    ingredients: [
+      { name: 'Ripe Plantain', amount: '1 medium' },
+      { name: 'Eggs', amount: '2 large' },
+      { name: 'Fresh Avocado', amount: '1/2 sliced' },
+      { name: 'Black Pepper & Sea Salt', amount: 'To taste' },
+    ],
+    steps: [
+      'Boil eggs for 8 minutes, peel, and halve.',
+      'Pan-roast or air-fry plantain slices with just a brush of oil for 8 mins.',
+      'Plate with sliced avocado and cracked black pepper.',
+    ],
+  },
+  {
+    id: 'protein-pepper-steak-egg-skillet',
+    categoryType: 'home',
+    cookTimeOrDistance: '12 MIN',
+    title: 'Peppered Beef Strips & 3-Egg Scramble',
+    nutrition: '39g PROTEIN · HIGH ENERGY',
+    reason: 'Fast, high-protein skillet built for recovery and fullness without heavy carbs.',
+    imageUrl: '',
+    baseCostUsd: 2.8,
+    cuisineTags: ['high_protein'],
+    healthCategory: 'high_protein',
+    ingredients: [
+      { name: 'Lean Beef Strips', amount: '150g' },
+      { name: 'Eggs', amount: '3 large' },
+      { name: 'Spring Onions & Bell Pepper', amount: '1/2 cup' },
+      { name: 'Cooking Oil', amount: '1 tsp' },
+    ],
+    steps: [
+      'Flash-sear seasoned beef strips in a hot pan for 4 mins with bell peppers.',
+      'Push to one side and scramble the eggs softly for 2 mins.',
+      'Garnish with chopped spring onions and serve immediately.',
+    ],
+  },
+  {
+    id: 'light-veggie-egg-drop-stirfry',
+    categoryType: 'home',
+    cookTimeOrDistance: '10 MIN',
+    title: 'Crisp Cabbage, Carrot & Egg Stir-Fry',
+    nutrition: 'LIGHT · 310 KCAL',
+    reason: 'Crunchy ribbons of cabbage and sweet carrot tossed with fluffy eggs for a light evening.',
+    imageUrl: '',
+    baseCostUsd: 1.5,
+    cuisineTags: ['light_night', 'clean_healthy'],
+    healthCategory: 'light_night',
+    ingredients: [
+      { name: 'Shredded Cabbage & Carrot', amount: '2 cups' },
+      { name: 'Eggs', amount: '2 large' },
+      { name: 'Garlic & Ginger', amount: '1 tsp minced' },
+      { name: 'Light Soy Sauce / Salt', amount: '1 tsp' },
+    ],
+    steps: [
+      'Scramble 2 eggs in a hot skillet for 1 min and set aside.',
+      'Stir-fry garlic, ginger, cabbage, and carrot on high heat for 3 mins so they stay crisp.',
+      'Return eggs to the pan, toss with a splash of soy sauce or salt, and plate.',
+    ],
+  },
 ];
 
 export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
+  const { isInsideTabs, setActiveTab } = useTabNavigation();
   const [kitchenPass, setKitchenPass] = useState<UserKitchenPass>(
     preferencesStore.getKitchenPass()
   );
-  const [activeFilter, setActiveFilter] = useState<MealFilterType>('all');
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [savedItemIds, setSavedItemIds] = useState<string[]>(kitchenPass.likedDishes);
+  const [pantryItems, setPantryItems] = useState<string[]>(() =>
+    pantryService.getCachedPantry().map((i) => i.name)
+  );
+  const [activeFilter, setActiveFilter] = useState<DiscoverFilterId>('all');
+  const [savedItemIds, setSavedItemIds] = useState<string[]>(() => {
+    const saved = savedMealsService.getCachedMeals();
+    return Array.from(
+      new Set([
+        ...kitchenPass.likedDishes,
+        ...saved.map((m) => m.mealId || m.id),
+        ...saved.map((m) => m.title.toLowerCase()),
+      ])
+    );
+  });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [countryModalVisible, setCountryModalVisible] = useState(false);
+  const [passModalVisible, setPassModalVisible] = useState(false);
+  const [apiRawDeck, setApiRawDeck] = useState<RawDiscoveryItem[]>([]);
+  const [aiPhotosMap, setAiPhotosMap] = useState<Record<string, string>>({});
 
-  // Mama live dialogue state
-  const [mamaQuote, setMamaQuote] = useState<string>(
-    MamaDialogueService.getDiscoverQuote(kitchenPass)
-  );
-  const [mamaPose, setMamaPose] = useState<MamaPose>('delighted');
-  const [showPassReasons, setShowPassReasons] = useState(false);
-  const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
-
-  // Entrance animations
   const contentFade = useRef(new Animated.Value(0)).current;
-  const contentY = useRef(new Animated.Value(20)).current;
+  const remainingBudget = kitchenPass.weeklyBudget - kitchenPass.spentThisWeek;
+  const formattedBudget = useMemo(() => {
+    if (remainingBudget >= 1000) {
+      const kVal = Math.round(remainingBudget / 1000);
+      return `${kitchenPass.currencySymbol}${kVal}k`;
+    }
+    return `${kitchenPass.currencySymbol}${Math.max(0, Math.round(remainingBudget))}`;
+  }, [remainingBudget, kitchenPass.currencySymbol]);
 
-  // Card swipe animations
-  const swipeAnim = useRef(new Animated.ValueXY()).current;
-  const cardOpacity = useRef(new Animated.Value(1)).current;
-
-  // Mama bounce animation
-  const mamaBounceAnim = useRef(new Animated.Value(1)).current;
-
-  // Subscribe to preferencesStore
   useEffect(() => {
     const unsubscribe = preferencesStore.subscribe((pass) => {
       setKitchenPass(pass);
-      setSavedItemIds(pass.likedDishes);
     });
-    return unsubscribe;
+    const unsubSaved = savedMealsService.subscribe((meals) => {
+      setSavedItemIds(
+        Array.from(
+          new Set([
+            ...meals.map((m) => m.mealId || m.id),
+            ...meals.map((m) => m.title.toLowerCase()),
+          ])
+        )
+      );
+    });
+    const unsubPantry = pantryService.subscribe((items) => {
+      setPantryItems(items.map((i) => i.name));
+    });
+    pantryService.fetchAll().then((items) => {
+      setPantryItems(items.map((i) => i.name));
+    }).catch(() => {});
+
+    return () => {
+      unsubscribe();
+      unsubSaved();
+      unsubPantry();
+    };
   }, []);
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(contentFade, {
-        toValue: 1,
-        duration: 450,
-        useNativeDriver: true,
-      }),
-      Animated.timing(contentY, {
-        toValue: 0,
-        duration: 450,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
+    Animated.timing(contentFade, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [contentFade]);
 
-  // Filter and sort deck according to user's culinary anchor
-  const filteredRawItems = useMemo(() => {
-    const subset = RAW_DECK.filter((item) => {
-      if (activeFilter === 'home') return item.categoryType === 'home';
-      if (activeFilter === 'eating_out') return item.categoryType === 'eating_out';
-      return true;
-    });
+  const dietKey = (kitchenPass.dietaryRestrictions || []).join(',');
+  const pantrySig = [...pantryItems].sort().join(',');
 
-    // Sort matching user's cuisine anchor first
-    return [...subset].sort((a, b) => {
-      const aMatches = a.cuisineTags.includes(kitchenPass.cuisineAnchor);
-      const bMatches = b.cuisineTags.includes(kitchenPass.cuisineAnchor);
-      if (aMatches && !bMatches) return -1;
-      if (!aMatches && bMatches) return 1;
-      return 0;
-    });
-  }, [activeFilter, kitchenPass.cuisineAnchor]);
-
-  // Convert to localized DiscoveryItem format
-  const discoveryDeck: DiscoveryItem[] = useMemo(() => {
-    return filteredRawItems.map((item, idx) => {
-      const localizedCost = convertMealCost(
-        item.baseCostUsd,
-        kitchenPass.currencyCode,
-        kitchenPass.currencySymbol
-      );
-      const categoryLabel =
-        item.categoryType === 'home'
-          ? `At home Â· ${item.cookTimeOrDistance}`
-          : `Eating out Â· ${item.cookTimeOrDistance}`;
-
-      return {
-        id: item.id,
-        positionLabel: `${String(idx + 1).padStart(2, '0')} / ${String(
-          filteredRawItems.length
-        ).padStart(2, '0')}`,
-        category: categoryLabel,
-        cost: `${localizedCost} est. / ${
-          item.categoryType === 'home' ? 'serving' : 'meal'
-        }`,
-        title: item.title,
-        nutrition: item.nutrition,
-        reason: item.reason,
-        imageUrl: item.imageUrl,
-      };
-    });
-  }, [filteredRawItems, kitchenPass.currencyCode, kitchenPass.currencySymbol]);
-
-  const activeRawItem = filteredRawItems[currentIndex % Math.max(filteredRawItems.length, 1)];
-  const currentItem = discoveryDeck[currentIndex % Math.max(discoveryDeck.length, 1)];
-  const isSaved = currentItem ? savedItemIds.includes(currentItem.id) : false;
-
-  // Localized "A different direction" options
-  const localizedQuickOptions: MealOptionData[] = useMemo(() => {
-    const costOpt1 = convertMealCost(8.5, kitchenPass.currencyCode, kitchenPass.currencySymbol);
-    const costOpt2 = convertMealCost(2.4, kitchenPass.currencyCode, kitchenPass.currencySymbol);
-
-    return [
-      {
-        id: 'opt-1',
-        eyebrow: 'EATING OUT Â· 10 MIN WALK',
-        mealName: 'Roasted veg & hummus pita',
-        estimatedCost: `${costOpt1} est. / meal`,
-        imageUrl:
-          '',
-      },
-      {
-        id: 'opt-2',
-        eyebrow: 'AT HOME Â· 25 MIN',
-        mealName: 'Tomato & white bean pasta',
-        estimatedCost: `${costOpt2} est. / serving`,
-        imageUrl:
-          '',
-      },
-    ];
-  }, [kitchenPass.currencyCode, kitchenPass.currencySymbol]);
-
-  const triggerMamaBounce = () => {
-    Animated.sequence([
-      Animated.timing(mamaBounceAnim, {
-        toValue: 0.94,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.spring(mamaBounceAnim, {
-        toValue: 1,
-        friction: 4,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  const handleTapMama = () => {
-    triggerMamaBounce();
-    const interactive = MamaDialogueService.getRandomInteractiveLine(kitchenPass);
-    setMamaQuote(interactive.quote);
-    setMamaPose(interactive.pose);
-
-    AiMamaService.getLiveMamaDialogue(kitchenPass, 'discover')
-      .then((aiQuote) => {
-        if (aiQuote && aiQuote.length > 5) {
-          setMamaQuote(aiQuote);
+  useEffect(() => {
+    let isMounted = true;
+    AiMamaService.generateDiscoverDeck(kitchenPass, pantryItems)
+      .then((meals) => {
+        if (isMounted && Array.isArray(meals) && meals.length > 0) {
+          setApiRawDeck(meals);
         }
       })
       .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    kitchenPass.timeLimitMinutes,
+    kitchenPass.cookingGear,
+    kitchenPass.cuisineAnchor,
+    kitchenPass.country,
+    kitchenPass.bodyGoal,
+    dietKey,
+    pantrySig,
+  ]);
+
+  const filteredRawDeck = useMemo<RawDiscoveryItem[]>(() => {
+    // Dietary and permanent ban filter applied to curated list
+    const dietCompliantCurated = CURATED_HEALTHY_DECK.filter((m) =>
+      isMealDietCompliant(
+        {
+          id: m.id,
+          title: m.title,
+          subtitle: m.reason,
+          timeOfDay: 'dinner',
+          cookTimeMinutes: 15,
+          estCost: m.baseCostUsd,
+          ingredients: m.ingredients || [],
+          steps: m.steps || [],
+        },
+        kitchenPass
+      )
+    );
+
+    const seen = new Set<string>();
+    const combined = [...apiRawDeck, ...dietCompliantCurated].filter((m) => {
+      const key = m.title.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    if (activeFilter === 'all') {
+      return combined;
+    }
+    const matching = combined.filter(
+      (item) =>
+        item.healthCategory === activeFilter ||
+        (Array.isArray(item.cuisineTags) && item.cuisineTags.includes(activeFilter))
+    );
+    return matching.length > 0 ? matching : combined;
+  }, [activeFilter, apiRawDeck, kitchenPass]);
+
+  // Auto-hydrate top Discover feed cards with real dish-accurate AI photography
+  useEffect(() => {
+    let cancelled = false;
+    filteredRawDeck.slice(0, 4).forEach((item) => {
+      if (aiPhotosMap[item.title]) return;
+      MealImageService.generateMealImage(
+        item.title,
+        item.ingredients,
+        kitchenPass.cuisineAnchor
+      )
+        .then((url) => {
+          if (!cancelled && url && !MealImageService.isCatalogImage(url)) {
+            setAiPhotosMap((prev) => ({ ...prev, [item.title]: url }));
+          }
+        })
+        .catch(() => {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredRawDeck, kitchenPass.cuisineAnchor, aiPhotosMap]);
+
+  const feedPosts = useMemo<FeedPostItem[]>(() => {
+    const deckPhotos = MealImageService.getCarouselDeckImages(
+      filteredRawDeck.map((m) => ({ title: m.title, ingredients: m.ingredients })),
+      kitchenPass.cuisineAnchor
+    );
+    return filteredRawDeck.map((item, idx) => {
+      const itemText = `${item.title} ${(item.ingredients || []).map((i) => i.name).join(' ')}`;
+      const matchingPantryCount = pantryItems.filter((p) =>
+        textMentionsPantryItem(itemText, p)
+      ).length;
+
+      return {
+        ...item,
+        resolvedImage: aiPhotosMap[item.title] || item.imageUrl || deckPhotos[idx],
+        formattedCost: convertMealCost(
+          item.baseCostUsd,
+          kitchenPass.currencyCode,
+          kitchenPass.currencySymbol
+        ),
+        matchingPantryCount,
+      };
+    });
+  }, [aiPhotosMap, filteredRawDeck, kitchenPass.currencyCode, kitchenPass.currencySymbol, kitchenPass.cuisineAnchor, pantryItems]);
+
+  const handleToggleLikePost = (post: FeedPostItem) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    const titleKey = post.title.toLowerCase();
+    const alreadySaved =
+      savedItemIds.includes(post.id) || savedItemIds.includes(titleKey);
+
+    if (alreadySaved) {
+      setSavedItemIds((prev) => prev.filter((id) => id !== post.id && id !== titleKey));
+      savedMealsService.removeMeal(post.id);
+      setToastMessage('Removed from collection');
+      return;
+    }
+
+    setSavedItemIds((prev) => [...prev, post.id, titleKey]);
+    preferencesStore.recordMealDecision(post.id, 'saved', post.baseCostUsd);
+    savedMealsService.saveMeal({
+      mealId: post.id,
+      title: post.title,
+      type: post.categoryType,
+      cookTime: post.cookTimeOrDistance,
+      cost: post.formattedCost,
+      costNumeric: post.baseCostUsd,
+      imageUrl: post.resolvedImage,
+      recipeSteps: post.steps,
+      ingredients: post.ingredients,
+      vibe: post.reason,
+    });
+    setToastMessage('Saved to Collection');
   };
 
-  const transitionCard = (direction: 'left' | 'right', callback?: () => void) => {
-    const toX = direction === 'right' ? 380 : -380;
-    Animated.parallel([
-      Animated.timing(swipeAnim.x, {
-        toValue: toX,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-      Animated.timing(cardOpacity, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      if (callback) callback();
-      setCurrentIndex((prev) => (prev + 1) % Math.max(discoveryDeck.length, 1));
-      swipeAnim.setValue({ x: 0, y: 0 });
-      setShowPassReasons(false);
-      setSelectedReasons([]);
-      Animated.timing(cardOpacity, {
-        toValue: 1,
-        duration: 220,
-        useNativeDriver: true,
-      }).start();
+  const handleOpenPostDetails = (post: FeedPostItem) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    navigation.navigate('AtHomeMealDetails', {
+      id: post.id,
+      title: post.title,
+      subtitle: post.reason,
+      cookTime: post.cookTimeOrDistance,
+      gear: kitchenPass.cookingGearLabel || '1 Pan',
+      estCost: post.formattedCost,
+      costNumeric: post.baseCostUsd,
+      image: post.resolvedImage,
+      steps: post.steps,
+      ingredients: post.ingredients,
+      mamaTip: post.reason,
     });
   };
 
-  const handlePass = () => {
-    triggerMamaBounce();
-    const reaction = MamaDialogueService.getPassReaction();
-    setMamaQuote(reaction);
-    setMamaPose('thinking');
-    setShowPassReasons(true);
-
-    if (activeRawItem) {
-      preferencesStore.recordMealDecision(activeRawItem.id, 'passed', activeRawItem.baseCostUsd);
-      // Log to Neon DB (fire-and-forget)
-      decisionsService.log(activeRawItem.id, activeRawItem.title, 'passed', activeRawItem.baseCostUsd);
-    }
-
-    transitionCard('left');
-  };
-
-  const handleLikeAndSave = () => {
-    triggerMamaBounce();
-    const reaction = MamaDialogueService.getCookReaction();
-    setMamaQuote(reaction);
-    setMamaPose('delighted');
-
-    if (activeRawItem) {
-      preferencesStore.recordMealDecision(activeRawItem.id, 'cooked', activeRawItem.baseCostUsd);
-      // Log decision to Neon DB
-      decisionsService.log(activeRawItem.id, activeRawItem.title, 'cooked', activeRawItem.baseCostUsd);
-      // Save meal to Neon DB so it appears in the Collection screen
-      savedMealsService.saveMeal({
-        mealId: activeRawItem.id,
-        title: activeRawItem.title,
-        type: activeRawItem.categoryType,
-        cookTime: activeRawItem.cookTimeOrDistance,
-        cost: currentItem?.cost || '$2.50',
-        costNumeric: activeRawItem.baseCostUsd,
-        imageUrl: activeRawItem.imageUrl,
-        recipeSteps: activeRawItem.steps,
-        ingredients: activeRawItem.ingredients,
-        spotName: activeRawItem.spotName,
-        vibe: activeRawItem.reason,
-      });
-    }
-
-    transitionCard('right', () => {
-      if (currentItem) {
-        setSavedItemIds((prev) =>
-          prev.includes(currentItem.id) ? prev : [...prev, currentItem.id]
-        );
-        setToastMessage(`"${currentItem.title}" saved to your collection âœ¨`);
-      }
-    });
-  };
-
-  const handleSelectFilter = (filter: MealFilterType) => {
-    setActiveFilter(filter);
-    setCurrentIndex(0);
-    swipeAnim.setValue({ x: 0, y: 0 });
-    cardOpacity.setValue(1);
-    setShowPassReasons(false);
-    setSelectedReasons([]);
-
-    const reaction = MamaDialogueService.getDiscoverFilterReaction(filter);
-    setMamaQuote(reaction);
-    setMamaPose(filter === 'home' ? 'cooking' : filter === 'eating_out' ? 'welcoming' : 'delighted');
-    triggerMamaBounce();
-  };
-
-  const handleOpenActiveDetails = () => {
-    if (!activeRawItem || !currentItem) return;
-
-    if (activeRawItem.categoryType === 'eating_out') {
-      navigation.navigate('EatingOutMealDetails', {
-        spotName: activeRawItem.spotName || 'Local Kitchen Pick',
-        dishName: activeRawItem.title,
-        distance: activeRawItem.cookTimeOrDistance,
-        price: currentItem.cost.split(' est.')[0] || '$8.50',
-        vibe: activeRawItem.reason,
-        image: activeRawItem.imageUrl,
-      });
+  const handleTabChange = (tab: 'edit' | 'kitchen' | 'discover' | 'collection') => {
+    if (isInsideTabs) {
+      setActiveTab(tab);
     } else {
-      navigation.navigate('AtHomeMealDetails', {
-        id: activeRawItem.id,
-        title: activeRawItem.title,
-        subtitle: activeRawItem.reason,
-        cookTime: activeRawItem.cookTimeOrDistance,
-        gear: '1 Pan & Skillet',
-        estCost: currentItem.cost.split(' est.')[0] || '$2.50',
-        costNumeric: activeRawItem.baseCostUsd,
-        image: activeRawItem.imageUrl,
-        steps: activeRawItem.steps || [
-          'Warm your skillet on medium heat with olive oil or butter.',
-          'Cook the ingredients until fragrant and golden brown.',
-          'Season with fresh pepper, plate warm, and enjoy immediately.',
-        ],
-        ingredients: activeRawItem.ingredients || [
-          { name: 'Core staple', amount: '1 portion' },
-          { name: 'Aromatics & seasonings', amount: 'To taste' },
-          { name: 'Cooking oil', amount: '1 tbsp' },
-        ],
-      });
+      if (tab === 'edit') navigation.navigate('YourDailyEdit');
+      if (tab === 'kitchen') navigation.navigate('WhatsInYourKitchen');
+      if (tab === 'collection') navigation.navigate('YourCollection');
     }
   };
 
-  const handleTogglePassReason = (reason: string) => {
-    setSelectedReasons((prev) => {
-      const exists = prev.includes(reason);
-      const updated = exists ? prev.filter((r) => r !== reason) : [...prev, reason];
-      if (!exists) {
-        setMamaQuote(`Understood! I'll remember you don't like meals with "${reason}".`);
-        setMamaPose('writing');
-        triggerMamaBounce();
-      }
-      return updated;
-    });
-  };
+  const renderFeedPost = ({ item }: { item: FeedPostItem }) => {
+    const isLiked =
+      savedItemIds.includes(item.id) || savedItemIds.includes(item.title.toLowerCase());
+    return (
+      <TouchableOpacity
+        style={styles.feedCard}
+        activeOpacity={0.94}
+        onPress={() => handleOpenPostDetails(item)}
+      >
+        <Image
+          source={{ uri: item.resolvedImage }}
+          style={styles.feedImage}
+          resizeMode="cover"
+        />
 
-  const handleTabChange = (tab: 'edit' | 'discover' | 'collection') => {
-    if (tab === 'edit') {
-      navigation.navigate('YourDailyEdit');
-    } else if (tab === 'collection') {
-      navigation.navigate('YourCollection');
-    }
+        {/* Top Row: Health Badge + Pantry Match (Left) + Dopamine Heart Button (Right) */}
+        <View style={styles.feedTopRow}>
+          <View style={styles.topBadgesCluster}>
+            <View style={styles.healthGlassBadge}>
+              <Ionicons name="leaf" size={12} color="#4ADE80" />
+              <Text style={styles.healthGlassText}>
+                {item.nutrition || 'FRESH HOME PICK'}
+              </Text>
+            </View>
+
+            {item.matchingPantryCount > 0 && (
+              <View style={styles.pantryGlassBadge}>
+                <Ionicons name="basket" size={11} color="#4ADE80" />
+                <Text style={styles.pantryGlassText}>
+                  {item.matchingPantryCount} in kitchen
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.heartCircleBtn, isLiked && styles.heartCircleBtnActive]}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleToggleLikePost(item);
+            }}
+            activeOpacity={0.8}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons
+              name={isLiked ? 'heart' : 'heart-outline'}
+              size={20}
+              color="#FFFFFF"
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Bottom Scrim Overlay: Dish Title + Time/Cost + Check Food Pill */}
+        <View style={styles.feedBottomScrim}>
+          <Text style={styles.feedTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
+
+          <View style={styles.feedBottomMetaRow}>
+            <View style={styles.feedTimeCostRow}>
+              <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.85)" />
+              <Text style={styles.feedTimeCostText}>
+                {item.cookTimeOrDistance} · {item.formattedCost}
+              </Text>
+            </View>
+
+            <View style={styles.checkFoodPill}>
+              <Text style={styles.checkFoodPillText}>Cook</Text>
+              <Ionicons name="arrow-forward" size={12} color="#FFFFFF" />
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar style="dark" />
 
-      {/* Masthead Header with Country Switcher */}
-      <View style={styles.masthead}>
+      {/* 1. TOP BAR */}
+      <View style={styles.topBar}>
         <View style={styles.brandGroup}>
-          <Ionicons name="leaf-outline" size={20} color={colors.primary} />
-          <Text style={styles.brandTitle}>MAMA KITCHEN</Text>
+          <Text style={styles.brandTitle}>Mama</Text>
+          <Text style={styles.periodPillText}>Discover</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.countryBadge}
-          onPress={() => setCountryModalVisible(true)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.countryBadgeFlag}>{kitchenPass.country}</Text>
-          <Text style={styles.countryBadgeCurrency}>{kitchenPass.currencySymbol}</Text>
-          <Feather name="chevron-down" size={13} color={colors.text.secondary} />
-        </TouchableOpacity>
+        <View style={styles.iconCluster}>
+          <TouchableOpacity
+            style={styles.headerChip}
+            onPress={() => setCountryModalVisible(true)}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="wallet-outline" size={13} color={colors.primary} />
+            <Text style={styles.headerChipText}>{formattedBudget}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.headerChip}
+            onPress={() => {
+              if (isInsideTabs) setActiveTab('kitchen');
+              else navigation.navigate('WhatsInYourKitchen');
+            }}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="basket-outline" size={13} color={colors.primary} />
+            <Text style={styles.headerChipText}>
+              {pantryItems.length > 0 ? `${pantryItems.length} in house` : 'Kitchen'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.headerChip}
+            onPress={() => setPassModalVisible(true)}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="options-outline" size={14} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Scrollable Feed */}
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View
-          style={[
-            styles.animatedContainer,
-            {
-              opacity: contentFade,
-              transform: [{ translateY: contentY }],
-            },
-          ]}
+      {/* 2. HEALTHY & CRAVING FILTER BAR */}
+      <View style={styles.filterBarWrap}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScrollContent}
         >
-          {/* Section 1: Discover Introduction */}
-          <View style={styles.introductionBlock}>
-            <View style={styles.introHeaderRow}>
-              <Text style={styles.eyebrow}>
-                A LITTLE INSPIRATION Â· {kitchenPass.countryName.toUpperCase()}
-              </Text>
-            </View>
-            <Text style={styles.heading}>Follow your{'\n'}appetite.</Text>
-            <Text style={styles.supportingCopy}>
-              Swipe right to save, left to pass. Mama learns what you love.
-            </Text>
-          </View>
+          {DISCOVER_FILTERS.map((filter) => {
+            const active = activeFilter === filter.id;
+            return (
+              <TouchableOpacity
+                key={filter.id}
+                style={[styles.filterPill, active && styles.filterPillActive]}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setActiveFilter(filter.id);
+                }}
+                activeOpacity={0.82}
+              >
+                <Ionicons
+                  name={filter.icon}
+                  size={14}
+                  color={active ? '#FFFFFF' : colors.primary}
+                />
+                <Text style={[styles.filterPillText, active && styles.filterPillTextActive]}>
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
-          {/* Section 2: Mama Live Voice Coaching Banner */}
-          <TouchableOpacity
-            style={styles.mamaGreetingCard}
-            onPress={handleTapMama}
-            activeOpacity={0.85}
-          >
-            <MamaCharacter
-              pose={mamaPose}
-              size={54}
-              isSpeaking={true}
-              onPress={handleTapMama}
-            />
+      {/* 3. VERTICAL SCROLLING DOPAMINE FOOD INSTAGRAM FEED */}
+      <Animated.View style={{ flex: 1, opacity: contentFade }}>
+        <FlatList
+          data={feedPosts}
+          keyExtractor={(item) => item.id}
+          renderItem={renderFeedPost}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.feedListContent}
+          initialNumToRender={4}
+        />
+      </Animated.View>
 
-            <View style={styles.mamaBubbleWrap}>
-              <View style={styles.mamaBadgeRow}>
-                <Text style={styles.mamaName}>Mama</Text>
-                <View style={styles.tapPill}>
-                  <Ionicons name="chatbubble-ellipses-outline" size={11} color={colors.primary} />
-                  <Text style={styles.tapPillText}>Tap to chat</Text>
-                </View>
-              </View>
-
-              <Animated.View style={{ transform: [{ scale: mamaBounceAnim }] }}>
-                <Text style={styles.mamaBubbleText}>&ldquo;{mamaQuote}&rdquo;</Text>
-              </Animated.View>
-            </View>
-          </TouchableOpacity>
-
-          {/* Section 3: Meal Filters */}
-          <MealFilters
-            activeFilter={activeFilter}
-            onSelectFilter={handleSelectFilter}
-          />
-
-          {/* Section 4: Featured Discovery Card */}
-          {currentItem ? (
-            <FeaturedDiscoveryCard
-              item={currentItem}
-              swipeAnim={swipeAnim}
-              cardOpacity={cardOpacity}
-              onOpenDetails={handleOpenActiveDetails}
-            />
-          ) : (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>All caught up!</Text>
-              <Text style={styles.emptySubtitle}>
-                You&apos;ve reviewed all meals in this category. Switch filters to explore more ideas.
-              </Text>
-            </View>
-          )}
-
-          {/* Section 5: Swipe Actions & Gesture Hints */}
-          {currentItem && (
-            <SwipeActions
-              onPass={handlePass}
-              onLikeAndSave={handleLikeAndSave}
-              isSaved={isSaved}
-            />
-          )}
-
-          {/* Section 6: Optional Pass Reasons (appears when user passes) */}
-          {showPassReasons && (
-            <View style={styles.passReasonsContainer}>
-              <Text style={styles.passReasonsTitle}>Not today? Tell Mama why (optional)</Text>
-              <View style={styles.reasonsChipsRow}>
-                {PASS_REASONS.map((reason) => {
-                  const isSelected = selectedReasons.includes(reason);
-                  return (
-                    <Pressable
-                      key={reason}
-                      onPress={() => handleTogglePassReason(reason)}
-                      style={[
-                        styles.reasonChip,
-                        isSelected ? styles.chipSelected : styles.chipUnselected,
-                      ]}
-                    >
-                      {isSelected && (
-                        <Ionicons
-                          name="checkmark"
-                          size={12}
-                          color={colors.primary}
-                          style={{ marginRight: 4 }}
-                        />
-                      )}
-                      <Text
-                        style={[
-                          styles.reasonLabel,
-                          isSelected ? styles.labelSelected : styles.labelUnselected,
-                        ]}
-                      >
-                        {reason}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-
-          <View style={styles.divider} />
-
-          {/* Section 7: Other Options ("A different direction") */}
-          <OtherOptionsSection
-            options={localizedQuickOptions}
-            onSelectOption={(option) => {
-              if (option.id === 'opt-1') {
-                navigation.navigate('EatingOutMealDetails', {
-                  spotName: 'Greenery Fresh Deli',
-                  dishName: option.mealName,
-                  distance: '10 min walk',
-                  price: option.estimatedCost.split(' est.')[0] || '$8.50',
-                  vibe: 'Warm pita packed with roasted seasonal veggies and house tahini.',
-                  image: option.imageUrl,
-                });
-              } else {
-                navigation.navigate('AtHomeMealDetails', {
-                  id: 'opt-2-recipe',
-                  title: option.mealName,
-                  subtitle: 'Hearty Italian staple made with cannellini beans and crushed tomatoes.',
-                  cookTime: '25 min',
-                  gear: '1 Saucepan',
-                  estCost: option.estimatedCost.split(' est.')[0] || '$2.40',
-                  costNumeric: 2.4,
-                  image: option.imageUrl,
-                  steps: [
-                    'Cook pasta in a pot of boiling salted water until al dente.',
-                    'Simmer canned white beans and crushed tomatoes with garlic.',
-                    'Combine pasta directly into the sauce and top with olive oil.',
-                  ],
-                  ingredients: [
-                    { name: 'Rigatoni or penne', amount: '150g' },
-                    { name: 'White cannellini beans', amount: '1 can' },
-                    { name: 'Crushed tomatoes', amount: '1 can' },
-                    { name: 'Garlic & oregano', amount: 'To taste' },
-                  ],
-                });
-              }
-            }}
-          />
-
-          {/* Section 8: Localized Budget Awareness Pill */}
-          <TouchableOpacity
-            style={styles.budgetPill}
-            onPress={() => setCountryModalVisible(true)}
-            activeOpacity={0.85}
-          >
-            <View style={styles.budgetPillLeft}>
-              <Ionicons name="wallet-outline" size={16} color={colors.primary} />
-              <Text style={styles.budgetPillText}>
-                Weekly Balance:{' '}
-                <Text style={styles.budgetPillBold}>
-                  {kitchenPass.currencySymbol}
-                  {(kitchenPass.weeklyBudget - kitchenPass.spentThisWeek).toLocaleString()}
-                </Text>{' '}
-                left Â· {kitchenPass.remainingDaysInWeek} days
-              </Text>
-            </View>
-            <Feather name="settings" size={14} color={colors.text.secondary} />
-          </TouchableOpacity>
-        </Animated.View>
-      </ScrollView>
-
-      {/* Country & Currency Modal */}
+      {/* Country Modal */}
       <CountryCurrencyModal
         visible={countryModalVisible}
         onClose={() => setCountryModalVisible(false)}
       />
 
-      {/* Floating In-App Toast */}
+      {/* Kitchen Pass Modal */}
+      <KitchenPassModal
+        visible={passModalVisible}
+        onClose={() => setPassModalVisible(false)}
+      />
+
+      {/* Tactile Toast */}
       <TactileToast
         visible={!!toastMessage}
         message={toastMessage || ''}
@@ -772,10 +656,12 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
       />
 
       {/* Bottom Navigation */}
-      <BottomNavigation
-        activeTab="discover"
-        onTabChange={handleTabChange}
-      />
+      {!isInsideTabs && (
+        <BottomNavigation
+          activeTab="discover"
+          onTabChange={handleTabChange}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -785,236 +671,212 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  masthead: {
-    height: 56,
-    paddingHorizontal: 24,
+  topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 6,
   },
   brandGroup: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
     gap: 8,
   },
   brandTitle: {
     fontSize: 24,
     fontFamily: typography.fontFamily.serif,
-    fontWeight: '600',
-    color: colors.text.primary,
-    letterSpacing: 1,
-  },
-  countryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    backgroundColor: colors.snow100,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  countryBadgeFlag: {
-    fontSize: 11,
     fontWeight: '700',
     color: colors.primary,
-    letterSpacing: 0.5,
+    letterSpacing: -0.4,
   },
-  countryBadgeCurrency: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.text.primary,
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 28,
-  },
-  animatedContainer: {
-    gap: 20,
-  },
-  introductionBlock: {
-    gap: 6,
-  },
-  introHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  eyebrow: {
-    fontSize: typography.fontSize.label,
-    fontWeight: '600',
-    color: colors.primary,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  heading: {
-    fontSize: 40,
-    lineHeight: 44,
-    fontFamily: typography.fontFamily.serif,
-    color: colors.text.primary,
-    fontWeight: '500',
-  },
-  supportingCopy: {
-    fontSize: typography.fontSize.sub,
-    lineHeight: 20,
-    color: colors.text.secondary,
-  },
-
-  // Mama Live Voice Coaching Card
-  mamaGreetingCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.snow100,
-    borderRadius: 18,
-    padding: 14,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
-  },
-  mamaBubbleWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  mamaBadgeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  mamaName: {
-    fontSize: 12,
-    fontFamily: typography.fontFamily.serif,
-    fontWeight: '700',
-    color: colors.primary,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  tapPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.linen100,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  tapPillText: {
-    fontSize: 10,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  mamaBubbleText: {
+  periodPillText: {
     fontSize: 13,
-    lineHeight: 18,
-    fontFamily: typography.fontFamily.regular,
-    fontStyle: 'italic',
-    color: colors.text.primary,
-  },
-
-  emptyCard: {
-    padding: 32,
-    borderRadius: 20,
-    backgroundColor: colors.snow100,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontFamily: typography.fontFamily.serif,
     fontWeight: '600',
-    color: colors.text.primary,
-  },
-  emptySubtitle: {
-    fontSize: 14,
     color: colors.text.secondary,
-    textAlign: 'center',
-    lineHeight: 20,
   },
-
-  // Pass Reasons
-  passReasonsContainer: {
-    gap: 10,
-    padding: 14,
-    backgroundColor: colors.snow100,
-    borderRadius: 14,
+  iconCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(36, 40, 32, 0.06)',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  headerChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  filterBarWrap: {
+    paddingVertical: 8,
+  },
+  filterScrollContent: {
+    paddingHorizontal: 18,
+    gap: 8,
+  },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(36, 40, 32, 0.08)',
   },
-  passReasonsTitle: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: '600',
-    color: colors.text.secondary,
-  },
-  reasonsChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  reasonChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 99,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  chipSelected: {
-    backgroundColor: colors.linen100,
+  filterPillActive: {
+    backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  chipUnselected: {
-    backgroundColor: colors.background,
-    borderColor: colors.border,
+  filterPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text.primary,
   },
-  reasonLabel: {
-    fontSize: typography.fontSize.reassurance,
-    lineHeight: 14,
+  filterPillTextActive: {
+    color: '#FFFFFF',
   },
-  labelSelected: {
-    color: colors.primary,
-    fontWeight: '600',
+  feedListContent: {
+    paddingHorizontal: 18,
+    paddingTop: 6,
+    paddingBottom: 110,
+    gap: 18,
   },
-  labelUnselected: {
-    color: colors.text.secondary,
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    width: '100%',
-  },
-
-  // Budget Pill
-  budgetPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  feedCard: {
+    height: 395,
+    borderRadius: 28,
+    overflow: 'hidden',
+    backgroundColor: '#1E211B',
     justifyContent: 'space-between',
-    backgroundColor: colors.linen100,
+    shadowColor: '#181512',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    elevation: 8,
     borderWidth: 1,
-    borderColor: colors.linen200,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
-  budgetPillLeft: {
+  feedImage: {
+    ...StyleSheet.absoluteFill,
+    width: '100%',
+    height: '100%',
+  },
+  feedTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  topBadgesCluster: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
     flex: 1,
+    marginRight: 10,
   },
-  budgetPillText: {
-    fontSize: 12,
-    color: colors.text.secondary,
+  healthGlassBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(18, 20, 16, 0.74)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
   },
-  budgetPillBold: {
-    color: colors.primary,
+  healthGlassText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  pantryGlassBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(21, 128, 61, 0.82)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(74, 222, 128, 0.35)',
+  },
+  pantryGlassText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  heartCircleBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(18, 20, 16, 0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  heartCircleBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  feedBottomScrim: {
+    paddingHorizontal: 18,
+    paddingTop: 32,
+    paddingBottom: 18,
+    backgroundColor: 'rgba(18, 20, 16, 0.72)',
+    gap: 10,
+  },
+  feedTitle: {
+    fontSize: 25,
+    lineHeight: 30,
+    fontFamily: typography.fontFamily.serif,
     fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  feedBottomMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  feedTimeCostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  feedTimeCostText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  checkFoodPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 14,
+  },
+  checkFoodPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 });
 
 export default DiscoverYourNextMeal;
-

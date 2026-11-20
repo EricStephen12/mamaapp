@@ -3,13 +3,25 @@ import { Platform } from 'react-native';
 export const typography = {
   fontFamily: {
     serif: Platform.select({
-      ios: 'CormorantGaramond-Medium',
+      ios: 'Georgia',
       android: 'serif',
       default: 'serif',
     }),
-    regular: 'Inter-Regular',
-    medium: 'Inter-Medium',
-    semiBold: 'Inter-SemiBold',
+    regular: Platform.select({
+      ios: 'System',
+      android: 'sans-serif',
+      default: 'sans-serif',
+    }),
+    medium: Platform.select({
+      ios: 'System',
+      android: 'sans-serif-medium',
+      default: 'sans-serif',
+    }),
+    semiBold: Platform.select({
+      ios: 'System',
+      android: 'sans-serif-medium',
+      default: 'sans-serif',
+    }),
   },
   fontSize: {
     label: 10,

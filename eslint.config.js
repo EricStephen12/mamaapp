@@ -3,9 +3,11 @@ const { defineConfig } = require('eslint/config');
 const expoConfig = require('eslint-config-expo/flat');
 
 module.exports = defineConfig([
+  {
+    ignores: ['dist/**', 'server/**', 'scripts/**'],
+  },
   expoConfig,
   {
-    ignores: ['dist/*'],
     rules: {
       'react-hooks/refs': 'off',
     },

@@ -1,23 +1,24 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   Animated,
-  PanResponder,
-  Dimensions,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { BottomNavigation, NavTab } from '../../components/navigation/BottomNavigation';
+import { useTabNavigation } from '../../context/TabNavigationContext';
 import { TactileToast } from '../../components/common/TactileToast';
 import { MamaCharacter, MamaPose } from '../../components/common/MamaCharacter';
 import {
@@ -25,406 +26,797 @@ import {
   UserKitchenPass,
   convertMealCost,
 } from '../../services/preferencesStore';
-import { WeeklyBalanceCard } from './components/WeeklyBalanceCard';
 import { CountryCurrencyModal } from '../../components/common/CountryCurrencyModal';
-import { MEAL_CATALOG, MealPeriod } from './mealCatalog';
-import { MamaDialogueService } from '../../services/mamaDialogueService';
+import { KitchenPassModal } from '../../components/common/KitchenPassModal';
+import { MamaDialogueService, MealPeriod } from '../../services/mamaDialogueService';
 import { AiMamaService } from '../../services/aiMamaService';
 import { decisionsService } from '../../services/api/decisionsService';
-import { savedMealsService } from '../../services/api/savedMealsService';
-import { apiClient } from '../../services/api/client';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
+import { pantryService } from '../../services/api/pantryService';
+import {
+  rollService,
+  RolledMeal,
+  getCurrentTimeOfDay,
+  getTimeOfDayHeading,
+  getInitialMeal,
+  getInitialMealDeck,
+} from '../../services/api/rollService';
+import { useShake } from '../../hooks/useShake';
+import { useUserDataBank } from '../../context/UserDataBankContext';
+import { WeeklyBalanceCard } from './components/WeeklyBalanceCard';
+import { MealCardDeck } from './components/MealCardDeck';
+import { RollRevealModal } from './components/RollRevealModal';
+import { MamaPopUpModal } from './components/MamaPopUpModal';
+import { MealImageService } from '../../services/mealImageService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'YourDailyEdit'>;
 
-interface DeckItem {
-  id: string;
-  type: 'standard' | 'survival' | 'takeout';
-  title: string;
-  subtitle: string;
-  cookTimeOrDistance: string;
-  gearOrVibe: string;
-  estCost: string;
-  costNumeric: number;
-  image?: string;
-  mamaQuote: string;
-  mamaPose: MamaPose;
-  steps?: string[];
-  ingredients?: { name: string; amount: string }[];
-}
-
-function getAutoMealPeriod(): MealPeriod {
-  const hour = new Date().getHours();
-  if (hour >= 5 && hour < 11) return 'morning';
-  if (hour >= 11 && hour < 16) return 'lunch';
-  if (hour >= 16 && hour < 22) return 'dinner';
-  return 'late_night';
-}
-
-export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
-  const [activeTab, setActiveTab] = useState<NavTab>('edit');
+export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
+  const { user, isLoggedIn } = useUserDataBank();
+  const { isInsideTabs, activeTab, setActiveTab, injectedDailyMeal, setInjectedDailyMeal } = useTabNavigation();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [countryModalVisible, setCountryModalVisible] = useState(false);
+  const [passModalVisible, setPassModalVisible] = useState(false);
+  const [rollRevealVisible, setRollRevealVisible] = useState(false);
+  const [pendingRolledMeal, setPendingRolledMeal] = useState<RolledMeal | null>(null);
+  const [mamaModalVisible, setMamaModalVisible] = useState(false);
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
+  const [passModalInitialTab, setPassModalInitialTab] = useState<
+    'gear' | 'time' | 'flavor' | 'diet' | 'goal' | 'account'
+  >('gear');
 
-  // User kitchen preferences
+  // User preferences
   const [kitchenPass, setKitchenPass] = useState<UserKitchenPass>(
     preferencesStore.getKitchenPass()
   );
 
-  // API-generated deck from backend (null = loading/fallback to local catalog)
-  const [apiDeck, setApiDeck] = useState<DeckItem[] | null>(null);
-  const [apiDeckLoading, setApiDeckLoading] = useState(true);
+  // Time of day (tappable to switch between Morning, Lunch, Dinner, and Late Night)
+  const [mealPeriod, setMealPeriod] = useState<MealPeriod>(() => getCurrentTimeOfDay());
+  const periodTitle = useMemo(() => getTimeOfDayHeading(mealPeriod), [mealPeriod]);
 
-  // Current automatic time of day
-  const [mealPeriod] = useState<MealPeriod>(getAutoMealPeriod);
-  const [deckIndex, setDeckIndex] = useState(0);
-
-  // Dynamic Mama Live Dialogue
-  const [mamaQuote, setMamaQuote] = useState<string>(
-    MamaDialogueService.getDynamicQuote(mealPeriod, kitchenPass)
+  const [pantryItems, setPantryItems] = useState<string[]>(() =>
+    pantryService.getCachedPantry().map((i) => i.name)
   );
+
+  // Dynamic multi-meal deck for buttery-smooth swipeable carousel
+  const [mealsDeck, setMealsDeck] = useState<RolledMeal[]>(() =>
+    getInitialMealDeck(mealPeriod, kitchenPass)
+  );
+  const [activeMealIndex, setActiveMealIndex] = useState<number>(0);
+  const rolledMeal = mealsDeck[activeMealIndex] || mealsDeck[0];
+  const [isRolling, setIsRolling] = useState(false);
+  const [lastRolledMeal, setLastRolledMeal] = useState<RolledMeal | null>(null);
+  const [showUndoBanner, setShowUndoBanner] = useState(false);
+  const undoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Dynamic Mama Live Dialogue — directly synchronized with pantry, budget, and active dish
+  const [mamaQuote, setMamaQuote] = useState<string>(() => {
+    const initial = getInitialMeal(mealPeriod, kitchenPass);
+    const cachedPantry = pantryService.getCachedPantry().map((i) => i.name);
+    const voice = MamaDialogueService.getSyncedMamaVoice({
+      timeOfDay: mealPeriod,
+      pass: kitchenPass,
+      pantryItems: cachedPantry,
+      activeDish: {
+        title: initial.title,
+        cookTimeMinutes: initial.cookTimeMinutes,
+        estCost: initial.estCost,
+        gear: kitchenPass.cookingGearLabel,
+        mamaTip: initial.mamaTip,
+      },
+      actionHint: 'init',
+    });
+    return voice.quote;
+  });
   const [mamaPose, setMamaPose] = useState<MamaPose>('cooking');
 
-  // Entrance animations
+  const handleCycleMealPeriod = () => {
+    Haptics.selectionAsync().catch(() => {});
+    const order: MealPeriod[] = ['morning', 'lunch', 'dinner', 'late_night'];
+    const nextPeriod = order[(order.indexOf(mealPeriod) + 1) % order.length];
+    setMealPeriod(nextPeriod);
+    const newDeck = getInitialMealDeck(nextPeriod, kitchenPass);
+    setMealsDeck(newDeck);
+    setActiveMealIndex(0);
+    const nextMeal = newDeck[0];
+    const voice = MamaDialogueService.getSyncedMamaVoice({
+      timeOfDay: nextPeriod,
+      pass: kitchenPass,
+      pantryItems,
+      activeDish: {
+        title: nextMeal.title,
+        cookTimeMinutes: nextMeal.cookTimeMinutes,
+        estCost: nextMeal.estCost,
+        gear: kitchenPass.cookingGearLabel,
+        mamaTip: nextMeal.mamaTip,
+      },
+      actionHint: 'init',
+    });
+    setMamaQuote(voice.quote);
+    setMamaPose(voice.pose);
+  };
+
+  const handleSelectMealIndex = useCallback(
+    (index: number) => {
+      setActiveMealIndex(index);
+      const selected = mealsDeck[index];
+      if (selected) {
+        const voice = MamaDialogueService.getSyncedMamaVoice({
+          timeOfDay: mealPeriod,
+          pass: kitchenPass,
+          pantryItems,
+          activeDish: {
+            title: selected.title,
+            cookTimeMinutes: selected.cookTimeMinutes,
+            estCost: selected.estCost,
+            gear: kitchenPass.cookingGearLabel,
+            mamaTip: selected.mamaTip,
+          },
+          actionHint: 'init',
+        });
+        setMamaQuote(voice.quote);
+        setMamaPose(voice.pose);
+      }
+    },
+    [mealsDeck, mealPeriod, kitchenPass, pantryItems]
+  );
+
+  // Entrance & card reaction animations
   const contentFade = useRef(new Animated.Value(0)).current;
   const contentY = useRef(new Animated.Value(15)).current;
-  const bubbleScaleAnim = useRef(new Animated.Value(1)).current;
 
-  // Horizontal card gesture animations
-  const position = useRef(new Animated.ValueXY()).current;
-  const cardOpacity = useRef(new Animated.Value(1)).current;
+  // Automatically hydrate the visible carousel cards with dish-accurate AI photography
+  useEffect(() => {
+    let cancelled = false;
+    const indicesToHydrate = [activeMealIndex, activeMealIndex + 1].filter(
+      (idx) => idx >= 0 && idx < mealsDeck.length
+    );
+
+    indicesToHydrate.forEach((idx) => {
+      const targetMeal = mealsDeck[idx];
+      if (!targetMeal || !MealImageService.isCatalogImage(targetMeal.imageUrl)) {
+        return;
+      }
+      MealImageService.generateMealImage(
+        targetMeal.title,
+        targetMeal.ingredients,
+        kitchenPass.cuisineAnchor
+      )
+        .then((aiPhotoUrl) => {
+          if (!cancelled && aiPhotoUrl && !MealImageService.isCatalogImage(aiPhotoUrl)) {
+            setMealsDeck((prev) =>
+              prev.map((m) =>
+                m.title === targetMeal.title ? { ...m, imageUrl: aiPhotoUrl } : m
+              )
+            );
+          }
+        })
+        .catch(() => {});
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMealIndex, mealsDeck, kitchenPass.cuisineAnchor]);
+
+  // Subscribe to kitchen pass preferences and keep meal synced when culinary preferences change
+  const prevPrefsKeyRef = useRef<string>(
+    `${kitchenPass.cuisineAnchor}|${kitchenPass.bodyGoal}|${kitchenPass.timeLimitMinutes}|${(kitchenPass.dietaryRestrictions || []).join(',')}`
+  );
 
   useEffect(() => {
     const unsub = preferencesStore.subscribe((updated) => {
       setKitchenPass(updated);
-      setMamaQuote(MamaDialogueService.getDynamicQuote(mealPeriod, updated));
+      const nextPrefsKey = `${updated.cuisineAnchor}|${updated.bodyGoal}|${updated.timeLimitMinutes}|${(updated.dietaryRestrictions || []).join(',')}`;
+      if (nextPrefsKey !== prevPrefsKeyRef.current) {
+        prevPrefsKeyRef.current = nextPrefsKey;
+        const newDeck = getInitialMealDeck(mealPeriod, updated);
+        setMealsDeck(newDeck);
+        setActiveMealIndex(0);
+        const matchedMeal = newDeck[0];
+        const currentPantry = pantryService.getCachedPantry().map((i) => i.name);
+        const voice = MamaDialogueService.getSyncedMamaVoice({
+          timeOfDay: mealPeriod,
+          pass: updated,
+          pantryItems: currentPantry,
+          activeDish: {
+            title: matchedMeal.title,
+            cookTimeMinutes: matchedMeal.cookTimeMinutes,
+            estCost: matchedMeal.estCost,
+            gear: updated.cookingGearLabel,
+            mamaTip: matchedMeal.mamaTip,
+          },
+          actionHint: 'init',
+        });
+        setMamaQuote(voice.quote);
+        setMamaPose(voice.pose);
+
+        setPendingRolledMeal(null);
+        setIsRolling(true);
+        rollService
+          .rollNextMeal(mealPeriod, matchedMeal.title)
+          .then(async (aiMeal) => {
+            const photoPromise = MealImageService.generateMealImage(
+              aiMeal.title,
+              aiMeal.ingredients,
+              updated.cuisineAnchor
+            ).catch(() => null);
+            const fastPhotoUrl = await Promise.race([
+              photoPromise,
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 3200)),
+            ]);
+            const hydratedMeal: RolledMeal = fastPhotoUrl
+              ? { ...aiMeal, imageUrl: fastPhotoUrl }
+              : aiMeal;
+
+            setMealsDeck((prev) => [
+              hydratedMeal,
+              ...prev.filter((m) => m.title !== hydratedMeal.title),
+            ]);
+            setActiveMealIndex(0);
+
+            if (!fastPhotoUrl) {
+              photoPromise.then((lateUrl) => {
+                if (lateUrl) {
+                  setMealsDeck((prev) =>
+                    prev.map((m) => (m.title === aiMeal.title ? { ...m, imageUrl: lateUrl } : m))
+                  );
+                }
+              });
+            }
+            const aiSyncVoice = MamaDialogueService.getSyncedMamaVoice({
+              timeOfDay: mealPeriod,
+              pass: updated,
+              pantryItems: currentPantry,
+              activeDish: {
+                title: aiMeal.title,
+                cookTimeMinutes: aiMeal.cookTimeMinutes,
+                estCost: aiMeal.estCost,
+                gear: updated.cookingGearLabel,
+                mamaTip: aiMeal.mamaTip,
+              },
+              actionHint: 'init',
+            });
+            setMamaQuote(aiSyncVoice.quote);
+            setMamaPose(aiSyncVoice.pose);
+
+            AiMamaService.getLiveMamaDialogue({
+              timeOfDay: mealPeriod,
+              pass: updated,
+              pantryItems: currentPantry,
+              activeDish: {
+                title: aiMeal.title,
+                cookTimeMinutes: aiMeal.cookTimeMinutes,
+                estCost: aiMeal.estCost,
+                gear: updated.cookingGearLabel,
+              },
+              actionHint: 'init',
+            })
+              .then((aiQuote) => {
+                if (aiQuote && aiQuote.length > 5) {
+                  setMamaQuote(aiQuote);
+                }
+              })
+              .catch(() => {});
+          })
+          .catch(() => {})
+          .finally(() => {
+            setIsRolling(false);
+          });
+      }
     });
+    return unsub;
+  }, [mealPeriod]);
+
+  // Initial meal roll & pantry load
+  useEffect(() => {
+    let cancelled = false;
     Animated.parallel([
       Animated.timing(contentFade, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.timing(contentY, { toValue: 0, duration: 400, useNativeDriver: true }),
     ]).start();
 
-    // Load AI-curated daily edit from backend
-    // Load AI-curated daily edit from backend (One Winner + One Alternative)
-    const loadApiDeck = async () => {
-      try {
-        const pass = preferencesStore.getKitchenPass();
-        const { pantryService } = await import('../../services/api/pantryService');
-        const { SUPPORTED_COUNTRIES } = await import('../../services/preferencesStore');
+    pantryService
+      .fetchAll()
+      .then(async (items) => {
+        if (cancelled) return;
+        const itemNames = items.map((i) => i.name);
+        setPantryItems(itemNames);
 
-        // Fetch real stored pantry items from Neon DB
-        const dbItems = await pantryService.fetchAll();
-        const pantryList = dbItems.length > 0
-          ? dbItems.map((item) => item.name)
-          : (SUPPORTED_COUNTRIES.find((c) => c.id === pass.country)?.popularStaples || ['Eggs', 'Tomatoes', 'Rice', 'Onions']);
-
-        const result = await apiClient<any>('/api/daily-edit', {
-          method: 'POST',
-          body: JSON.stringify({
-            pantryItems: pantryList,
-            kitchenPass: {
-              country: pass.country,
-              countryName: pass.countryName,
-              currencyCode: pass.currencyCode,
-              currencySymbol: pass.currencySymbol,
-              weeklyBudget: pass.weeklyBudget,
-              cuisineAnchor: pass.cuisineAnchor,
-              cuisineLabel: pass.cuisineLabel,
-              cookingGear: pass.cookingGear,
-              cookingGearLabel: pass.cookingGearLabel,
-              timeLimitMinutes: pass.timeLimitMinutes,
-              stapleBase: pass.stapleBase,
-              spiceLevel: pass.spiceLevel,
-              dietaryRestrictions: pass.dietaryRestrictions,
-            },
-          }),
+        const currentPass = preferencesStore.getKitchenPass();
+        const initialDeck = getInitialMealDeck(mealPeriod, currentPass);
+        setMealsDeck(initialDeck);
+        setActiveMealIndex(0);
+        const initialDish = initialDeck[0];
+        const voice = MamaDialogueService.getSyncedMamaVoice({
+          timeOfDay: mealPeriod,
+          pass: currentPass,
+          pantryItems: itemNames,
+          activeDish: {
+            title: initialDish.title,
+            cookTimeMinutes: initialDish.cookTimeMinutes,
+            estCost: initialDish.estCost,
+            gear: currentPass.cookingGearLabel,
+            mamaTip: initialDish.mamaTip,
+          },
+          actionHint: 'init',
         });
-
-        if (result && result.makeNowMeal) {
-          const makeNow = result.makeNowMeal;
-          const costNum = typeof makeNow.estimatedCost === 'number'
-            ? makeNow.estimatedCost
-            : 2.2;
-
-          const deck: DeckItem[] = [];
-
-          // 1. The One Winner (Primary Curated Choice)
-          deck.push({
-            id: makeNow.id || 'api-make-now',
-            type: 'standard',
-            title: makeNow.title || "Tonight's Curated Meal",
-            subtitle: makeNow.subtitle || makeNow.description || '',
-            cookTimeOrDistance: `${makeNow.timeMinutes || makeNow.cookTimeMinutes || 10} min`,
-            gearOrVibe: makeNow.tags?.[0] || pass.cookingGearLabel || '1 Pan',
-            estCost: convertMealCost(costNum, pass.currencyCode, pass.currencySymbol),
-            costNumeric: costNum,
-            image: makeNow.imageUrl || undefined,
-            mamaQuote: makeNow.description || result.curatorNote || 'Hot skillet comfort tonight!',
-            mamaPose: 'cooking',
-            steps: Array.isArray(makeNow.steps) ? makeNow.steps : undefined,
-            ingredients: Array.isArray(makeNow.ingredients) ? makeNow.ingredients : undefined,
-          });
-
-          // 2. The One Alternative (Backup Choice)
-          if (result.tonightDinner) {
-            const dinner = result.tonightDinner;
-            const dinnerCostNum = typeof dinner.estimatedCost === 'number'
-              ? dinner.estimatedCost
-              : 2.5;
-
-            deck.push({
-              id: dinner.id || 'api-dinner',
-              type: 'standard',
-              title: dinner.title || "Tonight's Alternative",
-              subtitle: dinner.subtitle || dinner.description || '',
-              cookTimeOrDistance: `${dinner.timeMinutes || dinner.cookTimeMinutes || 14} min`,
-              gearOrVibe: dinner.tags?.[0] || '1 Pan Skillet',
-              estCost: convertMealCost(dinnerCostNum, pass.currencyCode, pass.currencySymbol),
-              costNumeric: dinnerCostNum,
-              image: dinner.imageUrl || undefined,
-              mamaQuote: dinner.description || "A comforting alternative that respects your budget.",
-              mamaPose: 'delighted',
-              steps: Array.isArray(dinner.steps) ? dinner.steps : undefined,
-              ingredients: Array.isArray(dinner.ingredients) ? dinner.ingredients : undefined,
-            });
-          }
-
-          if (deck.length > 0) {
-            setApiDeck(deck);
-            if (result.curatorNote) {
-              setMamaQuote(result.curatorNote);
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('[YourDailyEdit] loadApiDeck fallback:', err);
-      } finally {
-        setApiDeckLoading(false);
-      }
-    };
-
-    loadApiDeck();
-    return unsub;
-  }, []);
-
-  // Format today's date
-  const now = new Date();
-  const dayName = now.toLocaleDateString('en-US', { weekday: 'short' });
-  const dateFormatted = `${dayName}, ${now.getDate()} ${now.toLocaleDateString('en-US', { month: 'short' })}`;
-
-  // Time of day label
-  const periodTitle = useMemo(() => {
-    switch (mealPeriod) {
-      case 'morning':
-        return 'Morning Fuel';
-      case 'lunch':
-        return 'Midday Lunch';
-      case 'dinner':
-        return "Tonight's Decision";
-      case 'late_night':
-        return 'Late Night Plate';
-    }
-  }, [mealPeriod]);
-
-  // Build 2-card deck (One Winner + One Alternative): prefer live API deck, fall back to local catalog
-  const mealDeck: DeckItem[] = useMemo(() => {
-    // Use API deck when loaded and available
-    if (!apiDeckLoading && apiDeck && apiDeck.length > 0) {
-      return apiDeck;
-    }
-    // Local catalog fallback (One Winner + One Alternative, no takeout in V1)
-    const periodCatalog = MEAL_CATALOG[mealPeriod];
-    const cuisineGroup =
-      periodCatalog[kitchenPass.cuisineAnchor] || periodCatalog.default;
-
-    const std = cuisineGroup.standard;
-    const surv = cuisineGroup.survival;
-
-    const stdCostNum = parseFloat(std.estCost.replace(/[^0-9.]/g, '')) || 2.2;
-    const survCostNum = parseFloat(surv.estCost.replace(/[^0-9.]/g, '')) || 1.4;
-
-    return [
-      {
-        id: std.id,
-        type: 'standard',
-        title: std.title,
-        subtitle: std.subtitle,
-        cookTimeOrDistance: std.cookTime,
-        gearOrVibe: std.gear,
-        estCost: convertMealCost(stdCostNum, kitchenPass.currencyCode, kitchenPass.currencySymbol),
-        costNumeric: stdCostNum,
-        image: std.image,
-        mamaQuote: "Hot skillet comfort. One pan, zero sink dishes tonight.",
-        mamaPose: 'cooking',
-        steps: std.steps,
-      },
-      {
-        id: surv.id,
-        type: 'survival',
-        title: surv.title,
-        subtitle: surv.subtitle,
-        cookTimeOrDistance: surv.cookTime,
-        gearOrVibe: surv.gear,
-        estCost: convertMealCost(survCostNum, kitchenPass.currencyCode, kitchenPass.currencySymbol),
-        costNumeric: survCostNum,
-        image: surv.image,
-        mamaQuote: "Zero effort alternative. In 4 minutes you're eating.",
-        mamaPose: 'writing',
-        steps: surv.steps,
-      },
-    ];
-  }, [apiDeckLoading, apiDeck, mealPeriod, kitchenPass.cuisineAnchor, kitchenPass.currencyCode, kitchenPass.currencySymbol]);
-
-  const activeItem = mealDeck[deckIndex % mealDeck.length];
-
-  // Interactive talk with Mama on tap (Instant local response + Groq AI async refresh)
-  const handleTapMama = () => {
-    const line = MamaDialogueService.getRandomInteractiveLine(kitchenPass);
-    setMamaQuote(line.quote);
-    setMamaPose(line.pose);
-
-    bubbleScaleAnim.setValue(0.93);
-    Animated.spring(bubbleScaleAnim, {
-      toValue: 1,
-      friction: 4,
-      useNativeDriver: true,
-    }).start();
-
-    // Async live dialogue generation with Groq ultra-fast AI
-    AiMamaService.getLiveMamaDialogue(kitchenPass, 'tap')
-      .then((aiQuote) => {
-        if (aiQuote && aiQuote.length > 5) {
-          setMamaQuote(aiQuote);
-        }
+        setMamaQuote(voice.quote);
+        setMamaPose(voice.pose);
       })
-      .catch(() => {});
-  };
+      .catch(() => {
+        // Keep initial dish if offline
+      });
 
-  // PanResponder for smooth thumb swiping left ("Not today") and right ("Cook today")
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 12,
-        onPanResponderMove: (_, gesture) => {
-          position.setValue({ x: gesture.dx, y: 0 });
-        },
-        onPanResponderRelease: (_, gesture) => {
-          if (gesture.dx > SWIPE_THRESHOLD) {
-            handleSwipeAction('right');
-          } else if (gesture.dx < -SWIPE_THRESHOLD) {
-            handleSwipeAction('left');
-          } else {
-            Animated.spring(position, {
-              toValue: { x: 0, y: 0 },
-              friction: 5,
-              useNativeDriver: true,
-            }).start();
-          }
-        },
-      }),
-    [deckIndex, mealDeck.length]
+    return () => {
+      cancelled = true;
+    };
+  }, [mealPeriod, contentFade, contentY]);
+
+  // Listen for meals chosen from Discover or Kitchen Match
+  useEffect(() => {
+    const injected = injectedDailyMeal || route.params?.injectedMeal;
+    if (injected && injected.title) {
+      const formattedMeal: RolledMeal = {
+        id: injected.id || `injected-${Date.now()}`,
+        title: injected.title,
+        subtitle: injected.subtitle || `Cooks in ${injected.cookTime || '15 mins'}`,
+        timeOfDay: mealPeriod,
+        cookTimeMinutes: parseInt(injected.cookTime || '15', 10) || 15,
+        estCost: typeof injected.costNumeric === 'number' ? injected.costNumeric : 2.0,
+        imageUrl: injected.imageUrl || injected.image || injected.resolvedImage,
+        pantryNote: injected.pantryNote || 'Chosen for tonight',
+        mamaTip: injected.mamaTip || `Wonderful choice tonight, my child! Let's cook ${injected.title}.`,
+        ingredients: Array.isArray(injected.ingredients) ? injected.ingredients : [],
+        steps: Array.isArray(injected.steps) ? injected.steps : [],
+      };
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMealsDeck((prev) => [formattedMeal, ...prev.filter((m) => m.title !== formattedMeal.title)]);
+      setActiveMealIndex(0);
+      setMamaQuote(`I love this choice! Let's cook ${formattedMeal.title} tonight.`);
+      setMamaPose('delighted');
+      setToastMessage(`Set ${formattedMeal.title} as today's meal!`);
+      if (injectedDailyMeal) {
+        setInjectedDailyMeal(null);
+      }
+    }
+  }, [injectedDailyMeal, route.params?.injectedMeal, mealPeriod, setInjectedDailyMeal]);
+
+  // Subscribe to pantry inventory changes & re-roll when inventory changes
+  const prevPantrySigRef = useRef<string>(
+    pantryService
+      .getCachedPantry()
+      .map((i) => i.name.toLowerCase().trim())
+      .sort()
+      .join(',')
   );
 
-  const handleSwipeAction = (direction: 'left' | 'right') => {
-    const toX = direction === 'right' ? SCREEN_WIDTH + 50 : -SCREEN_WIDTH - 50;
-    Animated.parallel([
-      Animated.timing(position.x, {
-        toValue: toX,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(cardOpacity, {
-        toValue: 0,
-        duration: 160,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      if (direction === 'right') {
-        // Cook Today -> Mama praises you & records decision
-        preferencesStore.recordMealDecision(activeItem.id, 'cooked', activeItem.costNumeric);
-        const cookSpeech = MamaDialogueService.getCookReaction();
-        setToastMessage(`Mama: "${cookSpeech}"`);
-        // Log to DB + save to collection
-        decisionsService.log(activeItem.id, activeItem.title, 'cooked', activeItem.costNumeric);
-        savedMealsService.saveMeal({
-          mealId: activeItem.id,
-          title: activeItem.title,
-          type: 'home',
-          cookTime: activeItem.cookTimeOrDistance,
-          cost: activeItem.estCost,
-          costNumeric: activeItem.costNumeric,
-          imageUrl: activeItem.image,
-          recipeSteps: activeItem.steps,
-          ingredients: activeItem.ingredients,
-        });
+  useEffect(() => {
+    const unsubPantry = pantryService.subscribe((items) => {
+      const names = items.map((i) => i.name);
+      setPantryItems(names);
 
-        navigation.navigate('AtHomeMealDetails', {
-          id: activeItem.id,
-          title: activeItem.title,
-          subtitle: activeItem.subtitle,
-          cookTime: activeItem.cookTimeOrDistance,
-          gear: activeItem.gearOrVibe,
-          estCost: activeItem.estCost,
-          costNumeric: activeItem.costNumeric,
-          image: activeItem.image,
-          steps: activeItem.steps,
-          ingredients: activeItem.ingredients,
-        });
-        position.setValue({ x: 0, y: 0 });
-        cardOpacity.setValue(1);
-      } else {
-        // Not Today -> Mama comments wittily and advances
-        preferencesStore.recordMealDecision(activeItem.id, 'passed', activeItem.costNumeric);
-        const passSpeech = MamaDialogueService.getPassReaction();
-        setMamaQuote(passSpeech);
-        setMamaPose('writing');
-        decisionsService.log(activeItem.id, activeItem.title, 'passed', activeItem.costNumeric);
+      const nextSig = names
+        .map((n) => n.toLowerCase().trim())
+        .sort()
+        .join(',');
+      if (nextSig !== prevPantrySigRef.current) {
+        prevPantrySigRef.current = nextSig;
+        const currentPass = preferencesStore.getKitchenPass();
+        setPendingRolledMeal(null);
+        setIsRolling(true);
+        rollService
+          .rollNextMeal(mealPeriod)
+          .then(async (aiMeal) => {
+            const photoPromise = MealImageService.generateMealImage(
+              aiMeal.title,
+              aiMeal.ingredients,
+              currentPass.cuisineAnchor
+            ).catch(() => null);
+            const fastPhotoUrl = await Promise.race([
+              photoPromise,
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 3200)),
+            ]);
+            const hydratedMeal: RolledMeal = fastPhotoUrl
+              ? { ...aiMeal, imageUrl: fastPhotoUrl }
+              : aiMeal;
 
-        setDeckIndex((prev) => (prev + 1) % mealDeck.length);
-        position.setValue({ x: 0, y: 0 });
-        Animated.timing(cardOpacity, {
-          toValue: 1,
-          duration: 180,
-          useNativeDriver: true,
-        }).start();
+            setMealsDeck((prev) => [
+              hydratedMeal,
+              ...prev.filter((m) => m.title !== hydratedMeal.title),
+            ]);
+            setActiveMealIndex(0);
+
+            if (!fastPhotoUrl) {
+              photoPromise.then((lateUrl) => {
+                if (lateUrl) {
+                  setMealsDeck((prev) =>
+                    prev.map((m) => (m.title === aiMeal.title ? { ...m, imageUrl: lateUrl } : m))
+                  );
+                }
+              });
+            }
+            if (aiMeal.mamaTip && aiMeal.mamaTip.length > 5) {
+              setMamaQuote(aiMeal.mamaTip);
+              setMamaPose('delighted');
+            } else {
+              const syncVoice = MamaDialogueService.getSyncedMamaVoice({
+                timeOfDay: mealPeriod,
+                pass: currentPass,
+                pantryItems: names,
+                activeDish: {
+                  title: aiMeal.title,
+                  cookTimeMinutes: aiMeal.cookTimeMinutes,
+                  estCost: aiMeal.estCost,
+                  gear: currentPass.cookingGearLabel,
+                  mamaTip: aiMeal.mamaTip,
+                },
+                actionHint: 'init',
+              });
+              setMamaQuote(syncVoice.quote);
+              setMamaPose(syncVoice.pose);
+            }
+          })
+          .catch(() => {})
+          .finally(() => {
+            setIsRolling(false);
+          });
       }
+    });
+    return unsubPantry;
+  }, [mealPeriod]);
+
+  // Refresh pantry count & items whenever screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      setIsScreenFocused(true);
+      if (!isInsideTabs) {
+        setActiveTab('edit');
+      }
+      pantryService
+        .fetchAll()
+        .then((items) => {
+          const names = items.map((i) => i.name);
+          setPantryItems(names);
+        })
+        .catch(() => {});
+      return () => {
+        setIsScreenFocused(false);
+      };
+    }, [isInsideTabs, setActiveTab, setPantryItems])
+  );
+
+  const executeRoll = useCallback(async () => {
+    if (isRolling) return;
+    setPendingRolledMeal(null);
+    setIsRolling(true);
+
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {
+      // Haptics optional
+    }
+
+    const previousMeal = rolledMeal;
+    const previousTitle = previousMeal ? previousMeal.title : undefined;
+
+    // 1. Silent feedback loop: log pass for undo & pattern learning
+    if (previousMeal) {
+      setLastRolledMeal(previousMeal);
+      setShowUndoBanner(true);
+      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+      undoTimeoutRef.current = setTimeout(() => {
+        setShowUndoBanner(false);
+      }, 7500);
+
+      rollService.addSessionPass(previousMeal.title);
+      decisionsService.log(previousMeal.id, previousMeal.title, 'passed', previousMeal.estCost);
+      preferencesStore.recordMealDecision(previousMeal.title, 'passed', previousMeal.estCost);
+    }
+
+    setMamaQuote(MamaDialogueService.getPassReaction(previousTitle));
+    setMamaPose('writing');
+
+    // 2. Fetch the fresh AI meal (pantry + goal + time-of-day aware) and LAND on it
+    try {
+      const nextMeal = await rollService.rollNextMeal(mealPeriod, previousTitle);
+      if (nextMeal) {
+        // Generate real dish-accurate AI food image and wait up to 3.2s so recipe + photo reveal together
+        const photoPromise = MealImageService.generateMealImage(
+          nextMeal.title,
+          nextMeal.ingredients,
+          kitchenPass.cuisineAnchor
+        ).catch(() => null);
+
+        const fastPhotoUrl = await Promise.race([
+          photoPromise,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3200)),
+        ]);
+
+        const hydratedMeal: RolledMeal = fastPhotoUrl
+          ? { ...nextMeal, imageUrl: fastPhotoUrl }
+          : nextMeal;
+
+        setPendingRolledMeal(hydratedMeal);
+        setMealsDeck((prev) => [
+          hydratedMeal,
+          ...prev.filter((m) => m.title !== hydratedMeal.title),
+        ]);
+        setActiveMealIndex(0);
+
+        if (!fastPhotoUrl) {
+          photoPromise.then((latePhotoUrl) => {
+            if (latePhotoUrl) {
+              setPendingRolledMeal((prev) =>
+                prev && prev.title === nextMeal.title ? { ...prev, imageUrl: latePhotoUrl } : prev
+              );
+              setMealsDeck((prev) =>
+                prev.map((m) => (m.title === nextMeal.title ? { ...m, imageUrl: latePhotoUrl } : m))
+              );
+            }
+          });
+        }
+
+        if (nextMeal.mamaTip && nextMeal.mamaTip.length > 5) {
+          setMamaQuote(nextMeal.mamaTip);
+          setMamaPose('delighted');
+        } else {
+          const voice = MamaDialogueService.getSyncedMamaVoice({
+            timeOfDay: mealPeriod,
+            pass: kitchenPass,
+            pantryItems,
+            activeDish: {
+              title: nextMeal.title,
+              cookTimeMinutes: nextMeal.cookTimeMinutes,
+              estCost: nextMeal.estCost,
+              gear: kitchenPass.cookingGearLabel,
+              mamaTip: nextMeal.mamaTip,
+            },
+            actionHint: 'pass_meal',
+            lastPassedDishTitle: previousTitle,
+          });
+          setMamaQuote(voice.quote);
+          setMamaPose(voice.pose);
+        }
+      }
+    } catch (err) {
+      console.warn('[YourDailyEdit] Roll error:', err);
+    } finally {
+      setIsRolling(false);
+    }
+  }, [isRolling, rolledMeal, mealPeriod, kitchenPass, pantryItems]);
+
+  // Roll again handler (triggered by physical shake or tapping the hero dice)
+  const handleRollAgain = useCallback(() => {
+    if (isRolling) return;
+
+    if (!preferencesStore.consumeDailyRoll()) {
+      const price = preferencesStore.getLocalizedPlusPrice();
+      Alert.alert(
+        '5 Daily Rolls Used Today',
+        `You've used your 5 free daily rolls today! Spend 50 XP for a bonus roll or unlock Mama Plus (${price}) for Unlimited Rolls, Free Healthy Remixes, and 2x XP.`,
+        [
+          { text: 'Not Now', style: 'cancel' },
+          {
+            text: 'Bonus Roll (-50 XP)',
+            onPress: () => {
+              if (preferencesStore.spendXp(50)) {
+                setToastMessage('Bonus Roll unlocked (-50 XP)!');
+                setPendingRolledMeal(null);
+                setRollRevealVisible(true);
+                executeRoll();
+              } else {
+                setToastMessage('Need 50 XP! Cook a meal at home (+50 XP) or unlock Mama Plus.');
+              }
+            },
+          },
+          {
+            text: 'Unlock Mama Plus',
+            onPress: () => {
+              setPassModalVisible(true);
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    setPendingRolledMeal(null);
+    setRollRevealVisible(true);
+    executeRoll();
+  }, [isRolling, executeRoll]);
+
+  // Undo accidental roll / brings back previous meal instantly
+  const handleUndoRoll = useCallback(() => {
+    if (!lastRolledMeal) return;
+
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {}
+
+    const restoredMeal = lastRolledMeal;
+    const currentDish = rolledMeal;
+
+    // Remove from passed tracking
+    rollService.removeSessionPass(restoredMeal.title);
+    preferencesStore.undoMealDecision(restoredMeal.title, 'passed', restoredMeal.estCost);
+
+    if (currentDish) {
+      rollService.removeSessionPass(currentDish.title);
+      preferencesStore.undoMealDecision(currentDish.title, 'passed', currentDish.estCost);
+    }
+
+    const existingIdx = mealsDeck.findIndex((m) => m.title === restoredMeal.title);
+    if (existingIdx !== -1) {
+      setActiveMealIndex(existingIdx);
+    } else {
+      setMealsDeck((prev) => [restoredMeal, ...prev]);
+      setActiveMealIndex(0);
+    }
+    setLastRolledMeal(null);
+    setShowUndoBanner(false);
+
+    setMamaQuote(`"Restored! Let's make ${restoredMeal.title}."`);
+    setMamaPose('delighted');
+  }, [lastRolledMeal, mealsDeck, rolledMeal]);
+
+  // Explicit confirmation to never suggest a dish (user actually dislikes it)
+  const handleConfirmNeverShow = (dishTitle: string) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
+
+    Alert.alert(
+      `Never suggest ${dishTitle}?`,
+      `Mama will stop suggesting this meal. You can unhide it anytime in your Kitchen Pass under Diet.`,
+      [
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Never show again',
+          style: 'destructive',
+          onPress: () => {
+            preferencesStore.addNeverShowDish(dishTitle);
+            setShowUndoBanner(false);
+            if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+            setToastMessage(`Mama won't suggest ${dishTitle} again`);
+          },
+        },
+      ]
+    );
+  };
+
+  // Accelerometer shake detection with walking & jostle filter (only active when Home tab is visible and no modal is open)
+  useShake(() => {
+    handleRollAgain();
+  }, {
+    threshold: 1.55,
+    minReversals: 3,
+    shakeWindowMs: 650,
+    timeout: 900,
+    enabled:
+      kitchenPass.shakeToRollEnabled !== false &&
+      isScreenFocused &&
+      (!isInsideTabs || activeTab === 'edit') &&
+      !passModalVisible &&
+      !countryModalVisible &&
+      !rollRevealVisible,
+  });
+
+  // Cook meal handler — opens recipe details so user can inspect ingredients & instructions
+  const handleCookMeal = () => {
+    if (!rolledMeal) return;
+
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {
+      // Haptics optional
+    }
+
+    // Note: Do NOT deduct from budget or log as cooked here!
+    // The user has not decided yet; they are simply reviewing the recipe.
+    // Budget deduction and cooked logging strictly occurs in AtHomeMealDetails when they tap "I Cooked This Tonight!".
+
+    navigation.navigate('AtHomeMealDetails', {
+      id: rolledMeal.id,
+      title: rolledMeal.title,
+      subtitle: rolledMeal.subtitle,
+      cookTime: `${rolledMeal.cookTimeMinutes} min`,
+      gear: kitchenPass.cookingGearLabel || '1 Pan',
+      estCost: convertMealCost(rolledMeal.estCost, kitchenPass.currencyCode, kitchenPass.currencySymbol),
+      costNumeric: rolledMeal.estCost,
+      steps: rolledMeal.steps,
+      ingredients: rolledMeal.ingredients,
+      mamaTip: rolledMeal.mamaTip,
+      image:
+        MealImageService.getCarouselDeckImages(mealsDeck, kitchenPass.cuisineAnchor)[
+          activeMealIndex
+        ] ||
+        MealImageService.getFallbackMealImage(
+          rolledMeal.title,
+          rolledMeal.ingredients,
+          kitchenPass.cuisineAnchor
+        ),
     });
   };
 
-  const animatedCardStyle = {
-    transform: [
-      { translateX: position.x },
-      {
-        rotate: position.x.interpolate({
-          inputRange: [-SCREEN_WIDTH, 0, SCREEN_WIDTH],
-          outputRange: ['-6deg', '0deg', '6deg'],
-        }),
-      },
-    ],
-    opacity: cardOpacity,
+  // Interactive dialogue tap — shares dish-specific advice
+  const handleTapMama = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
+
+    const voice = MamaDialogueService.getSyncedMamaVoice({
+      timeOfDay: mealPeriod,
+      pass: kitchenPass,
+      pantryItems,
+      activeDish: rolledMeal ? {
+        title: rolledMeal.title,
+        cookTimeMinutes: rolledMeal.cookTimeMinutes,
+        estCost: rolledMeal.estCost,
+        gear: kitchenPass.cookingGearLabel,
+        mamaTip: rolledMeal.mamaTip,
+      } : undefined,
+      actionHint: 'tap_advice',
+    });
+    setMamaQuote(voice.quote);
+    setMamaPose(voice.pose);
+
+    AiMamaService.getLiveMamaDialogue({
+      timeOfDay: mealPeriod,
+      pass: kitchenPass,
+      pantryItems,
+      activeDish: rolledMeal ? {
+        title: rolledMeal.title,
+        cookTimeMinutes: rolledMeal.cookTimeMinutes,
+        estCost: rolledMeal.estCost,
+        gear: kitchenPass.cookingGearLabel,
+      } : undefined,
+      actionHint: 'tap_advice',
+    }).then((aiQuote) => {
+      if (aiQuote && aiQuote.length > 5) {
+        setMamaQuote(aiQuote);
+      }
+    }).catch(() => {});
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar style="dark" />
 
-      {/* Sleek Minimal Masthead */}
-      <View style={styles.masthead}>
-        <Text style={styles.brandTitle}>Mama</Text>
+      {/* 1. COMPACT TOP STATUS BAR (Brand + Icons cluster) */}
+      <View style={styles.topBar}>
+        <View style={styles.brandGroup}>
+          <Text style={styles.brandTitle}>Mama</Text>
+          <TouchableOpacity
+            onPress={handleCycleMealPeriod}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}
+          >
+            <Text style={styles.periodPillText}>{periodTitle}</Text>
+            <Ionicons name="chevron-down" size={11} color={colors.text.muted} />
+          </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity
-          style={styles.countryBtn}
-          onPress={() => setCountryModalVisible(true)}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="location-outline" size={13} color={colors.primary} />
-          <Text style={styles.countryBtnText}>
-            {kitchenPass.countryName} ({kitchenPass.currencySymbol})
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.iconCluster}>
+          {/* Single Profile / Settings button */}
+          <TouchableOpacity
+            style={styles.headerChipMuted}
+            onPress={() => {
+              setPassModalInitialTab('account');
+              setPassModalVisible(true);
+            }}
+            activeOpacity={0.75}
+            accessibilityLabel="Account"
+          >
+            {(isLoggedIn && user) || user ? (
+              <Text style={[styles.headerChipText, { fontWeight: '700' }]}>
+                {(user?.name?.trim() || user?.email || 'M').charAt(0).toUpperCase()}
+              </Text>
+            ) : (
+              <Ionicons name="person-outline" size={14} color={colors.primary} />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -440,135 +832,123 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
             },
           ]}
         >
-          {/* Header Row: Title & Date in one clean line */}
-          <View style={styles.headerBlock}>
-            <Text style={styles.greetingTitle}>{periodTitle}</Text>
-            <Text style={styles.dateText}>{dateFormatted}</Text>
-          </View>
+          {/* 1. HERO CAROUSEL & ROLL ACTION (Tactile Curated 3-Poster Deck) */}
+          <MealCardDeck
+            meals={mealsDeck}
+            activeIndex={activeMealIndex}
+            onSelectMealIndex={handleSelectMealIndex}
+            kitchenPass={kitchenPass}
+            isRolling={isRolling}
+            onPressCard={handleCookMeal}
+            onRollPress={handleRollAgain}
+            onCyclePeriod={handleCycleMealPeriod}
+            headerTitle={periodTitle}
+          />
 
-          {/* 1. WEEKLY BUDGET (Compact, High-End) */}
+          {/* 3. WEEKLY BUDGET & SAVINGS TRACKER */}
           <WeeklyBalanceCard
             remainingAmount={kitchenPass.weeklyBudget - kitchenPass.spentThisWeek}
-            remainingDays={kitchenPass.remainingDaysInWeek}
+            remainingDays={kitchenPass.remainingDaysInWeek || 5}
             spentAmount={kitchenPass.spentThisWeek}
             totalBudget={kitchenPass.weeklyBudget}
             currencySymbol={kitchenPass.currencySymbol}
             currencyCode={kitchenPass.currencyCode}
             countryName={kitchenPass.countryName}
+            mealsCookedCount={kitchenPass.likedDishes.length}
             onPressManage={() => setCountryModalVisible(true)}
           />
 
-          {/* 2. MAMA LIVE VOICE (Interactive Talk Stage) */}
-          <TouchableOpacity
-            style={styles.mamaGreetingCard}
-            onPress={handleTapMama}
-            activeOpacity={0.85}
-          >
-            <MamaCharacter
-              pose={mamaPose}
-              size={54}
-              isSpeaking={true}
-              onPress={handleTapMama}
-            />
-
-            <View style={styles.mamaBubbleWrap}>
-              <View style={styles.mamaBadgeRow}>
-                <Text style={styles.mamaName}>Mama</Text>
-                <View style={styles.tapPill}>
-                  <Ionicons name="chatbubble-ellipses-outline" size={11} color={colors.primary} />
-                  <Text style={styles.tapPillText}>Tap Mama to talk</Text>
-                </View>
-              </View>
-
-              <Animated.View style={{ transform: [{ scale: bubbleScaleAnim }] }}>
-                <Text style={styles.mamaBubbleText}>&ldquo;{mamaQuote}&rdquo;</Text>
-              </Animated.View>
-            </View>
-          </TouchableOpacity>
-
-          {/* 3. HERO MEAL CARD (Clean, uncluttered, focused) */}
-          <Animated.View
-            {...panResponder.panHandlers}
-            style={[styles.heroCardWrap, animatedCardStyle]}
-          >
+          {/* 4. CROSS-SCREEN INSPIRATION & KITCHEN BRIDGE */}
+          <View style={styles.hubContainer}>
             <TouchableOpacity
-              style={styles.imageCard}
-              activeOpacity={0.92}
-              onPress={() => handleSwipeAction('right')}
+              style={styles.hubCard}
+              onPress={() => {
+                if (isInsideTabs) {
+                  setActiveTab('kitchen');
+                } else {
+                  navigation.navigate('WhatsInYourKitchen');
+                }
+              }}
+              activeOpacity={0.84}
             >
-              {activeItem.image ? (
-                <Image source={{ uri: activeItem.image }} style={styles.mealImage} resizeMode="cover" />
-              ) : (
-                <View style={styles.placeholderMealImage}>
-                  <Ionicons
-                    name={activeItem.type === 'takeout' ? 'restaurant-outline' : 'flame-outline'}
-                    size={44}
-                    color={colors.primary}
-                  />
-                </View>
-              )}
-
-              <View style={styles.timeBadge}>
-                <Ionicons
-                  name={activeItem.type === 'takeout' ? 'location-outline' : 'time-outline'}
-                  size={12}
-                  color={colors.primary}
-                />
-                <Text style={styles.timeBadgeText}>{activeItem.cookTimeOrDistance}</Text>
+              <View style={styles.hubIconCircle}>
+                <Ionicons name="basket-outline" size={17} color={colors.primary} />
               </View>
-
-              <View style={styles.gearBadge}>
-                <Ionicons
-                  name={activeItem.type === 'takeout' ? 'bag-handle-outline' : 'disc-outline'}
-                  size={12}
-                  color={colors.snow100}
-                />
-                <Text style={styles.gearBadgeText}>{activeItem.gearOrVibe}</Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Focused Card Body */}
-            <View style={styles.heroContent}>
-              <View style={styles.titlePriceRow}>
-                <Text style={styles.mealHeading} numberOfLines={2}>
-                  {activeItem.title}
+              <View style={styles.hubTextWrap}>
+                <Text style={styles.hubTitle}>In Your Kitchen</Text>
+                <Text style={styles.hubSubtitle} numberOfLines={1}>
+                  {pantryItems.length > 0
+                    ? `${pantryItems.length} items on hand · Match food →`
+                    : 'Tap to add staples →'}
                 </Text>
-                <Text style={styles.priceAmount}>{activeItem.estCost}</Text>
               </View>
-
-              <Text style={styles.mealSubtitle} numberOfLines={2}>
-                {activeItem.subtitle}
-              </Text>
-            </View>
-          </Animated.View>
-
-          {/* 4. THE SIGNATURE ACTIONS: SHOW ME ANOTHER vs I'M COOKING THIS */}
-          <View style={styles.actionsRow}>
-            <TouchableOpacity
-              style={styles.notTodayButton}
-              onPress={() => handleSwipeAction('left')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="refresh-outline" size={16} color={colors.text.secondary} />
-              <Text style={styles.notTodayText}>Show me another</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.cookTodayButton}
-              onPress={() => handleSwipeAction('right')}
-              activeOpacity={0.85}
+              style={styles.hubCard}
+              onPress={() => {
+                if (isInsideTabs) {
+                  setActiveTab('discover');
+                } else {
+                  navigation.navigate('DiscoverYourNextMeal');
+                }
+              }}
+              activeOpacity={0.84}
             >
-              <Ionicons
-                name="restaurant"
-                size={16}
-                color={colors.snow100}
-              />
-              <Text style={styles.cookTodayText}>I&apos;m Cooking This</Text>
-              <Ionicons name="arrow-forward" size={16} color={colors.snow100} />
+              <View style={styles.hubIconCircle}>
+                <Ionicons name="compass-outline" size={17} color={colors.primary} />
+              </View>
+              <View style={styles.hubTextWrap}>
+                <Text style={styles.hubTitle}>Discover Feed</Text>
+                <Text style={styles.hubSubtitle} numberOfLines={1}>
+                  Healthy ideas →
+                </Text>
+              </View>
             </TouchableOpacity>
           </View>
+          {/* Preserved for future Mama placement */}
+          {false && (
+            <TouchableOpacity onPress={handleTapMama}>
+              <MamaCharacter pose={mamaPose} size={36} />
+              <Text>{mamaQuote}</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </ScrollView>
+
+      {/* Minimal Luxury Dish Pop-Up Reveal Modal */}
+      <RollRevealModal
+        visible={rollRevealVisible}
+        meal={pendingRolledMeal}
+        deckMeals={mealsDeck}
+        isRolling={isRolling}
+        kitchenPass={kitchenPass}
+        onClose={() => {
+          setRollRevealVisible(false);
+          setPendingRolledMeal(null);
+        }}
+        onCookNow={() => {
+          setRollRevealVisible(false);
+          setPendingRolledMeal(null);
+          handleCookMeal();
+        }}
+        onSpinAgain={() => handleRollAgain()}
+      />
+
+      {/* Interactive Mama Kitchen Secret Pop-Up Modal */}
+      <MamaPopUpModal
+        visible={mamaModalVisible}
+        pose={mamaPose}
+        quote={mamaQuote}
+        activeMeal={rolledMeal}
+        onClose={() => setMamaModalVisible(false)}
+        onAskNewAdvice={handleTapMama}
+        onTriggerRoll={() => {
+          setRollRevealVisible(true);
+          handleRollAgain();
+        }}
+        onOpenRecipe={handleCookMeal}
+      />
 
       {/* Country & Currency Modal */}
       <CountryCurrencyModal
@@ -576,15 +956,33 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
         onClose={() => setCountryModalVisible(false)}
       />
 
-      {/* Bottom Tab Navigation */}
-      <BottomNavigation
-        activeTab={activeTab}
-        onTabChange={(tab: NavTab) => {
-          setActiveTab(tab);
-          if (tab === 'discover') navigation.navigate('DiscoverYourNextMeal');
-          if (tab === 'collection') navigation.navigate('YourCollection');
-        }}
+      {/* Kitchen Pass / Equipment Modal */}
+      <KitchenPassModal
+        visible={passModalVisible}
+        onClose={() => setPassModalVisible(false)}
+        initialTab={passModalInitialTab}
       />
+
+      {/* Preserved undo handlers for reference */}
+      {false && showUndoBanner && (
+        <View style={styles.floatingUndoBanner}>
+          <TouchableOpacity onPress={() => handleConfirmNeverShow(lastRolledMeal?.title || '')} />
+          <TouchableOpacity onPress={handleUndoRoll} />
+        </View>
+      )}
+
+      {/* Bottom Tab Navigation (rendered only when screen is standalone) */}
+      {!isInsideTabs && (
+        <BottomNavigation
+          activeTab={activeTab}
+          onTabChange={(tab: NavTab) => {
+            setActiveTab(tab);
+            if (tab === 'kitchen') navigation.navigate('WhatsInYourKitchen');
+            if (tab === 'discover') navigation.navigate('DiscoverYourNextMeal');
+            if (tab === 'collection') navigation.navigate('YourCollection');
+          }}
+        />
+      )}
 
       {/* Tactile Toast Notification */}
       <TactileToast
@@ -599,247 +997,491 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.snow100,
   },
-  masthead: {
-    height: 50,
-    paddingHorizontal: 20,
+  topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(36, 40, 32, 0.08)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(36, 40, 32, 0.05)',
+  },
+  brandGroup: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
   },
   brandTitle: {
+    fontFamily: typography.fontFamily.serif,
     fontSize: 22,
-    fontFamily: typography.fontFamily.serif,
-    fontWeight: '600',
-    color: colors.text.primary,
-    letterSpacing: 0.6,
-  },
-  countryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.snow200,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  countryBtnText: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: '600',
+    fontWeight: '800',
     color: colors.primary,
+    letterSpacing: -0.4,
   },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 90,
-  },
-  container: {
-    gap: 14,
-  },
-  headerBlock: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-  },
-  greetingTitle: {
-    fontSize: 24,
-    fontFamily: typography.fontFamily.serif,
-    color: colors.text.primary,
+  periodPillText: {
+    fontSize: 12,
     fontWeight: '600',
+    color: colors.text.secondary,
   },
-  dateText: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: '600',
-    color: colors.text.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  mamaGreetingCard: {
+  iconCluster: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#FAF6EF',
-    borderWidth: 1,
-    borderColor: '#ECE4D4',
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    shadowColor: '#242820',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 2,
+    gap: 6,
   },
-  mamaBubbleWrap: {
-    flex: 1,
+  headerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 4,
+    backgroundColor: 'rgba(46, 61, 43, 0.08)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
-  mamaBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  mamaName: {
-    fontSize: typography.fontSize.xs,
+  headerChipText: {
+    fontSize: 11,
     fontWeight: '700',
     color: colors.primary,
-    letterSpacing: 0.4,
   },
-  tapPill: {
+  headerChipMuted: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#ECE3D4',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
+    backgroundColor: 'rgba(36, 40, 32, 0.04)',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
-  tapPillText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.primary,
+  headerChipTextMuted: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.text.secondary,
   },
-  mamaBubbleText: {
-    fontSize: typography.fontSize.xs,
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-start',
+    paddingBottom: 100,
+  },
+  container: {
+    width: '100%',
+    paddingHorizontal: 10,
+    paddingTop: 2,
+    paddingBottom: 8,
+    gap: 12,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  mamaVoicePill: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.snow200,
+    borderRadius: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(36, 40, 32, 0.06)',
+    marginBottom: 4,
+  },
+  floatingMamaOrb: {
+    position: 'absolute',
+    right: 16,
+    bottom: 92,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    paddingVertical: 6,
+    paddingLeft: 6,
+    paddingRight: 12,
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    elevation: 10,
+    zIndex: 20,
+  },
+  floatingMamaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  floatingMamaBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  mamaVoiceText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.text.primary,
-    lineHeight: 18,
     fontStyle: 'italic',
     fontWeight: '500',
   },
-  heroCardWrap: {
-    borderRadius: 20,
-    backgroundColor: colors.snow100,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
-    shadowColor: colors.text.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    elevation: 3,
-  },
-  imageCard: {
-    height: 220,
+  mamaHeroCard: {
     width: '100%',
-    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.snow200,
-  },
-  mealImage: {
-    width: '100%',
-    height: '100%',
-  },
-  placeholderMealImage: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: colors.sand,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  timeBadge: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  timeBadgeText: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  gearBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(36, 40, 32, 0.85)',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  gearBadgeText: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: '600',
-    color: colors.snow100,
-  },
-  heroContent: {
-    padding: 16,
-    gap: 6,
-  },
-  titlePriceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  mealHeading: {
-    flex: 1,
-    fontSize: 18,
-    fontFamily: typography.fontFamily.serif,
-    fontWeight: '600',
-    color: colors.text.primary,
-    lineHeight: 23,
-  },
-  priceAmount: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  mealSubtitle: {
-    fontSize: typography.fontSize.xs,
-    color: colors.text.secondary,
-    lineHeight: 18,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  notTodayButton: {
-    flex: 1,
-    height: 50,
-    borderRadius: 14,
-    backgroundColor: colors.snow100,
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 14,
     borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.12)',
-    flexDirection: 'row',
+    borderColor: 'rgba(36, 40, 32, 0.06)',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  mamaAvatarWrapper: {
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  mamaAuraGlow: {
+    position: 'absolute',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(205, 162, 88, 0.16)',
+  },
+  mamaSpeechBubble: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 4,
+  },
+  mamaSpeechHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  mamaNameTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  onlineStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+  },
+  mamaNameText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: 0.8,
+  },
+  mamaTapHint: {
+    fontSize: 11,
+    color: colors.text.muted,
+  },
+  mamaQuoteText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.text.primary,
+    fontStyle: 'italic',
+    fontWeight: '500',
+  },
+  rollActionGroup: {
+    width: '100%',
+    alignItems: 'center',
+    paddingHorizontal: 22,
+    marginTop: 6,
+    marginBottom: 16,
     gap: 8,
   },
-  notTodayText: {
-    fontSize: typography.fontSize.sub,
-    fontWeight: '600',
-    color: colors.text.secondary,
-  },
-  cookTodayButton: {
-    flex: 1.4,
-    height: 50,
-    borderRadius: 14,
+  bigRollButton: {
+    width: '100%',
     backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    gap: 10,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  bigRollButtonDisabled: {
+    opacity: 0.72,
+  },
+  diceIconWrapper: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bigRollButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.snow100,
+    letterSpacing: -0.2,
+  },
+  secondaryCookLink: {
+    paddingVertical: 4,
+  },
+  secondaryCookLinkText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  diceHeroStage: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 10,
+  },
+  diceHintText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.text.secondary,
+    letterSpacing: 0.4,
+    marginTop: -2,
+  },
+  hubContainer: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  hubCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(36, 40, 32, 0.07)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  hubIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(217, 85, 36, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hubTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  hubTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  hubSubtitle: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: colors.text.secondary,
+  },
+  dishSection: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: 8,
+  },
+  dishTitleBlock: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+  },
+  dishTitle: {
+    fontFamily: typography.fontFamily.serif,
+    fontSize: 28,
+    fontWeight: '700',
+    color: colors.text.primary,
+    letterSpacing: -0.4,
+    textAlign: 'center',
+    lineHeight: 34,
+  },
+  dishHint: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.text.secondary,
+    textAlign: 'center',
+  },
+  buttonWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  makeButton: {
+    width: '100%',
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 16,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.22,
     shadowRadius: 8,
     elevation: 3,
   },
-  cookTodayText: {
-    fontSize: typography.fontSize.sub,
-    fontWeight: '600',
+  makeButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
     color: colors.snow100,
+  },
+  // Visible Learning Observation Badge
+  mamaObservationBadge: {
+    width: '100%',
+    backgroundColor: 'rgba(46, 61, 43, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(46, 61, 43, 0.12)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 4,
+    marginTop: -4,
+  },
+  mamaObservationTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mamaObservationTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 0.2,
+  },
+  mamaObservationTag: {
+    backgroundColor: 'rgba(46, 61, 43, 0.08)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 'auto',
+  },
+  mamaObservationTagText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
+  mamaObservationDetail: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    lineHeight: 16,
+  },
+  // Backup roll button (for quiet / walking situations)
+  rollBackupButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(46, 61, 43, 0.08)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+    marginTop: 2,
+  },
+  rollBackupButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  // Floating Undo Banner
+  floatingUndoBanner: {
+    position: 'absolute',
+    bottom: 82,
+    left: 16,
+    right: 16,
+    backgroundColor: colors.snow100,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(46, 61, 43, 0.14)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+    zIndex: 999,
+  },
+  undoTextGroup: {
+    flex: 1,
+    gap: 2,
+  },
+  undoEyebrow: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.text.muted,
+    letterSpacing: 0.6,
+  },
+  undoMealTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  undoActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  undoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  undoButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.snow100,
+  },
+  neverShowButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  neverShowButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  undoDismissButton: {
+    padding: 3,
   },
 });
 

@@ -53,6 +53,7 @@ app.use('/api/auth', authRouter);
 // Health check, AI generation, and pantry analysis work without a token
 import { GroqService } from './services/groq.service.js';
 import { ImageService } from './services/image.service.js';
+import { VideoService } from './services/video.service.js';
 
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
@@ -63,23 +64,48 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
+app.post('/api/ai/chat', async (req: Request, res: Response) => {
+  try {
+    const { messages, jsonMode, temperature, maxTokens } = req.body || {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+      res.status(400).json({ error: 'messages array is required' });
+      return;
+    }
+    const result = await GroqService.proxyChatCompletion({
+      messages,
+      jsonMode: Boolean(jsonMode),
+      temperature: typeof temperature === 'number' ? temperature : 0.65,
+      maxTokens: typeof maxTokens === 'number' ? Math.min(maxTokens, 1200) : 450,
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('[API public] /api/ai/chat error:', error);
+    res.status(500).json({ error: 'Failed to complete AI chat' });
+  }
+});
+
+app.post('/api/roll', async (req: Request, res: Response) => {
+  try {
+    const { timeOfDay, pantryItems, passedTitles, recentCookedTitles, kitchenPass } = req.body;
+    const rolled = await GroqService.rollMeal({
+      timeOfDay,
+      pantryItems: Array.isArray(pantryItems) ? pantryItems : [],
+      passedTitles: Array.isArray(passedTitles) ? passedTitles : [],
+      recentCookedTitles: Array.isArray(recentCookedTitles) ? recentCookedTitles : [],
+      kitchenPass,
+    });
+    res.json(rolled);
+  } catch (error) {
+    console.error('[API public] /api/roll error:', error);
+    res.status(500).json({ error: 'Failed to roll meal' });
+  }
+});
+
 app.post('/api/daily-edit', async (req: Request, res: Response) => {
   try {
     const pantryItems = (req.body?.pantryItems as string[]) || ['Eggs', 'Tomatoes', 'Rice', 'Onions'];
     const kitchenPass = req.body?.kitchenPass;
     const dailyEdit = await GroqService.generateDailyEdit(pantryItems, kitchenPass);
-    if (dailyEdit.makeNowMeal?.imagePrompt) {
-      const imgResult = await ImageService.generateFoodImage(dailyEdit.makeNowMeal.imagePrompt, kitchenPass?.stapleBase || 'rice');
-      if (imgResult?.imageUrl) {
-        dailyEdit.makeNowMeal.imageUrl = imgResult.imageUrl;
-      }
-    }
-    if (dailyEdit.tonightDinner?.imagePrompt) {
-      const imgResult = await ImageService.generateFoodImage(dailyEdit.tonightDinner.imagePrompt, kitchenPass?.stapleBase || 'rice');
-      if (imgResult?.imageUrl) {
-        dailyEdit.tonightDinner.imageUrl = imgResult.imageUrl;
-      }
-    }
     res.json(dailyEdit);
   } catch (error) {
     console.error('[API public] /daily-edit error:', error);
@@ -103,11 +129,6 @@ app.post('/api/recipes/generate', async (req: Request, res: Response) => {
     const ingredients = (req.body?.availableIngredients as string[]) || ['Eggs', 'Tomatoes', 'Rice'];
     const title = req.body?.titleSuggestion as string | undefined;
     const recipe = await GroqService.generateRecipe(ingredients, title);
-    if (recipe.imagePrompt) {
-      const imageResult = await ImageService.generateFoodImage(recipe.imagePrompt);
-      // @ts-expect-error add generated image url
-      recipe.imageUrl = imageResult.imageUrl;
-    }
     res.json(recipe);
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate recipe' });
@@ -122,6 +143,53 @@ app.post('/api/images/generate', async (req: Request, res: Response) => {
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate image' });
+  }
+});
+
+app.all(['/api/videos/search', '/api/video/search'], async (req: Request, res: Response) => {
+  try {
+    const dish = (req.body?.dish || req.query.dish || req.body?.prompt || req.query.prompt || '') as string;
+    const ingredients = (req.body?.ingredients as string[]) || undefined;
+
+    if (!dish && (!ingredients || ingredients.length === 0)) {
+      res.status(400).json({ error: 'dish name or ingredients required' });
+      return;
+    }
+
+    const result = await VideoService.searchCookingVideo(dish, ingredients);
+    res.json({ success: !!result, video: result });
+  } catch (error) {
+    console.error('[API public] /api/videos/search error:', error);
+    res.status(500).json({ error: 'Failed to search video' });
+  }
+});
+
+app.post('/api/discover', async (req: Request, res: Response) => {
+  try {
+    const pantryItems = (req.body?.pantryItems as string[]) || ['Eggs', 'Tomatoes', 'Rice', 'Onions'];
+    const kitchenPass = req.body?.kitchenPass;
+    const deck = await GroqService.generateDiscoverDeck(pantryItems, kitchenPass);
+    res.json({ meals: deck.meals });
+  } catch (error) {
+    console.error('[API public] /discover error:', error);
+    res.status(500).json({ error: 'Failed to generate discover deck' });
+  }
+});
+
+app.all(['/api/meals/recommendations', '/api/recommendations'], async (req: Request, res: Response) => {
+  try {
+    const timeLimit = req.query.timeLimit ? parseInt(req.query.timeLimit as string) : 20;
+    const gear = (req.query.gear as string) || 'one_pan';
+    const cuisine = (req.query.cuisine as string) || 'african_caribbean';
+    const deck = await GroqService.generateDiscoverDeck([], {
+      timeLimitMinutes: timeLimit,
+      cookingGear: gear,
+      cuisineAnchor: cuisine,
+    } as any);
+    res.json(deck.meals);
+  } catch (error) {
+    console.error('[API public] /api/meals/recommendations error:', error);
+    res.status(500).json({ error: 'Failed to generate recommendations' });
   }
 });
 

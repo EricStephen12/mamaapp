@@ -27,7 +27,7 @@ export const TasteLearningCard: React.FC<TasteLearningCardProps> = ({
       <View style={styles.headerRow}>
         <Text style={styles.eyebrow}>MAMA&apos;S TASTE MEMORY</Text>
         <View style={styles.learningBadge}>
-          <Ionicons name="sparkles" size={12} color={colors.primary} />
+          <Ionicons name="bulb-outline" size={12} color={colors.primary} />
           <Text style={styles.learningBadgeText}>
             {likedCount > 0 ? `${likedCount} meals learned` : 'Learning your palate'}
           </Text>

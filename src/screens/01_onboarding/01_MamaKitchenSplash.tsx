@@ -1,13 +1,11 @@
-import React, { useRef } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
+import React, { useRef, useCallback } from 'react';
+import { View, StyleSheet, Animated, TouchableWithoutFeedback } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { MamaKitchenLogo } from '../../components/common/MamaKitchenLogo';
-
-import { tokenStore } from '../../services/api/tokenStore';
 import { preferencesStore } from '../../services/preferencesStore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MamaKitchenSplash'>;
@@ -15,66 +13,71 @@ type Props = NativeStackScreenProps<RootStackParamList, 'MamaKitchenSplash'>;
 export const MamaKitchenSplash: React.FC<Props> = ({ navigation }) => {
   const taglineOpacity = useRef(new Animated.Value(0)).current;
   const taglineTranslateY = useRef(new Animated.Value(10)).current;
+  const hasNavigated = useRef(false);
+
+  const navigateNext = useCallback(() => {
+    if (hasNavigated.current) return;
+    hasNavigated.current = true;
+    const pass = preferencesStore.getKitchenPass();
+    if (pass.hasCompletedOnboarding) {
+      navigation.replace('YourDailyEdit');
+    } else {
+      navigation.replace('MakeItYours');
+    }
+  }, [navigation]);
 
   const handleAnimationEnd = () => {
     // Fade in the tagline once logo sequence is complete
     Animated.parallel([
       Animated.timing(taglineOpacity, {
         toValue: 1,
-        duration: 400,
+        duration: 350,
         useNativeDriver: true,
       }),
       Animated.timing(taglineTranslateY, {
         toValue: 0,
-        duration: 400,
+        duration: 350,
         useNativeDriver: true,
       }),
     ]).start();
 
-    // Route to appropriate screen based on session and onboarding status
+    // Smoothly route to appropriate screen
     const advanceTimer = setTimeout(() => {
-      if (tokenStore.isLoggedIn()) {
-        const pass = preferencesStore.getKitchenPass();
-        if (pass.hasCompletedOnboarding) {
-          navigation.replace('YourDailyEdit');
-        } else {
-          navigation.replace('MakeItYours');
-        }
-      } else {
-        navigation.replace('MamaKitchenSignIn');
-      }
-    }, 1800);
+      navigateNext();
+    }, 650);
 
     return () => clearTimeout(advanceTimer);
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar style="dark" />
+    <TouchableWithoutFeedback onPress={navigateNext}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
+        <StatusBar style="dark" />
 
-      {/* Main Centered Content */}
-      <View style={styles.content}>
-        <MamaKitchenLogo
-          width={280}
-          height={210}
-          animated={true}
-          onAnimationEnd={handleAnimationEnd}
-        />
+        {/* Main Centered Content */}
+        <View style={styles.content}>
+          <MamaKitchenLogo
+            width={280}
+            height={210}
+            animated={true}
+            onAnimationEnd={handleAnimationEnd}
+          />
 
-        {/* Animated Tagline */}
-        <Animated.Text
-          style={[
-            styles.tagline,
-            {
-              opacity: taglineOpacity,
-              transform: [{ translateY: taglineTranslateY }],
-            },
-          ]}
-        >
-          Good food. Your taste. Your budget.
-        </Animated.Text>
-      </View>
-    </SafeAreaView>
+          {/* Animated Tagline */}
+          <Animated.Text
+            style={[
+              styles.tagline,
+              {
+                opacity: taglineOpacity,
+                transform: [{ translateY: taglineTranslateY }],
+              },
+            ]}
+          >
+            Good food. Your taste. Your budget.
+          </Animated.Text>
+        </View>
+      </SafeAreaView>
+    </TouchableWithoutFeedback>
   );
 };
 

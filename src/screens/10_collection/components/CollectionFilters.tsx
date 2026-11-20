@@ -1,8 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
-import { typography } from '../../../theme/typography';
 
 export type CollectionFilterType = 'all' | 'home' | 'eating_out';
 
@@ -23,8 +21,7 @@ export const CollectionFilters: React.FC<CollectionFiltersProps> = ({
 }) => {
   const options = [
     { key: 'all' as const, label: 'All saved', count: counts.all },
-    { key: 'home' as const, label: 'At home', count: counts.home },
-    { key: 'eating_out' as const, label: 'Eating out', count: counts.eating_out },
+    { key: 'home' as const, label: 'Home kitchen', count: counts.home },
   ];
 
   return (
@@ -39,16 +36,8 @@ export const CollectionFilters: React.FC<CollectionFiltersProps> = ({
               isSelected ? styles.chipSelected : styles.chipUnselected,
             ]}
             onPress={() => onSelectFilter(option.key)}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
           >
-            {isSelected && (
-              <Ionicons
-                name="checkmark"
-                size={12}
-                color={colors.primary}
-                style={styles.checkIcon}
-              />
-            )}
             <Text
               style={[
                 styles.label,
@@ -57,21 +46,14 @@ export const CollectionFilters: React.FC<CollectionFiltersProps> = ({
             >
               {option.label}
             </Text>
-            <View
+            <Text
               style={[
-                styles.countBadge,
-                isSelected ? styles.countBadgeSelected : styles.countBadgeUnselected,
+                styles.countText,
+                isSelected ? styles.countTextSelected : styles.countTextUnselected,
               ]}
             >
-              <Text
-                style={[
-                  styles.countText,
-                  isSelected ? styles.countTextSelected : styles.countTextUnselected,
-                ]}
-              >
-                {option.count}
-              </Text>
-            </View>
+              {option.count}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -84,69 +66,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flexWrap: 'wrap',
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingLeft: 14,
-    paddingRight: 8,
-    borderRadius: 99,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 20,
     borderWidth: 1,
     gap: 6,
-    shadowColor: colors.text.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
   },
   chipSelected: {
-    backgroundColor: colors.linen100,
-    borderColor: 'rgba(102, 112, 74, 0.4)',
+    backgroundColor: '#F3F6F1',
+    borderColor: colors.primary,
   },
   chipUnselected: {
-    backgroundColor: colors.snow100,
-    borderColor: 'rgba(36, 40, 32, 0.1)',
-  },
-  checkIcon: {
-    marginRight: 2,
+    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(36, 40, 32, 0.08)',
   },
   label: {
-    fontSize: typography.fontSize.reassurance,
-    fontFamily: typography.fontFamily.medium,
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.text.secondary,
   },
   labelSelected: {
     color: colors.primary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   labelUnselected: {
     color: colors.text.secondary,
   },
-  countBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 99,
-    minWidth: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  countBadgeSelected: {
-    backgroundColor: 'rgba(102, 112, 74, 0.18)',
-  },
-  countBadgeUnselected: {
-    backgroundColor: 'rgba(36, 40, 32, 0.06)',
-  },
   countText: {
-    fontSize: 11,
-    fontFamily: typography.fontFamily.medium,
+    fontSize: 12,
     fontWeight: '600',
+    color: colors.text.muted,
   },
   countTextSelected: {
     color: colors.primary,
   },
   countTextUnselected: {
-    color: colors.text.secondary,
+    color: colors.text.muted,
   },
 });
 

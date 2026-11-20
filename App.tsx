@@ -3,21 +3,30 @@ import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation';
+import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { tokenStore } from './src/services/api/tokenStore';
 import { preferencesStore } from './src/services/preferencesStore';
+import { pantryService } from './src/services/api/pantryService';
+import { savedMealsService } from './src/services/api/savedMealsService';
+import { subscriptionService } from './src/services/subscriptionService';
+import { UserDataBankProvider } from './src/context/UserDataBankContext';
 import { colors } from './src/theme/colors';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    // Restore JWT first; only fetch DB preferences if an active session exists
+    // Restore JWT and active user's isolated data bank from local secure storage
     const initApp = async () => {
       try {
         await tokenStore.init();
-        if (tokenStore.isLoggedIn()) {
-          await preferencesStore.initFromDb();
-        }
+        await Promise.all([
+          preferencesStore.init(),
+          pantryService.fetchAll(),
+          savedMealsService.fetchAll(),
+        ]);
+        // Mama Plus billing (no-op until RevenueCat keys are added)
+        subscriptionService.init(tokenStore.getUser()?.id).catch(() => {});
       } catch (err) {
         console.warn('[App] Initialization warning:', err);
       } finally {
@@ -37,9 +46,13 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <RootNavigator />
-      </NavigationContainer>
+      <ErrorBoundary>
+        <UserDataBankProvider>
+          <NavigationContainer>
+            <RootNavigator />
+          </NavigationContainer>
+        </UserDataBankProvider>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

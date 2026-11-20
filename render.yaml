@@ -16,3 +16,9 @@ services:
         sync: false
       - key: CF_API_TOKEN
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RAPIDAPI_KEY
+        sync: false
+      - key: RAPIDAPI_TIKTOK_HOST
+        value: tiktok-video-no-watermark2.p.rapidapi.com

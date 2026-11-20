@@ -3,7 +3,58 @@
  * Persists the user's culinary DNA, kitchen equipment, country, currency, and weekly budget.
  */
 
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+import { tokenStore } from './api/tokenStore';
 import { userPreferencesService } from './api/userPreferencesService';
+
+const LEGACY_KITCHEN_PASS_KEY = 'mama_kitchen_pass_v1';
+
+function getStorageKey(): string {
+  return `mama_kitchen_pass_v2_${tokenStore.getActiveScope()}`;
+}
+
+async function loadPassFromStorage(): Promise<Partial<UserKitchenPass> | null> {
+  const key = getStorageKey();
+  try {
+    if (Platform.OS === 'web') {
+      if (typeof localStorage !== 'undefined') {
+        const item = localStorage.getItem(key) || (tokenStore.getActiveScope() === 'guest' ? localStorage.getItem(LEGACY_KITCHEN_PASS_KEY) : null);
+        return item ? JSON.parse(item) : null;
+      }
+      return null;
+    }
+    const raw = await SecureStore.getItemAsync(key);
+    if (raw) return JSON.parse(raw);
+    if (tokenStore.getActiveScope() === 'guest') {
+      const legacy = await SecureStore.getItemAsync(LEGACY_KITCHEN_PASS_KEY);
+      return legacy ? JSON.parse(legacy) : null;
+    }
+    return null;
+  } catch (err) {
+    console.warn('[preferencesStore] Read storage error:', err);
+    return null;
+  }
+}
+
+async function savePassToStorage(pass: UserKitchenPass): Promise<void> {
+  const key = getStorageKey();
+  try {
+    const json = JSON.stringify(pass);
+    if (Platform.OS === 'web') {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(key, json);
+      }
+      return;
+    }
+    const options = Platform.OS === 'ios'
+      ? { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }
+      : undefined;
+    await SecureStore.setItemAsync(key, json, options);
+  } catch (err) {
+    console.warn('[preferencesStore] Write storage error:', err);
+  }
+}
 
 export interface SupportedCountry {
   id: string; // 'NG', 'GB', 'US', 'GH', 'KE', 'CA', 'EU', 'ZA', 'AU', 'custom'
@@ -127,6 +178,34 @@ export const SUPPORTED_CURRENCIES: SupportedCurrency[] = [
   { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
 ];
 
+export type BodyGoal = 'balanced' | 'curves_glutes' | 'reduce_weight' | 'add_weight';
+
+export const BODY_GOAL_CONFIG: Record<
+  BodyGoal,
+  { label: string; description: string; emphasis: string }
+> = {
+  balanced: {
+    label: 'Balanced Energy',
+    description: 'Everyday wholesome fuel to keep you energized',
+    emphasis: 'Balanced proteins, fresh veggies, and hearty staples',
+  },
+  curves_glutes: {
+    label: 'Curves & Glutes (Hips & Body)',
+    description: 'High protein + complex energy carbs for healthy curves',
+    emphasis: 'Plenty of boiled eggs, beans, sweet plantains, yam & chicken',
+  },
+  reduce_weight: {
+    label: 'Lean & Light (Weight Loss)',
+    description: 'High protein, lighter oils, and plenty of fresh vegetables',
+    emphasis: 'Light pepper soups, leafy greens, grilled fish & lean poultry',
+  },
+  add_weight: {
+    label: 'Gain Weight & Fullness (Healthy Bulk)',
+    description: 'Hearty calorie-dense portions of yam, rice, dodo, and stew',
+    emphasis: 'Calorie-rich beans & plantains, jollof rice, yam porridge & oats',
+  },
+};
+
 export interface UserKitchenPass {
   country: string;
   countryName: string;
@@ -146,14 +225,65 @@ export interface UserKitchenPass {
   dietaryRestrictions: string[];
   spiceLevel: 'mild' | 'warm' | 'hot';
   spiceLabel: string;
+  bodyGoal: BodyGoal;
+  bodyGoalLabel: string;
   hasCompletedOnboarding: boolean;
   likedDishes: string[];
   passedDishes: string[];
+  neverShowDishes: string[];
+  shakeToRollEnabled: boolean;
+  weekStartKey?: string;
+  xpBalance?: number;
+  planTier?: 'free' | 'plus';
+  dailyRollsCount?: number;
+  dailyRollsDateKey?: string;
+}
+
+function getTodayDateKey(): string {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function calculateRemainingDays(): number {
   const day = new Date().getDay(); // 0 = Sunday, 1 = Monday...
   return day === 0 ? 1 : 7 - day;
+}
+
+function getCurrentMondayKey(): string {
+  const now = new Date();
+  const day = now.getDay(); // 0 = Sun, 1 = Mon...
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday);
+  const yyyy = monday.getFullYear();
+  const mm = String(monday.getMonth() + 1).padStart(2, '0');
+  const dd = String(monday.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function normalizeWeeklyBudgetReset(pass: UserKitchenPass): UserKitchenPass {
+  const currentMonday = getCurrentMondayKey();
+  let spentThisWeek = typeof pass.spentThisWeek === 'number' && Number.isFinite(pass.spentThisWeek) ? pass.spentThisWeek : 0;
+  // Auto-heal any runaway or corrupt spent values from previous versions (> 1.5x budget or runaway millions)
+  if (spentThisWeek > (pass.weeklyBudget || 35000) * 1.5 || spentThisWeek > 150000) {
+    spentThisWeek = 0;
+  }
+  if (pass.weekStartKey && pass.weekStartKey !== currentMonday) {
+    return {
+      ...pass,
+      spentThisWeek: 0,
+      weekStartKey: currentMonday,
+      remainingDaysInWeek: calculateRemainingDays(),
+    };
+  }
+  return {
+    ...pass,
+    spentThisWeek,
+    weekStartKey: currentMonday,
+    remainingDaysInWeek: calculateRemainingDays(),
+  };
 }
 
 const DEFAULT_KITCHEN_PASS: UserKitchenPass = {
@@ -175,9 +305,18 @@ const DEFAULT_KITCHEN_PASS: UserKitchenPass = {
   dietaryRestrictions: [],
   spiceLevel: 'warm',
   spiceLabel: 'Warm Kick (Black Pepper & Chili Flakes)',
+  bodyGoal: 'balanced',
+  bodyGoalLabel: 'Balanced Energy',
   hasCompletedOnboarding: false,
   likedDishes: [],
   passedDishes: [],
+  neverShowDishes: [],
+  shakeToRollEnabled: true,
+  weekStartKey: getCurrentMondayKey(),
+  xpBalance: 100,
+  planTier: 'free',
+  dailyRollsCount: 0,
+  dailyRollsDateKey: getTodayDateKey(),
 };
 
 let currentKitchenPass: UserKitchenPass = { ...DEFAULT_KITCHEN_PASS };
@@ -196,49 +335,48 @@ export function formatCurrency(
 }
 
 /**
- * Converts a base USD meal price into the user's localized currency equivalent
+ * Safely computes the localized cost of a meal.
+ * Handles both base USD costs (< 50) and already-localized amounts (> 50) cleanly.
+ */
+export function getMealCostInCurrency(cost: number, currencyCode: string = 'NGN'): number {
+  const safeCost = typeof cost === 'number' && Number.isFinite(cost) && cost > 0 ? cost : 2.0;
+  if (currencyCode === 'NGN') {
+    return safeCost > 50 ? Math.min(Math.round(safeCost / 100) * 100, 8000) : Math.round((safeCost * 1400) / 100) * 100;
+  }
+  if (currencyCode === 'KES') {
+    return safeCost > 40 ? Math.min(Math.round(safeCost / 10) * 10, 1500) : Math.round((safeCost * 130) / 10) * 10;
+  }
+  if (currencyCode === 'GHS') {
+    return safeCost > 20 ? Math.min(Math.round(safeCost), 200) : Math.round(safeCost * 15);
+  }
+  if (currencyCode === 'ZAR') {
+    return safeCost > 30 ? Math.min(Math.round(safeCost), 250) : Math.round(safeCost * 18);
+  }
+  if (currencyCode === 'GBP') {
+    return safeCost > 20 ? safeCost : Number((safeCost * 0.79).toFixed(2));
+  }
+  if (currencyCode === 'EUR') {
+    return safeCost > 20 ? safeCost : Number((safeCost * 0.92).toFixed(2));
+  }
+  if (currencyCode === 'CAD') {
+    return safeCost > 20 ? safeCost : Number((safeCost * 1.36).toFixed(2));
+  }
+  if (currencyCode === 'AUD') {
+    return safeCost > 20 ? safeCost : Number((safeCost * 1.52).toFixed(2));
+  }
+  return safeCost > 30 ? safeCost : Number(safeCost.toFixed(2));
+}
+
+/**
+ * Converts a meal price into the user's localized currency formatted string
  */
 export function convertMealCost(
-  baseUsdCost: number,
+  cost: number,
   currencyCode: string = 'NGN',
   currencySymbol: string = '₦'
 ): string {
-  switch (currencyCode) {
-    case 'NGN': {
-      const ngn = Math.round((baseUsdCost * 1400) / 100) * 100;
-      return `${currencySymbol}${ngn.toLocaleString()}`;
-    }
-    case 'GBP': {
-      const gbp = baseUsdCost * 0.79;
-      return `${currencySymbol}${gbp.toFixed(2)}`;
-    }
-    case 'EUR': {
-      const eur = baseUsdCost * 0.92;
-      return `${currencySymbol}${eur.toFixed(2)}`;
-    }
-    case 'CAD': {
-      const cad = baseUsdCost * 1.36;
-      return `${currencySymbol}${cad.toFixed(2)}`;
-    }
-    case 'GHS': {
-      const ghs = Math.round(baseUsdCost * 15);
-      return `${currencySymbol}${ghs}`;
-    }
-    case 'KES': {
-      const kes = Math.round((baseUsdCost * 130) / 10) * 10;
-      return `${currencySymbol}${kes.toLocaleString()}`;
-    }
-    case 'ZAR': {
-      const zar = Math.round(baseUsdCost * 18);
-      return `${currencySymbol}${zar}`;
-    }
-    case 'AUD': {
-      const aud = baseUsdCost * 1.52;
-      return `${currencySymbol}${aud.toFixed(2)}`;
-    }
-    default:
-      return `${currencySymbol}${baseUsdCost.toFixed(2)}`;
-  }
+  const localizedAmount = getMealCostInCurrency(cost, currencyCode);
+  return formatCurrency(localizedAmount, currencySymbol, currencyCode);
 }
 
 export const preferencesStore = {
@@ -246,20 +384,48 @@ export const preferencesStore = {
     return currentKitchenPass;
   },
 
-  async initFromDb(): Promise<void> {
+  hasCompletedOnboarding(): boolean {
+    return !!currentKitchenPass.hasCompletedOnboarding;
+  },
+
+  async init(): Promise<void> {
     try {
-      const dbPrefs = await userPreferencesService.fetchFromDb();
-      if (dbPrefs) {
-        currentKitchenPass = {
-          ...currentKitchenPass,
-          ...dbPrefs,
-          remainingDaysInWeek: calculateRemainingDays(),
-        };
-        listeners.forEach((listener) => listener(currentKitchenPass));
+      // 1. Restore this user's local data bank first (isolated per user ID or guest)
+      const local = await loadPassFromStorage();
+      if (local) {
+        currentKitchenPass = normalizeWeeklyBudgetReset({
+          ...DEFAULT_KITCHEN_PASS,
+          ...local,
+        });
+      } else {
+        currentKitchenPass = normalizeWeeklyBudgetReset({
+          ...DEFAULT_KITCHEN_PASS,
+          hasCompletedOnboarding: tokenStore.isLoggedIn(),
+        });
+      }
+      savePassToStorage(currentKitchenPass);
+      listeners.forEach((listener) => listener(currentKitchenPass));
+
+      // 2. If user is authenticated, sync with their remote Neon DB bank
+      if (tokenStore.isLoggedIn()) {
+        const dbPrefs = await userPreferencesService.fetchFromDb();
+        if (dbPrefs) {
+          currentKitchenPass = normalizeWeeklyBudgetReset({
+            ...currentKitchenPass,
+            ...dbPrefs,
+            hasCompletedOnboarding: true,
+          });
+          savePassToStorage(currentKitchenPass);
+          listeners.forEach((listener) => listener(currentKitchenPass));
+        }
       }
     } catch {
       // offline / fallback
     }
+  },
+
+  async initFromDb(): Promise<void> {
+    await this.init();
   },
 
   updateKitchenPass(updates: Partial<UserKitchenPass>): UserKitchenPass {
@@ -268,9 +434,15 @@ export const preferencesStore = {
       ...updates,
     };
     listeners.forEach((listener) => listener(currentKitchenPass));
+    // Persist locally immediately
+    savePassToStorage(currentKitchenPass);
     // Persist to Neon DB asynchronously (fire-and-forget)
     userPreferencesService.syncToDb(currentKitchenPass);
     return currentKitchenPass;
+  },
+
+  completeOnboarding(): UserKitchenPass {
+    return this.updateKitchenPass({ hasCompletedOnboarding: true });
   },
 
   updateCountryAndCurrency(
@@ -288,8 +460,16 @@ export const preferencesStore = {
 
     const defaultBudget = foundCountry ? foundCountry.defaultWeeklyBudget : 85;
     const weeklyBudget = customWeeklyBudget ?? defaultBudget;
-    // Preserve actual logged spend, never fabricate a mock spend
-    const spentThisWeek = currentKitchenPass.spentThisWeek || 0;
+    // Scale logged spend proportionally when switching between currencies so ₦2,500 never becomes £2,500
+    let spentThisWeek = currentKitchenPass.spentThisWeek || 0;
+    if (currencyCode !== currentKitchenPass.currencyCode && spentThisWeek > 0) {
+      const oldBudget = currentKitchenPass.weeklyBudget || 1;
+      const ratio = Math.min(1, Math.max(0, spentThisWeek / oldBudget));
+      const scaled = ratio * weeklyBudget;
+      spentThisWeek = ['NGN', 'KES', 'ZAR', 'GHS'].includes(currencyCode)
+        ? Math.round(scaled)
+        : Number(scaled.toFixed(2));
+    }
 
     return this.updateKitchenPass({
       country: countryId,
@@ -301,32 +481,150 @@ export const preferencesStore = {
     });
   },
 
-  recordMealDecision(dishId: string, action: 'cooked' | 'passed', mealCostUsd: number = 2.5): UserKitchenPass {
+  recordMealDecision(dishId: string, action: 'cooked' | 'passed' | 'saved', mealCostUsd: number = 2.5): UserKitchenPass {
     const isCooked = action === 'cooked';
-    const likedDishes = isCooked
+    const isSaved = action === 'saved';
+    const isPassed = action === 'passed';
+
+    const likedDishes = (isCooked || isSaved)
       ? [...new Set([...currentKitchenPass.likedDishes, dishId])]
       : currentKitchenPass.likedDishes;
-    const passedDishes = !isCooked
+    const passedDishes = isPassed
       ? [...new Set([...currentKitchenPass.passedDishes, dishId])]
       : currentKitchenPass.passedDishes;
 
     let newSpent = currentKitchenPass.spentThisWeek;
+    const currentXp =
+      typeof currentKitchenPass.xpBalance === 'number'
+        ? currentKitchenPass.xpBalance
+        : (currentKitchenPass.likedDishes || []).length * 50 + 100;
+    let nextXp = currentXp;
     if (isCooked) {
-      // Calculate localized meal cost
-      let costInLocalCurrency = mealCostUsd;
-      if (currentKitchenPass.currencyCode === 'NGN') costInLocalCurrency = mealCostUsd * 1400;
-      else if (currentKitchenPass.currencyCode === 'KES') costInLocalCurrency = mealCostUsd * 130;
-      else if (currentKitchenPass.currencyCode === 'GHS') costInLocalCurrency = mealCostUsd * 15;
-      else if (currentKitchenPass.currencyCode === 'GBP') costInLocalCurrency = mealCostUsd * 0.79;
-      else if (currentKitchenPass.currencyCode === 'EUR') costInLocalCurrency = mealCostUsd * 0.92;
-
+      const costInLocalCurrency = getMealCostInCurrency(mealCostUsd, currentKitchenPass.currencyCode);
       newSpent = Math.min(currentKitchenPass.weeklyBudget, currentKitchenPass.spentThisWeek + costInLocalCurrency);
+      const xpReward = currentKitchenPass.planTier === 'plus' ? 100 : 50;
+      nextXp = currentXp + xpReward;
     }
 
     return this.updateKitchenPass({
       likedDishes,
       passedDishes,
       spentThisWeek: newSpent,
+      xpBalance: nextXp,
+    });
+  },
+
+  getXpBalance(): number {
+    if (typeof currentKitchenPass.xpBalance === 'number') {
+      return currentKitchenPass.xpBalance;
+    }
+    return (currentKitchenPass.likedDishes || []).length * 50 + 100;
+  },
+
+  spendXp(amount: number): boolean {
+    const currentXp = this.getXpBalance();
+    if (currentXp < amount) return false;
+    this.updateKitchenPass({ xpBalance: currentXp - amount });
+    return true;
+  },
+
+  isMamaPlus(): boolean {
+    return currentKitchenPass.planTier === 'plus';
+  },
+
+  setPlanTier(tier: 'free' | 'plus'): UserKitchenPass {
+    return this.updateKitchenPass({ planTier: tier });
+  },
+
+  getRemainingDailyRolls(): number {
+    if (currentKitchenPass.planTier === 'plus') return 999;
+    const today = getTodayDateKey();
+    const usedToday =
+      currentKitchenPass.dailyRollsDateKey === today
+        ? currentKitchenPass.dailyRollsCount || 0
+        : 0;
+    return Math.max(0, 5 - usedToday);
+  },
+
+  consumeDailyRoll(): boolean {
+    if (currentKitchenPass.planTier === 'plus') return true;
+    const today = getTodayDateKey();
+    const usedToday =
+      currentKitchenPass.dailyRollsDateKey === today
+        ? currentKitchenPass.dailyRollsCount || 0
+        : 0;
+    if (usedToday >= 5) return false;
+    this.updateKitchenPass({
+      dailyRollsCount: usedToday + 1,
+      dailyRollsDateKey: today,
+    });
+    return true;
+  },
+
+  getLocalizedPlusPrice(): string {
+    const code = currentKitchenPass.currencyCode || 'NGN';
+    if (code === 'NGN') return '₦2,500/mo';
+    if (code === 'GBP') return '£3.49/mo';
+    if (code === 'EUR') return '€3.99/mo';
+    if (code === 'GHS') return 'GH₵45/mo';
+    if (code === 'KES') return 'KSh450/mo';
+    if (code === 'ZAR') return 'R65/mo';
+    if (code === 'CAD') return 'CA$4.99/mo';
+    if (code === 'AUD') return 'A$5.99/mo';
+    return '$3.99/mo';
+  },
+
+  addNeverShowDish(dishTitleOrId: string): UserKitchenPass {
+    const neverShowDishes = [
+      ...new Set([...(currentKitchenPass.neverShowDishes || []), dishTitleOrId]),
+    ];
+    // Also remove from liked dishes if present
+    const likedDishes = currentKitchenPass.likedDishes.filter(
+      (id) => id.toLowerCase() !== dishTitleOrId.toLowerCase()
+    );
+    return this.updateKitchenPass({ neverShowDishes, likedDishes });
+  },
+
+  removeNeverShowDish(dishTitleOrId: string): UserKitchenPass {
+    const neverShowDishes = (currentKitchenPass.neverShowDishes || []).filter(
+      (d) => d.toLowerCase() !== dishTitleOrId.toLowerCase()
+    );
+    return this.updateKitchenPass({ neverShowDishes });
+  },
+
+  undoMealDecision(dishId: string, action: 'passed' | 'cooked', mealCostUsd: number = 2.5): UserKitchenPass {
+    const isCooked = action === 'cooked';
+    const isPassed = action === 'passed';
+
+    const likedDishes = isCooked
+      ? currentKitchenPass.likedDishes.filter((id) => id !== dishId)
+      : currentKitchenPass.likedDishes;
+    const passedDishes = isPassed
+      ? currentKitchenPass.passedDishes.filter((id) => id !== dishId)
+      : currentKitchenPass.passedDishes;
+
+    let newSpent = currentKitchenPass.spentThisWeek;
+    if (isCooked) {
+      const costInLocalCurrency = getMealCostInCurrency(mealCostUsd, currentKitchenPass.currencyCode);
+      newSpent = Math.max(0, currentKitchenPass.spentThisWeek - costInLocalCurrency);
+    }
+
+    return this.updateKitchenPass({
+      likedDishes,
+      passedDishes,
+      spentThisWeek: newSpent,
+    });
+  },
+
+  setShakeToRollEnabled(enabled: boolean): UserKitchenPass {
+    return this.updateKitchenPass({ shakeToRollEnabled: enabled });
+  },
+
+  setBodyGoal(goal: BodyGoal): UserKitchenPass {
+    const config = BODY_GOAL_CONFIG[goal];
+    return this.updateKitchenPass({
+      bodyGoal: goal,
+      bodyGoalLabel: config ? config.label : 'Balanced Energy',
     });
   },
 
@@ -338,5 +636,6 @@ export const preferencesStore = {
   reset(): void {
     currentKitchenPass = { ...DEFAULT_KITCHEN_PASS };
     listeners.forEach((listener) => listener(currentKitchenPass));
+    savePassToStorage(currentKitchenPass);
   },
 };

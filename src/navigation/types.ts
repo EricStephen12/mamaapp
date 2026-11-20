@@ -10,7 +10,7 @@ export type RootStackParamList = {
   MakeItYours: undefined;
 
   // 04 - Daily Edit (Home Feed) Group
-  YourDailyEdit: undefined;
+  YourDailyEdit: { injectedMeal?: any } | undefined;
 
   // 05 - Discover Group
   DiscoverYourNextMeal: undefined;
@@ -37,6 +37,7 @@ export type RootStackParamList = {
         image?: string;
         steps?: string[];
         ingredients?: { name: string; amount: string }[];
+        mamaTip?: string;
       }
     | undefined;
   EatingOutMealDetails:

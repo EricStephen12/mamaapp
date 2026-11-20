@@ -32,7 +32,7 @@ export const DetectedIngredientItem: React.FC<DetectedIngredientItemProps> = ({
       {/* Ingredient Details Column */}
       <View style={styles.detailsColumn}>
         <Text style={styles.ingredientName}>{item.name}</Text>
-        <Text style={styles.detectionStatus}>Possible match · please check</Text>
+        <Text style={styles.detectionStatus}>In your pantry</Text>
       </View>
 
       {/* Editable Quantity Input */}

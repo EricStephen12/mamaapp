@@ -1,18 +1,27 @@
 {
   "expo": {
-    "name": "mama",
+    "name": "Mama",
     "slug": "mama",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "mama",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8F5EF"
+    },
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.mamakitchen.app"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.mamakitchen.app",
+      "buildNumber": "1"
     },
     "android": {
+      "package": "com.mamakitchen.app",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F8F5EF",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -22,10 +31,27 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/e311b01c-32e9-4629-9cc2-324aec7cdefe"
+    },
     "plugins": [
       "expo-font",
       "expo-status-bar",
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      "expo-updates",
+      "expo-video"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e311b01c-32e9-4629-9cc2-324aec7cdefe"
+      }
+    },
+    "owner": "hub11"
   }
 }

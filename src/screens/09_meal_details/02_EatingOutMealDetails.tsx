@@ -24,20 +24,25 @@ import { decisionsService } from '../../services/api/decisionsService';
 type Props = NativeStackScreenProps<RootStackParamList, 'EatingOutMealDetails'>;
 
 export const EatingOutMealDetails: React.FC<Props> = ({ navigation, route }) => {
-  const params = route.params || {};
+  const params = route.params;
 
-  const dishName = params.dishName || '';
-  const spotName = params.spotName || '';
-  const distance = params.distance || '';
-  const price = params.price || '';
-  const vibe = params.vibe || '';
+  const dishName = params?.dishName || '';
+  const spotName = params?.spotName || '';
+  const distance = params?.distance || '';
+  const price = params?.price || '';
+  const vibe = params?.vibe || '';
   // Use API-provided image only — never fall back to a hardcoded third-party URL
-  const image = params.image || undefined;
+  const image = params?.image || undefined;
   const slug = dishName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'dish';
   const spotSlug = spotName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'spot';
   const mealId = `takeout-${spotSlug}-${slug}`;
 
-  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState<boolean>(() => {
+    if (!dishName) return false;
+    return savedMealsService
+      .getCachedMeals()
+      .some((m) => m.mealId === mealId || m.id === mealId || m.title.toLowerCase() === dishName.toLowerCase());
+  });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Entrance animations
@@ -51,14 +56,48 @@ export const EatingOutMealDetails: React.FC<Props> = ({ navigation, route }) => 
     ]).start();
   }, [contentFade, contentY]);
 
+  if (!params || !params.dishName) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <StatusBar style="dark" />
+        <View style={styles.masthead}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={18} color={colors.text.primary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Takeout Spot</Text>
+          <View style={{ width: 34 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16 }}>
+          <MamaCharacter pose="thinking" size={80} />
+          <Text style={{ fontSize: 20, fontFamily: typography.fontFamily.serif, fontWeight: '700', color: colors.text.primary, textAlign: 'center' }}>
+            No Spot Selected
+          </Text>
+          <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', lineHeight: 20 }}>
+            Choose a meal or takeout spot from Your Daily Edit to see restaurant details and hours.
+          </Text>
+          <TouchableOpacity
+            style={[styles.eatOutBtn, { marginTop: 12, paddingHorizontal: 24 }]}
+            onPress={() => navigation.navigate('YourDailyEdit')}
+          >
+            <Text style={styles.eatOutBtnText}>Go to Daily Edit</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const handleChooseForToday = () => {
     preferencesStore.recordMealDecision(dishName, 'cooked', 14);
     decisionsService.log(mealId, `${spotName} · ${dishName}`, 'cooked', 14);
 
     setToastMessage(`Mama: "Enjoy your dinner at ${spotName}! Rest your feet."`);
     setTimeout(() => {
-      navigation.navigate('YourDailyEdit');
-    }, 900);
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('YourDailyEdit');
+      }
+    }, 800);
   };
 
   const handleSaveToggle = () => {

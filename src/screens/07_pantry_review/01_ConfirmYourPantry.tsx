@@ -6,6 +6,8 @@ import {
   ScrollView,
   Animated,
   TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -14,14 +16,13 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { MamaCharacter } from '../../components/common/MamaCharacter';
+import { MamaCharacter, MamaPose } from '../../components/common/MamaCharacter';
+import { KitchenPassModal } from '../../components/common/KitchenPassModal';
 import { pantryService } from '../../services/api/pantryService';
+import { preferencesStore } from '../../services/preferencesStore';
 import { DetectedItemData } from './components/DetectedIngredientItem';
 
 import { DetectedIngredientsSection } from './components/DetectedIngredientsSection';
-import { UncertaintyGuidanceCard } from './components/UncertaintyGuidanceCard';
-import { PantryBasicsSection } from './components/PantryBasicsSection';
-import { CookingTimePreferenceSection } from './components/CookingTimePreferenceSection';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ConfirmYourPantry'>;
 
@@ -31,29 +32,44 @@ export const ConfirmYourPantry: React.FC<Props> = ({ navigation, route }) => {
   const confirmScale = useRef(new Animated.Value(1)).current;
 
   const passedItems = route.params?.items;
-  const initialDetected: DetectedItemData[] =
-    passedItems && passedItems.length > 0
-      ? passedItems.map((name, idx) => ({
-          id: `ing-${idx + 1}`,
-          name,
-          quantity: '1 portion',
-        }))
-      : [
-          { id: 'ing-1', name: 'Tomatoes', quantity: 'About 4 medium' },
-          { id: 'ing-2', name: 'Eggs', quantity: '6 large' },
-          { id: 'ing-3', name: 'White rice', quantity: '1 cup dry' },
-          { id: 'ing-4', name: 'Onions', quantity: '2 yellow' },
-        ];
 
   // Track confirmed pantry items so we can sync to Neon DB on confirm
-  const [confirmedItems, setConfirmedItems] = useState<DetectedItemData[]>(initialDetected);
+  const [confirmedItems, setConfirmedItems] = useState<DetectedItemData[]>(() => {
+    if (passedItems && passedItems.length > 0) {
+      return passedItems.map((name, idx) => ({
+        id: `ing-${idx + 1}`,
+        name,
+        quantity: '1 portion',
+      }));
+    }
+    const cached = pantryService.getCachedPantry();
+    if (cached.length > 0) {
+      return cached.map((item, idx) => ({
+        id: `ing-${idx + 1}`,
+        name: item.name,
+        quantity: item.quantity || '1 portion',
+      }));
+    }
+    const pass = preferencesStore.getKitchenPass();
+    const isPlantBased = pass.dietaryRestrictions?.some(
+      (d) => d.toLowerCase().includes('vegan') || d.toLowerCase().includes('vegetarian')
+    );
+    return [
+      { id: 'ing-1', name: 'Tomatoes', quantity: 'About 4 medium' },
+      { id: 'ing-2', name: isPlantBased ? 'Plantains' : 'Eggs', quantity: isPlantBased ? '2 ripe' : '6 large' },
+      { id: 'ing-3', name: 'White rice', quantity: '1 cup dry' },
+      { id: 'ing-4', name: 'Onions', quantity: '2 yellow' },
+    ];
+  });
+  const [mamaPose] = useState<MamaPose>('writing');
+  const [passModalVisible, setPassModalVisible] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(contentFade, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.timing(contentY, { toValue: 0, duration: 400, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [contentFade, contentY]);
 
   const handlePressIn = () => {
     Animated.spring(confirmScale, { toValue: 0.96, useNativeDriver: true, friction: 5 }).start();
@@ -64,13 +80,12 @@ export const ConfirmYourPantry: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleConfirm = () => {
-    const activeList = confirmedItems.length > 0 ? confirmedItems : initialDetected;
     // Sync confirmed pantry items to Neon DB (fire-and-forget — never blocks navigation)
     pantryService.syncItems(
-      activeList.map((i) => ({ name: i.name, quantity: i.quantity, category: 'pantryStaples' }))
+      confirmedItems.map((i) => ({ name: i.name, quantity: i.quantity, category: 'pantryStaples' }))
     );
     navigation.navigate('AlreadyInYourKitchen', {
-      items: activeList.map((i) => i.name),
+      items: confirmedItems.map((i) => i.name),
     });
   };
 
@@ -91,15 +106,19 @@ export const ConfirmYourPantry: React.FC<Props> = ({ navigation, route }) => {
         <Text style={styles.brandTitle}>Mama Kitchen</Text>
         <TouchableOpacity
           style={styles.profileBadge}
-          onPress={() => navigation.navigate('MakeItYours')}
+          onPress={() => setPassModalVisible(true)}
           activeOpacity={0.8}
         >
           <Ionicons name="options-outline" size={16} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
-      {/* Scrollable Feed */}
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      {/* Scrollable Feed with Keyboard Protection */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Animated.View
           style={[
             styles.animatedContainer,
@@ -111,22 +130,22 @@ export const ConfirmYourPantry: React.FC<Props> = ({ navigation, route }) => {
             <Text style={styles.eyebrow}>PANTRY REVIEW · ZERO WASTE</Text>
             <Text style={styles.heading}>Confirm your pantry</Text>
             <Text style={styles.supportingCopy}>
-              Review what Mama detected before I suggest dinner ideas.
+              Review your kitchen ingredients before Mama suggests a meal.
             </Text>
           </View>
 
           {/* Mama Live Review Stage */}
           <View style={styles.mamaGreetingCard}>
-            <MamaCharacter pose="writing" size={48} isSpeaking={true} />
+            <MamaCharacter pose={mamaPose} size={48} isSpeaking={true} />
             <View style={styles.mamaBubble}>
               <Text style={styles.mamaBubbleText}>
                 &ldquo;
-                {(confirmedItems.length > 0 ? confirmedItems : initialDetected).length > 0
-                  ? `I noted ${(confirmedItems.length > 0 ? confirmedItems : initialDetected)
+                {confirmedItems.length > 0
+                  ? `I noted ${confirmedItems
                       .slice(0, 3)
                       .map((i) => i.name)
                       .join(', ')}${
-                      (confirmedItems.length > 0 ? confirmedItems : initialDetected).length > 3 ? ' and more' : ''
+                      confirmedItems.length > 3 ? ' and more' : ''
                     }. Check the list below and tap continue to see your custom meals!`
                   : 'Add or confirm what you have in your kitchen below and tap continue!'}
                 &rdquo;
@@ -136,23 +155,12 @@ export const ConfirmYourPantry: React.FC<Props> = ({ navigation, route }) => {
 
           {/* Section 2: Detected Ingredients List */}
           <DetectedIngredientsSection
-            items={initialDetected}
+            items={confirmedItems}
             onRetakePhoto={() => navigation.navigate('WhatsInYourKitchen')}
             onItemsChange={(items) => setConfirmedItems(items)}
           />
 
-          {/* Section 3: Uncertainty Guidance Card */}
-          <UncertaintyGuidanceCard />
-
-          {/* Section 4: Pantry Basics */}
-          <PantryBasicsSection />
-
-          <View style={styles.divider} />
-
-          {/* Section 5: Cooking Time Preference */}
-          <CookingTimePreferenceSection />
-
-          {/* Section 6: Confirmation Action & Explanatory Copy */}
+          {/* Section 3: Confirmation Action & Explanatory Copy */}
           <View style={styles.actionBlock}>
             <Animated.View style={[{ transform: [{ scale: confirmScale }] }]}>
               <TouchableOpacity
@@ -177,6 +185,12 @@ export const ConfirmYourPantry: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </Animated.View>
       </ScrollView>
+    </KeyboardAvoidingView>
+    {/* Kitchen Pass Modal */}
+      <KitchenPassModal
+        visible={passModalVisible}
+        onClose={() => setPassModalVisible(false)}
+      />
     </SafeAreaView>
   );
 };

@@ -85,7 +85,7 @@ export const MamaCharacter: React.FC<MamaCharacterProps> = ({
       breathLoop.stop();
       blinkLoop.stop();
     };
-  }, []);
+  }, [breathAnim, blinkAnim]);
 
   // Distinct Pose Animations triggered when pose changes
   useEffect(() => {
@@ -155,7 +155,7 @@ export const MamaCharacter: React.FC<MamaCharacterProps> = ({
     return () => {
       if (activeLoop) activeLoop.stop();
     };
-  }, [pose]);
+  }, [pose, waveAnim, thinkTapAnim, writeScribbleAnim, heartPulseAnim, stirAnim, steamAnim]);
 
   // Speaking mouth loop
   useEffect(() => {
@@ -174,7 +174,7 @@ export const MamaCharacter: React.FC<MamaCharacterProps> = ({
     );
     talkLoop.start();
     return () => talkLoop.stop();
-  }, [isSpeaking, pose]);
+  }, [isSpeaking, pose, mouthAnim]);
 
   const handlePress = () => {
     Animated.sequence([
@@ -333,9 +333,6 @@ export const MamaCharacter: React.FC<MamaCharacterProps> = ({
               {/* Fingers waving */}
               <Path d="M 28 94 Q 24 88 30 86 Q 34 90 32 96 Z" fill="#E8C39E" />
               <Path d="M 33 93 Q 32 85 37 85 Q 39 89 36 95 Z" fill="#E8C39E" />
-              {/* Motion sparkles around waving hand */}
-              <Path d="M 22 96 Q 18 94 22 92" stroke="#D4AF37" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-              <Path d="M 38 82 Q 42 80 40 84" stroke="#D4AF37" strokeWidth="1.5" strokeLinecap="round" fill="none" />
               {/* Right Hand resting peacefully on hip */}
               <Circle cx="122" cy="132" r="7" fill="#E8C39E" />
             </Svg>
@@ -406,9 +403,6 @@ export const MamaCharacter: React.FC<MamaCharacterProps> = ({
                 d="M 80 14 Q 75 7 70 10 Q 65 14 80 24 Q 95 14 90 10 Q 85 7 80 14 Z"
                 fill="#C45A45"
               />
-              {/* Joy sparkles */}
-              <Path d="M 64 12 L 67 15" stroke="#F4D35E" strokeWidth="2" strokeLinecap="round" />
-              <Path d="M 96 12 L 93 15" stroke="#F4D35E" strokeWidth="2" strokeLinecap="round" />
             </Svg>
           </Animated.View>
         )}

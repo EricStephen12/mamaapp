@@ -1,5 +1,10 @@
 import { apiClient } from './client';
 import { tokenStore } from './tokenStore';
+import { preferencesStore } from '../preferencesStore';
+import { pantryService } from './pantryService';
+import { savedMealsService } from './savedMealsService';
+import { aiMealCache } from './aiMealCache';
+import { subscriptionService } from '../subscriptionService';
 
 export interface SignInCredentials {
   email: string;
@@ -29,6 +34,12 @@ export const authService = {
       skipAuth: true,
     });
     await tokenStore.setSession(result.token, result.user);
+    subscriptionService.identify(result.user.id).catch(() => {});
+    await Promise.all([
+      preferencesStore.init(),
+      pantryService.fetchAll(),
+      savedMealsService.fetchAll(),
+    ]).catch(() => {});
     return result;
   },
 
@@ -39,11 +50,41 @@ export const authService = {
       skipAuth: true,
     });
     await tokenStore.setSession(result.token, result.user);
+    subscriptionService.identify(result.user.id).catch(() => {});
+    await Promise.all([
+      preferencesStore.init(),
+      pantryService.fetchAll(),
+      savedMealsService.fetchAll(),
+    ]).catch(() => {});
     return result;
   },
 
   async signOut(): Promise<void> {
     await tokenStore.clearSession();
+    subscriptionService.reset().catch(() => {});
+    await Promise.all([
+      preferencesStore.init(),
+      pantryService.clearLocalPantry(),
+      savedMealsService.clearLocalSavedMeals(),
+      aiMealCache.clear(),
+    ]).catch(() => {});
+  },
+
+  async deleteAccount(): Promise<void> {
+    if (tokenStore.isLoggedIn()) {
+      try {
+        await apiClient('/api/auth/account', {
+          method: 'DELETE',
+        });
+      } catch (err) {
+        console.warn('[authService] Delete account remote error:', err);
+      }
+    }
+    await tokenStore.clearSession();
+    preferencesStore.reset();
+    await pantryService.clearLocalPantry();
+    await savedMealsService.clearLocalSavedMeals();
+    await aiMealCache.clear();
   },
 
   async forgotPassword(email: string): Promise<{ message: string }> {
@@ -56,5 +97,9 @@ export const authService = {
 
   isLoggedIn(): boolean {
     return tokenStore.isLoggedIn();
+  },
+
+  getUser() {
+    return tokenStore.getUser();
   },
 };

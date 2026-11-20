@@ -1,8 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
-import { typography } from '../../../theme/typography';
 
 export type MealFilterType = 'all' | 'home' | 'eating_out';
 
@@ -18,8 +16,7 @@ interface FilterOption {
 
 const FILTER_OPTIONS: FilterOption[] = [
   { key: 'all', label: 'All ideas' },
-  { key: 'home', label: 'At home' },
-  { key: 'eating_out', label: 'Eating out' },
+  { key: 'home', label: 'Home kitchen' },
 ];
 
 export const MealFilters: React.FC<MealFiltersProps> = ({
@@ -40,14 +37,6 @@ export const MealFilters: React.FC<MealFiltersProps> = ({
               pressed && styles.chipPressed,
             ]}
           >
-            {isSelected && (
-              <Ionicons
-                name="checkmark"
-                size={12}
-                color={colors.primary}
-                style={styles.checkIcon}
-              />
-            )}
             <Text
               style={[
                 styles.filterLabel,
@@ -71,37 +60,33 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   filterChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 99,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 20,
     borderWidth: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
   chipSelected: {
-    backgroundColor: colors.linen100,
+    backgroundColor: '#F3F6F1',
     borderColor: colors.primary,
   },
   chipUnselected: {
-    backgroundColor: colors.background,
-    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(36, 40, 32, 0.08)',
   },
   chipPressed: {
     opacity: 0.85,
-    transform: [{ scale: 0.97 }],
-  },
-  checkIcon: {
-    marginRight: 5,
+    transform: [{ scale: 0.96 }],
   },
   filterLabel: {
-    fontSize: typography.fontSize.reassurance,
-    lineHeight: 14,
-    fontFamily: typography.fontFamily.regular,
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.text.secondary,
   },
   labelSelected: {
     color: colors.primary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   labelUnselected: {
     color: colors.text.secondary,

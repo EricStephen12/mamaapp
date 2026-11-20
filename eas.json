@@ -1,0 +1,45 @@
+{
+  "cli": {
+    "version": ">= 12.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://mama-backend-4uql.onrender.com"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://mama-backend-4uql.onrender.com"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://mama-backend-4uql.onrender.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
+

@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../db/prisma.js';
 import { authRateLimiter } from '../middleware/rateLimiter.js';
+import { requireAuth, AuthRequest } from '../middleware/auth.middleware.js';
+import { EmailService } from '../services/email.service.js';
 
 export const authRouter = Router();
 
@@ -59,6 +61,12 @@ authRouter.post('/signup', authRateLimiter, async (req: Request, res: Response) 
     });
 
     const token = makeToken(user.id);
+
+    // Send welcome email via Resend (fire-and-forget)
+    EmailService.sendWelcomeEmail(cleanEmail, user.name).catch((emailErr) => {
+      console.warn('[AUTH] Welcome email send error (non-fatal):', emailErr);
+    });
+
     res.status(201).json({
       token,
       user: { id: user.id, email: user.email, name: user.name },
@@ -108,8 +116,46 @@ authRouter.post('/signin', authRateLimiter, async (req: Request, res: Response) 
 
 /**
  * POST /api/auth/forgot-password
- * Always returns the same response to prevent email enumeration
+ * Sends password reset code via Resend if email exists, and returns consistent response
  */
-authRouter.post('/forgot-password', authRateLimiter, async (_req: Request, res: Response) => {
-  res.json({ message: 'If that email exists, a reset link has been sent.' });
+authRouter.post('/forgot-password', authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body as { email?: string };
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      const cleanEmail = sanitizeEmail(email);
+      const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+      if (user) {
+        // Generate random 6-digit verification code
+        const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+        // Send email via Resend
+        EmailService.sendPasswordResetEmail(cleanEmail, resetCode).catch((err) => {
+          console.warn('[AUTH] Forgot-password email error:', err);
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[AUTH] /forgot-password handled error:', err);
+  }
+  res.json({ message: 'If that email exists, a reset code has been sent.' });
+});
+
+/**
+ * DELETE /api/auth/account
+ * Deletes current authenticated user and cascades to all related records
+ */
+authRouter.delete('/account', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    await prisma.user.delete({
+      where: { id: userId },
+    });
+    res.json({ success: true, message: 'Account and associated data deleted permanently.' });
+  } catch (err) {
+    console.error('[AUTH] /account DELETE error:', err);
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
 });

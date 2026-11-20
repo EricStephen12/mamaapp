@@ -2,10 +2,12 @@
  * User Preferences Service — syncs KitchenPass to Neon DB
  */
 import { apiClient } from './client';
+import { tokenStore } from './tokenStore';
 import { UserKitchenPass } from '../preferencesStore';
 
 export const userPreferencesService = {
   async syncToDb(pass: UserKitchenPass): Promise<void> {
+    if (!tokenStore.isLoggedIn()) return;
     try {
       await apiClient('/api/user/preferences', {
         method: 'POST',
@@ -28,34 +30,36 @@ export const userPreferencesService = {
           dietaryRestrictions: pass.dietaryRestrictions,
         }),
       });
-    } catch (e) {
-      console.warn('[userPreferencesService] syncToDb error:', e);
+    } catch {
+      // Offline or unauthenticated — already saved locally
     }
   },
 
   async fetchFromDb(): Promise<Partial<UserKitchenPass> | null> {
+    if (!tokenStore.isLoggedIn()) return null;
     try {
       const data = await apiClient<any>('/api/user/preferences');
       if (!data || !data.id) return null;
       const profile = data.tasteProfile;
-      return {
-        country: data.country,
-        countryName: data.countryName,
-        currencyCode: data.currencyCode,
-        currencySymbol: data.currencySymbol,
-        weeklyBudget: data.weeklyBudget,
-        spentThisWeek: data.spentThisWeek,
-        cuisineAnchor: profile?.cuisineAnchor,
-        cuisineLabel: profile?.cuisineLabel,
-        cookingGear: profile?.cookingGear,
-        cookingGearLabel: profile?.cookingGearLabel,
-        timeLimitMinutes: profile?.timeLimitMinutes,
-        timeLimitLabel: profile?.timeLimitLabel,
-        stapleBase: profile?.stapleBase,
-        stapleBaseLabel: profile?.stapleBaseLabel,
-        spiceLevel: profile?.spiceLevel,
-        dietaryRestrictions: profile?.dietaryRestrictions,
+      const raw: Partial<UserKitchenPass> = {
+        ...(data.country ? { country: data.country } : {}),
+        ...(data.countryName ? { countryName: data.countryName } : {}),
+        ...(data.currencyCode ? { currencyCode: data.currencyCode } : {}),
+        ...(data.currencySymbol ? { currencySymbol: data.currencySymbol } : {}),
+        ...(typeof data.weeklyBudget === 'number' ? { weeklyBudget: data.weeklyBudget } : {}),
+        ...(typeof data.spentThisWeek === 'number' ? { spentThisWeek: data.spentThisWeek } : {}),
+        ...(profile?.cuisineAnchor ? { cuisineAnchor: profile.cuisineAnchor } : {}),
+        ...(profile?.cuisineLabel ? { cuisineLabel: profile.cuisineLabel } : {}),
+        ...(profile?.cookingGear ? { cookingGear: profile.cookingGear } : {}),
+        ...(profile?.cookingGearLabel ? { cookingGearLabel: profile.cookingGearLabel } : {}),
+        ...(typeof profile?.timeLimitMinutes === 'number' ? { timeLimitMinutes: profile.timeLimitMinutes } : {}),
+        ...(profile?.timeLimitLabel ? { timeLimitLabel: profile.timeLimitLabel } : {}),
+        ...(profile?.stapleBase ? { stapleBase: profile.stapleBase } : {}),
+        ...(profile?.stapleBaseLabel ? { stapleBaseLabel: profile.stapleBaseLabel } : {}),
+        ...(profile?.spiceLevel ? { spiceLevel: profile.spiceLevel } : {}),
+        ...(Array.isArray(profile?.dietaryRestrictions) ? { dietaryRestrictions: profile.dietaryRestrictions } : {}),
       };
+      return raw;
     } catch {
       return null;
     }

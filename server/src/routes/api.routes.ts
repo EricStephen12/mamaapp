@@ -178,27 +178,60 @@ apiRouter.post('/saved-meals', async (req: Request, res: Response) => {
       return;
     }
 
-    const savedMeal = await prisma.savedMeal.create({
-      data: {
+    const resolvedMealId = mealId || `meal-${Date.now()}`;
+    await prisma.savedMeal.deleteMany({
+      where: {
         userId: user.id,
-        mealId: mealId || `meal-${Date.now()}`,
-        title,
-        type,
-        cookTime,
-        cost,
-        costNumeric: Number(costNumeric) || 2.5,
-        imageUrl: imageUrl || null,
-        recipeSteps: Array.isArray(recipeSteps) ? recipeSteps : [],
-        ingredients: ingredients ? (typeof ingredients === 'string' ? JSON.parse(ingredients) : ingredients) : undefined,
-        spotName: spotName || null,
-        vibe: vibe || null,
+        mealId: resolvedMealId,
       },
     });
 
+    let savedMeal;
+    try {
+      savedMeal = await prisma.savedMeal.create({
+        data: {
+          userId: user.id,
+          mealId: resolvedMealId,
+          title,
+          type,
+          cookTime,
+          cost,
+          costNumeric: Number(costNumeric) || 2.5,
+          imageUrl: imageUrl || '',
+          recipeSteps: Array.isArray(recipeSteps) ? recipeSteps : [],
+          ingredients: ingredients ? (typeof ingredients === 'string' ? JSON.parse(ingredients) : ingredients) : undefined,
+          spotName: spotName || null,
+          vibe: vibe || null,
+        },
+      });
+    } catch {
+      // Auto-heal Neon DB SavedMeal columns if schema migration hasn't been pushed yet
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "SavedMeal" ADD COLUMN IF NOT EXISTS "ingredients" JSONB, ADD COLUMN IF NOT EXISTS "spotName" TEXT, ADD COLUMN IF NOT EXISTS "vibe" TEXT; ALTER TABLE "SavedMeal" ALTER COLUMN "imageUrl" DROP NOT NULL;`
+      ).catch(() => {});
+
+      savedMeal = await prisma.savedMeal.create({
+        data: {
+          userId: user.id,
+          mealId: resolvedMealId,
+          title,
+          type,
+          cookTime,
+          cost,
+          costNumeric: Number(costNumeric) || 2.5,
+          imageUrl: imageUrl || '',
+          recipeSteps: Array.isArray(recipeSteps) ? recipeSteps : [],
+          ingredients: ingredients ? (typeof ingredients === 'string' ? JSON.parse(ingredients) : ingredients) : undefined,
+          spotName: spotName || null,
+          vibe: vibe || null,
+        },
+      });
+    }
+
     res.json({ success: true, meal: savedMeal });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[API] POST /saved-meals error:', error);
-    res.status(500).json({ error: 'Failed to save meal to database' });
+    res.status(500).json({ error: error?.message || 'Failed to save meal to database' });
   }
 });
 
@@ -209,12 +242,12 @@ apiRouter.post('/saved-meals', async (req: Request, res: Response) => {
 apiRouter.delete('/saved-meals/:id', async (req: Request, res: Response) => {
   try {
     const user = await getTargetUser(req);
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     await prisma.savedMeal.deleteMany({
       where: {
-        id: id as string,
         userId: user.id,
+        OR: [{ id }, { mealId: id }],
       },
     });
 
@@ -245,19 +278,30 @@ apiRouter.post('/decisions', async (req: Request, res: Response) => {
       },
     });
 
-    if (action === 'cooked' && mealCost > 0) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          spentThisWeek: { increment: parseFloat(mealCost) },
-        },
-      });
-    }
-
     res.json({ success: true, decision });
   } catch (error) {
     console.error('[API] /decisions error:', error);
     res.status(500).json({ error: 'Failed to record decision' });
+  }
+});
+
+/**
+ * Get Recent Meal Decisions
+ * GET /api/decisions
+ */
+apiRouter.get('/decisions', async (req: Request, res: Response) => {
+  try {
+    const user = await getTargetUser(req);
+    const limit = parseInt(req.query.limit as string) || 20;
+    const decisions = await prisma.mealDecision.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    res.json(decisions);
+  } catch (error) {
+    console.error('[API] GET /decisions error:', error);
+    res.status(500).json({ error: 'Failed to fetch decisions' });
   }
 });
 
@@ -283,28 +327,31 @@ apiRouter.get('/pantry', async (req: Request, res: Response) => {
 apiRouter.post('/pantry', async (req: Request, res: Response) => {
   try {
     const user = await getTargetUser(req);
-    const items = (req.body?.items as Array<{ name: string; category?: string; quantity?: string }>) || [];
+    const items = req.body?.items;
 
-    if (!Array.isArray(items) || items.length === 0) {
+    if (!Array.isArray(items)) {
       res.status(400).json({ error: 'Please provide items array.' });
       return;
     }
 
-    // Replace or add pantry items
-    const created = await Promise.all(
-      items.map((item) =>
-        prisma.pantryItem.create({
-          data: {
-            userId: user.id,
-            name: item.name,
-            category: item.category || 'pantryStaples',
-            quantity: item.quantity || null,
-          },
-        })
-      )
-    );
+    // Replace user's pantry items cleanly (supports empty array when kitchen is cleared)
+    await prisma.pantryItem.deleteMany({
+      where: { userId: user.id },
+    });
 
-    res.json({ success: true, count: created.length });
+    const validItems = items.filter((item: any) => item && typeof item.name === 'string' && item.name.trim().length > 0);
+    if (validItems.length > 0) {
+      await prisma.pantryItem.createMany({
+        data: validItems.map((item: { name: string; category?: string; quantity?: string }) => ({
+          userId: user.id,
+          name: item.name.trim(),
+          category: item.category || 'pantryStaples',
+          quantity: item.quantity || null,
+        })),
+      });
+    }
+
+    res.json({ success: true, count: validItems.length });
   } catch (error) {
     console.error('[API] POST /pantry error:', error);
     res.status(500).json({ error: 'Failed to save pantry items' });

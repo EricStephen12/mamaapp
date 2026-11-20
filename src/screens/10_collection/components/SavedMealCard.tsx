@@ -17,7 +17,7 @@ export interface SavedMealItem {
   type: 'home' | 'eating_out';
   typeLabel: string;
   cost: string;
-  imageUrl: string;
+  imageUrl?: string;
   targetScreen: 'AtHomeMealDetails' | 'EatingOutMealDetails';
 }
 
@@ -25,21 +25,23 @@ interface SavedMealCardProps {
   item: SavedMealItem;
   onPress: () => void;
   onUnsave?: () => void;
+  onRollToday?: () => void;
 }
 
 export const SavedMealCard: React.FC<SavedMealCardProps> = ({
   item,
   onPress,
   onUnsave,
+  onRollToday,
 }) => {
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
     Animated.spring(scale, {
-      toValue: 0.97,
+      toValue: 0.96,
       useNativeDriver: true,
-      friction: 5,
-      tension: 300,
+      tension: 240,
+      friction: 12,
     }).start();
   };
 
@@ -47,8 +49,8 @@ export const SavedMealCard: React.FC<SavedMealCardProps> = ({
     Animated.spring(scale, {
       toValue: 1,
       useNativeDriver: true,
-      friction: 4,
-      tension: 200,
+      tension: 180,
+      friction: 8,
     }).start();
   };
 
@@ -60,13 +62,26 @@ export const SavedMealCard: React.FC<SavedMealCardProps> = ({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
-        {/* Meal Photograph with Bookmark Badge */}
-        <View style={styles.imageContainer}>
+        {item.imageUrl ? (
           <Image
             source={{ uri: item.imageUrl }}
             style={styles.image}
             resizeMode="cover"
           />
+        ) : (
+          <View style={styles.editorialTile}>
+            <Ionicons name="restaurant-outline" size={26} color={colors.primary} />
+          </View>
+        )}
+
+        {/* Top Row: Time/Cost Pill + Bookmark Button */}
+        <View style={styles.topRow}>
+          <View style={styles.metaPill}>
+            <Text style={styles.metaPillText}>
+              {item.typeLabel} · {item.cost}
+            </Text>
+          </View>
+
           <Pressable
             style={styles.bookmarkBadge}
             onPress={(e) => {
@@ -79,17 +94,24 @@ export const SavedMealCard: React.FC<SavedMealCardProps> = ({
           </Pressable>
         </View>
 
-        {/* Meal Metadata */}
-        <View style={styles.metadata}>
-          <Text style={styles.typeLabel} numberOfLines={1}>
-            {item.typeLabel}
-          </Text>
+        {/* Bottom Scrim Overlay with Serif Title & Roll Action */}
+        <View style={styles.bottomScrim}>
           <Text style={styles.title} numberOfLines={2}>
             {item.title}
           </Text>
-          <Text style={styles.cost} numberOfLines={1}>
-            {item.cost}
-          </Text>
+          {onRollToday && (
+            <Pressable
+              style={styles.rollTodayPill}
+              onPress={(e) => {
+                e.stopPropagation();
+                onRollToday();
+              }}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="dice-outline" size={11} color="#FFFFFF" />
+              <Text style={styles.rollTodayText}>Roll today</Text>
+            </Pressable>
+          )}
         </View>
       </Pressable>
     </Animated.View>
@@ -101,61 +123,93 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   card: {
-    flex: 1,
-    gap: 10,
-  },
-  imageContainer: {
-    position: 'relative',
-    width: '100%',
-    height: 159,
-    borderRadius: 16,
+    height: 215,
+    borderRadius: 22,
     overflow: 'hidden',
-    backgroundColor: colors.linen200,
+    backgroundColor: '#1E211B',
+    justifyContent: 'space-between',
+    shadowColor: '#181512',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   image: {
+    ...StyleSheet.absoluteFill,
     width: '100%',
-    height: 159,
+    height: '100%',
+  },
+  editorialTile: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#262922',
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingTop: 10,
+  },
+  metaPill: {
+    backgroundColor: 'rgba(18, 20, 16, 0.72)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+  },
+  metaPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   bookmarkBadge: {
-    position: 'absolute',
-    top: 9,
-    right: 9,
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.snow200,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
     elevation: 2,
   },
-  metadata: {
-    gap: 4,
-    alignItems: 'flex-start',
-  },
-  typeLabel: {
-    fontSize: 11,
-    fontFamily: typography.fontFamily.semiBold,
-    fontWeight: '600',
-    color: colors.primary,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+  bottomScrim: {
+    paddingHorizontal: 12,
+    paddingTop: 22,
+    paddingBottom: 14,
+    backgroundColor: 'rgba(18, 20, 16, 0.72)',
   },
   title: {
-    fontSize: 22,
-    lineHeight: 24,
+    fontSize: 16,
+    lineHeight: 20,
     fontFamily: typography.fontFamily.serif,
-    fontWeight: '500',
-    color: colors.text.primary,
-    minHeight: 48,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
-  cost: {
-    fontSize: typography.fontSize.reassurance,
-    fontFamily: typography.fontFamily.regular,
-    color: colors.text.secondary,
+  rollTodayPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+  },
+  rollTodayText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
 

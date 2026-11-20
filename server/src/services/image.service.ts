@@ -39,12 +39,15 @@ export class ImageService {
     // Enhance prompt with editorial food photography styling
     const enhancedPrompt = `${prompt}, appetizing gourmet food photography, Michelin editorial style, natural 45-degree diffused window lighting, shallow depth of field, 50mm f/1.8 lens, high culinary aesthetics, photorealistic, no text, no watermark`;
 
-    // 2. Try Cloudflare Workers AI (Free Edge GPUs, FLUX.1 Schnell)
+    // 2. Try Cloudflare Workers AI (Free Edge GPUs, FLUX.1 Schnell, 7s timeout)
     if (cfAccountId && cfApiToken) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 7000);
       try {
         const response = await fetch(
           `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
           {
+            signal: controller.signal,
             method: 'POST',
             headers: {
               Authorization: `Bearer ${cfApiToken}`,
@@ -56,6 +59,7 @@ export class ImageService {
             }),
           }
         );
+        clearTimeout(timer);
 
         if (response.ok) {
           const contentType = response.headers.get('content-type') || '';
@@ -74,6 +78,7 @@ export class ImageService {
           }
         }
       } catch (err) {
+        clearTimeout(timer);
         console.warn('[ImageService] Cloudflare Workers AI error, trying fallback:', err);
       }
     }
