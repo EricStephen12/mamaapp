@@ -11,7 +11,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://mama-backend-4uql.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://mama-backend-0k9s.onrender.com"
       }
     },
     "preview": {
@@ -24,7 +24,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://mama-backend-4uql.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://mama-backend-0k9s.onrender.com"
       }
     },
     "production": {
@@ -34,7 +34,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://mama-backend-4uql.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://mama-backend-0k9s.onrender.com"
       }
     }
   },

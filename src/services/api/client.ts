@@ -7,7 +7,7 @@
 import { tokenStore } from './tokenStore';
 
 const BASE_URL = (
-  process.env.EXPO_PUBLIC_API_URL || 'https://mama-backend-4uql.onrender.com'
+  process.env.EXPO_PUBLIC_API_URL || 'https://mama-backend-0k9s.onrender.com'
 ).replace(/\/$/, '');
 
 export function wakeBackendServer(): void {

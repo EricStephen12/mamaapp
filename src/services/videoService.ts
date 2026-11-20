@@ -57,7 +57,7 @@ export const VideoService = {
         const videoData = response?.success && response?.video ? response.video : null;
         videoResolutionCache.set(key, videoData);
         return videoData;
-      } catch (_error) {
+      } catch {
         // Quietly fall back to high-res meal image if video is temporarily unavailable
         videoResolutionCache.set(key, null);
         return null;
