@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,8 @@ interface MealVideoPlayerProps {
     avatar?: string;
   };
   style?: StyleProp<ViewStyle>;
-  onPressCard?: () => void;
+  soundPillTop?: number;
+  creatorPillBottom?: number;
 }
 
 export const MealVideoPlayer: React.FC<MealVideoPlayerProps> = ({
@@ -31,17 +32,46 @@ export const MealVideoPlayer: React.FC<MealVideoPlayerProps> = ({
   isActive,
   creator,
   style,
+  soundPillTop = 14,
+  creatorPillBottom = 14,
 }) => {
   const [isMuted, setIsMuted] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const isActiveRef = useRef(isActive);
+
+  useEffect(() => {
+    isActiveRef.current = isActive;
+  }, [isActive]);
 
   // Initialize native high-performance player
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
     p.muted = true;
-    if (isActive) {
+    if (isActiveRef.current) {
       p.play();
     }
   });
+
+  // Subscribe to player status changes so playback starts reliably once buffered
+  useEffect(() => {
+    const subscription = player.addListener('statusChange', ({ status, error }) => {
+      if (status === 'readyToPlay') {
+        setHasError(false);
+        if (isActiveRef.current) {
+          player.play();
+        }
+      } else if (status === 'error') {
+        if (__DEV__) {
+          console.log('[MealVideoPlayer] Playback error:', error?.message);
+        }
+        setHasError(true);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [player]);
 
   // Keep play/pause in sync with card active state (conserve battery & RAM)
   useEffect(() => {
@@ -53,8 +83,10 @@ export const MealVideoPlayer: React.FC<MealVideoPlayerProps> = ({
   }, [isActive, player]);
 
   const toggleSound = (e: any) => {
-    e.stopPropagation?.();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    e?.stopPropagation?.();
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
     setIsMuted((prev) => {
       const next = !prev;
       player.muted = next;
@@ -64,41 +96,49 @@ export const MealVideoPlayer: React.FC<MealVideoPlayerProps> = ({
 
   return (
     <View style={[styles.container, style]}>
-      {/* Background Poster (guarantees zero black-flash before stream buffers) */}
+      {/* Background Poster (guarantees zero black-flash before stream buffers or on error) */}
       {posterUrl ? (
         <Image
           source={{ uri: posterUrl }}
-          style={StyleSheet.absoluteFill}
+          style={styles.fill}
           resizeMode="cover"
         />
       ) : null}
 
       {/* Hardware-Accelerated 60 FPS Video Layer */}
-      <VideoView
-        style={StyleSheet.absoluteFill}
-        player={player}
-        nativeControls={false}
-        contentFit="cover"
-      />
+      {!hasError ? (
+        <VideoView
+          style={styles.fill}
+          player={player}
+          nativeControls={false}
+          contentFit="cover"
+          surfaceType="textureView"
+          useExoShutter={false}
+          playsInline
+          pointerEvents="none"
+        />
+      ) : null}
 
       {/* Floating Sound Toggle Pill (Top Right) */}
-      <TouchableOpacity
-        style={styles.soundPill}
-        onPress={toggleSound}
-        activeOpacity={0.8}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Ionicons
-          name={isMuted ? 'volume-mute' : 'volume-high'}
-          size={14}
-          color="#FFFFFF"
-        />
-        <Text style={styles.soundPillText}>{isMuted ? 'Mute' : 'Live'}</Text>
-      </TouchableOpacity>
+      {!hasError ? (
+        <TouchableOpacity
+          style={[styles.soundPill, { top: soundPillTop }]}
+          onPress={toggleSound}
+          activeOpacity={0.8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons
+            name={isMuted ? 'volume-mute' : 'volume-high'}
+            size={14}
+            color="#FFFFFF"
+          />
+          <Text style={styles.soundPillText}>{isMuted ? 'Sound off' : 'Sound on'}</Text>
+        </TouchableOpacity>
+      ) : null}
 
       {/* Creator Attribution Pill (Bottom Left) */}
-      {creator?.unique_id ? (
-        <View style={styles.creatorPill}>
+      {!hasError && creator?.unique_id ? (
+        <View style={[styles.creatorPill, { bottom: creatorPillBottom }]} pointerEvents="none">
           <Ionicons name="logo-tiktok" size={11} color="#FFFFFF" />
           <Text style={styles.creatorText} numberOfLines={1}>
             @{creator.unique_id}
@@ -111,24 +151,36 @@ export const MealVideoPlayer: React.FC<MealVideoPlayerProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFill,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     overflow: 'hidden',
     backgroundColor: '#0F172A',
   },
+  fill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
   soundPill: {
     position: 'absolute',
-    top: 14,
     right: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
-    paddingHorizontal: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+    paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
-    zIndex: 10,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+    zIndex: 20,
   },
   soundPillText: {
     fontSize: 10,
@@ -138,19 +190,18 @@ const styles = StyleSheet.create({
   },
   creatorPill: {
     position: 'absolute',
-    bottom: 14,
     left: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    maxWidth: 160,
-    zIndex: 10,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    maxWidth: 155,
+    zIndex: 20,
   },
   creatorText: {
     fontSize: 10,

@@ -31,6 +31,8 @@ import { MamaDialogueService } from '../../services/mamaDialogueService';
 import { AiMamaService } from '../../services/aiMamaService';
 import { getCurrentTimeOfDay } from '../../services/api/rollService';
 import { MealImageService } from '../../services/mealImageService';
+import { VideoService, MealVideoData } from '../../services/videoService';
+import { MealVideoPlayer } from '../../components/MealVideoPlayer';
 import {
   InteractiveCookModal,
   DishRewardModal,
@@ -251,6 +253,27 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
       .then((resolvedUrl) => {
         if (isMounted && resolvedUrl) {
           setAiGeneratedImageEntry({ title: dishTitle, url: resolvedUrl });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [dishTitle, params?.ingredients]);
+
+  // Resolve live cooking video (reuses cached video from card deck instantly if already loaded)
+  const [mealVideo, setMealVideo] = useState<MealVideoData | null>(() =>
+    dishTitle ? VideoService.getCachedVideo(dishTitle) : null
+  );
+
+  useEffect(() => {
+    if (!dishTitle) return;
+    let isMounted = true;
+    const ingredientNames = params?.ingredients?.map((i) => i.name);
+    VideoService.resolveCookingVideo(dishTitle, ingredientNames)
+      .then((videoData) => {
+        if (isMounted && videoData) {
+          setMealVideo(videoData);
         }
       })
       .catch(() => {});
@@ -667,21 +690,33 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Animated.View style={[styles.container, { opacity: contentFade, transform: [{ translateY: contentY }] }]}>
-          {/* Hero Photo Banner: instant catalog base layer + live AI-generated dish image */}
-          {image ? (
+          {/* Hero Banner: live TikTok cooking video with instant photo fallback */}
+          {image || mealVideo?.videoUrl ? (
             <View style={styles.heroWrap}>
-              <Image
-                source={{ uri: catalogFallbackImage }}
-                style={styles.heroImage}
-                resizeMode="cover"
-              />
-              {aiGeneratedImage && aiGeneratedImage !== catalogFallbackImage ? (
-                <Image
-                  source={{ uri: aiGeneratedImage }}
-                  style={styles.heroAiOverlayImage}
-                  resizeMode="cover"
+              {mealVideo?.videoUrl ? (
+                <MealVideoPlayer
+                  videoUrl={mealVideo.videoUrl}
+                  posterUrl={mealVideo.coverUrl || catalogFallbackImage}
+                  isActive={true}
+                  creator={mealVideo.author}
+                  creatorPillBottom={52}
                 />
-              ) : null}
+              ) : (
+                <>
+                  <Image
+                    source={{ uri: catalogFallbackImage }}
+                    style={styles.heroImage}
+                    resizeMode="cover"
+                  />
+                  {aiGeneratedImage && aiGeneratedImage !== catalogFallbackImage ? (
+                    <Image
+                      source={{ uri: aiGeneratedImage }}
+                      style={styles.heroAiOverlayImage}
+                      resizeMode="cover"
+                    />
+                  ) : null}
+                </>
+              )}
               <View style={styles.timeTag}>
                 <Ionicons name="time-outline" size={13} color={colors.primary} />
                 <Text style={styles.timeTagText}>{cookTime}</Text>

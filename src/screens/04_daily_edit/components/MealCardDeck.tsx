@@ -86,34 +86,41 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
   );
 
   const [deckVideos, setDeckVideos] = useState<Record<string, MealVideoData | null>>({});
-  const resolvedTitlesRef = useRef<Set<string>>(new Set());
+  const inFlightTitlesRef = useRef<Set<string>>(new Set());
 
-  // Auto-resolve video for the active meal
+  // Debounced active-card-only video resolution (450ms):
+  // Prevents API spam when swiping rapidly across cards; only fetches the card the user actually settles on.
   useEffect(() => {
     const currentMeal = meals[activeIndex];
-    if (!currentMeal?.title) return;
+    const title = currentMeal?.title;
+    if (!title || currentMeal.videoUrl || isRolling) return;
 
-    const title = currentMeal.title;
-    if (resolvedTitlesRef.current.has(title) || currentMeal.videoUrl) return;
-    resolvedTitlesRef.current.add(title);
+    // Instant 0ms hit if already in shared VideoService cache (rendered directly via getCachedVideo)
+    if (VideoService.getCachedVideo(title)) {
+      return;
+    }
 
-    let isMounted = true;
-    VideoService.resolveCookingVideo(title, currentMeal.ingredients?.map((i) => i.name))
-      .then((videoData) => {
-        if (isMounted) {
-          setDeckVideos((prev) => ({ ...prev, [title]: videoData }));
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setDeckVideos((prev) => ({ ...prev, [title]: null }));
-        }
-      });
+    let isCancelled = false;
+    const debounceTimer = setTimeout(() => {
+      if (isCancelled || inFlightTitlesRef.current.has(title)) return;
+      inFlightTitlesRef.current.add(title);
+
+      VideoService.resolveCookingVideo(title, currentMeal.ingredients?.map((i) => i.name))
+        .then((videoData) => {
+          if (!isCancelled && videoData) {
+            setDeckVideos((prev) => ({ ...prev, [title]: videoData }));
+          }
+        })
+        .finally(() => {
+          inFlightTitlesRef.current.delete(title);
+        });
+    }, 450);
 
     return () => {
-      isMounted = false;
+      isCancelled = true;
+      clearTimeout(debounceTimer);
     };
-  }, [activeIndex, meals]);
+  }, [activeIndex, meals, isRolling]);
 
   // Sync scroll position when activeIndex changes externally or when a new meal lands at index 0
   useEffect(() => {
@@ -263,6 +270,7 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
           {(() => {
             const videoData =
               deckVideos[item.title] ||
+              VideoService.getCachedVideo(item.title) ||
               (item.videoUrl
                 ? {
                     id: item.id || item.title,
@@ -278,7 +286,7 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
               return (
                 <MealVideoPlayer
                   videoUrl={videoData.videoUrl}
-                  posterUrl={catalogImageUrl}
+                  posterUrl={videoData.coverUrl || catalogImageUrl}
                   isActive={index === activeIndex && !isRolling}
                   creator={videoData.author}
                 />
@@ -337,6 +345,7 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
         <Animated.FlatList
           ref={flatListRef}
           data={meals}
+          extraData={{ deckVideos, activeIndex, isRolling }}
           keyExtractor={(item, index) => `${item.id || item.title}-${index}`}
           horizontal
           showsHorizontalScrollIndicator={false}

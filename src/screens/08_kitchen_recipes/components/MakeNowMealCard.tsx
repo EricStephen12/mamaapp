@@ -49,25 +49,35 @@ export const MakeNowMealCard: React.FC<MakeNowMealCardProps> = ({
   onChooseToCook,
 }) => {
   const [isSaved, setIsSaved] = useState(false);
-  const [resolvedVideo, setResolvedVideo] = useState<MealVideoData | null>(null);
+  const [resolvedEntry, setResolvedEntry] = useState<{ title: string; data: MealVideoData } | null>(null);
   const passScale = useRef(new Animated.Value(1)).current;
   const saveScale = useRef(new Animated.Value(1)).current;
   const cookScale = useRef(new Animated.Value(1)).current;
 
-  // Resolve video for the featured dish
+  // Debounced video lookup for the featured dish (reuses shared cache instantly)
   useEffect(() => {
     if (!title || propVideoUrl) return;
-    let isMounted = true;
-    VideoService.resolveCookingVideo(title)
-      .then((data) => {
-        if (isMounted) setResolvedVideo(data);
-      })
-      .catch(() => {});
+    if (VideoService.getCachedVideo(title)) {
+      return;
+    }
+    let isCancelled = false;
+    const timer = setTimeout(() => {
+      VideoService.resolveCookingVideo(title)
+        .then((data) => {
+          if (!isCancelled && data) setResolvedEntry({ title, data });
+        })
+        .catch(() => {});
+    }, 450);
     return () => {
-      isMounted = false;
+      isCancelled = true;
+      clearTimeout(timer);
     };
   }, [title, propVideoUrl]);
 
+  const resolvedVideo =
+    resolvedEntry?.title === title
+      ? resolvedEntry.data
+      : VideoService.getCachedVideo(title);
   const activeVideoUrl = propVideoUrl || resolvedVideo?.videoUrl;
   const activeVideoAuthor = propVideoAuthor || resolvedVideo?.author;
 
@@ -123,9 +133,10 @@ export const MakeNowMealCard: React.FC<MakeNowMealCardProps> = ({
             {activeVideoUrl ? (
               <MealVideoPlayer
                 videoUrl={activeVideoUrl}
-                posterUrl={image}
+                posterUrl={resolvedVideo?.coverUrl || image}
                 isActive={true}
                 creator={activeVideoAuthor}
+                creatorPillBottom={48}
               />
             ) : (
               <Image

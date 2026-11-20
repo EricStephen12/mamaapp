@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
+import { MealVideoPlayer } from '../../../components/MealVideoPlayer';
+import { VideoService, MealVideoData } from '../../../services/videoService';
 
 export interface DiscoveryItem {
   id: string;
@@ -35,6 +37,37 @@ export const FeaturedDiscoveryCard: React.FC<FeaturedDiscoveryCardProps> = ({
   swipeAnim,
   cardOpacity,
 }) => {
+  const [videoEntry, setVideoEntry] = useState<{ title: string; data: MealVideoData } | null>(null);
+
+  useEffect(() => {
+    if (!item.title) return;
+
+    if (VideoService.getCachedVideo(item.title)) {
+      return;
+    }
+
+    let isCancelled = false;
+    const timer = setTimeout(() => {
+      VideoService.resolveCookingVideo(item.title)
+        .then((data) => {
+          if (!isCancelled && data) {
+            setVideoEntry({ title: item.title, data });
+          }
+        })
+        .catch(() => {});
+    }, 450);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [item.title]);
+
+  const activeVideo =
+    videoEntry?.title === item.title
+      ? videoEntry.data
+      : VideoService.getCachedVideo(item.title);
+
   const animatedStyle = swipeAnim
     ? {
         transform: [
@@ -58,7 +91,16 @@ export const FeaturedDiscoveryCard: React.FC<FeaturedDiscoveryCardProps> = ({
         onPress={onOpenDetails}
         style={styles.touchable}
       >
-        {item.imageUrl ? (
+        {activeVideo?.videoUrl ? (
+          <MealVideoPlayer
+            videoUrl={activeVideo.videoUrl}
+            posterUrl={activeVideo.coverUrl || item.imageUrl}
+            isActive={true}
+            creator={activeVideo.author}
+            soundPillTop={56}
+            creatorPillBottom={108}
+          />
+        ) : item.imageUrl ? (
           <Image
             source={{ uri: item.imageUrl }}
             style={styles.mealImage}

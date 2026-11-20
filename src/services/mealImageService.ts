@@ -1,18 +1,8 @@
 /**
- * Meal Image Resolver Service
- * Multi-Tier High-Performance Food Image Pipeline.
- *
- * Tier 1: In-Memory / Local Cache (Instant 0ms recall for previously seen dishes)
- * Tier 2: Fal.ai FLUX.1 Schnell (Sub-second photorealistic culinary AI generation)
- * Tier 3: Real Food Photography API (Pixabay fallback search)
- * Tier 4: Curated Authentic Cultural Library (Guaranteed zero 404s, zero broken images)
+ * Meal Poster / Fallback Photo Resolver
+ * Provides instant 0ms curated food photography as a clean poster placeholder
+ * while the real cooking video buffers. Zero AI image generation calls.
  */
-
-import { apiClient } from './api/client';
-
-// In-memory cache to guarantee zero redundant network fetches for AI-generated images
-const imageResolutionCache = new Map<string, string>();
-const pendingGenerations = new Map<string, Promise<string>>();
 
 // Hand-picked authentic photography for cultural staples (high-res, CDN-cached, 100% verified)
 // Ordered from most specific dish type to broadest staple so compound titles ("Jollof Spaghetti",
@@ -114,48 +104,15 @@ const CATALOG_URLS = new Set<string>([
   ...CURATED_CAROUSEL_GALLERY,
 ]);
 
-/**
- * Builds a culinary photography prompt for Fal.ai FLUX.1 Schnell
- */
-function buildFalPrompt(
-  title: string,
-  ingredients: { name: string }[] = [],
-  cuisineAnchor: string = 'african_caribbean'
-): string {
-  const cleanTitle = title.replace(/[^\w\s-]/g, '').trim();
-  const topIngredients = ingredients
-    .slice(0, 3)
-    .map((i) => i.name.replace(/[^\w\s-]/g, '').trim())
-    .filter((n) => n.length > 2 && !cleanTitle.toLowerCase().includes(n.toLowerCase()))
-    .join(', ');
-
-  const garnish = topIngredients ? `garnished with ${topIngredients}` : 'garnished with fresh herbs and peppers';
-
-  let regionalCue = 'authentic West African culinary presentation';
-  if (cuisineAnchor === 'african_caribbean') {
-    regionalCue = 'authentic West African food, rich savory palm oil and red pepper glaze';
-  } else if (cuisineAnchor === 'weeknight_comfort') {
-    regionalCue = 'homemade gourmet comfort dish, perfectly seasoned';
-  }
-
-  return `overhead professional food photography of authentic ${cleanTitle}, ${garnish}, ${regionalCue}, plated on artisanal ceramic tableware, warm restaurant lighting, appetizing glistening sauce, shallow depth of field, 4k resolution, culinary magazine cover`;
-}
-
 export const MealImageService = {
   /**
-   * Fast synchronous fallback resolver.
-   * Checks in-memory cache first, then the verified cultural library.
+   * Fast synchronous fallback poster resolver using the verified cultural library.
    */
   getFallbackMealImage(
     title: string,
     ingredients: { name: string }[] = [],
     cuisineAnchor: string = 'african_caribbean'
   ): string {
-    const cacheKey = title.toLowerCase().trim();
-    if (imageResolutionCache.has(cacheKey)) {
-      return imageResolutionCache.get(cacheKey)!;
-    }
-
     // 1. Match dish title first so side ingredients don't override the main dish category
     const titleLower = title.toLowerCase();
     for (const [keyword, url] of Object.entries(AUTHENTIC_CULTURAL_LIBRARY)) {
@@ -179,8 +136,7 @@ export const MealImageService = {
   },
 
   /**
-   * Resolves images for a multi-card carousel deck.
-   * Guarantees that every dish's image strictly matches its actual name and ingredients.
+   * Resolves poster images for a multi-card carousel deck.
    */
   getCarouselDeckImages(
     meals: { title: string; ingredients?: { name: string }[]; imageUrl?: string }[],
@@ -188,10 +144,6 @@ export const MealImageService = {
   ): string[] {
     const usedCatalogUrls = new Set<string>();
     return meals.map((meal, idx) => {
-      const cachedAi = imageResolutionCache.get(meal.title.toLowerCase().trim());
-      if (cachedAi && !CATALOG_URLS.has(cachedAi)) {
-        return cachedAi;
-      }
       if (meal.imageUrl && meal.imageUrl.trim().length > 0 && !CATALOG_URLS.has(meal.imageUrl)) {
         return meal.imageUrl;
       }
@@ -214,24 +166,18 @@ export const MealImageService = {
   },
 
   /**
-   * Synchronous resolver for browsing surfaces (carousel, discover, collection).
-   * Returns a cached image (if one was already generated for this dish) or the
-   * curated catalog photo. NEVER triggers paid AI generation — browsing is free.
+   * Synchronous poster resolver for browsing surfaces (0 network calls).
    */
   resolveMealImage(
     title: string,
     ingredients: { name: string }[] = [],
     cuisineAnchor: string = 'african_caribbean'
   ): string {
-    const cached = imageResolutionCache.get(title.toLowerCase().trim());
-    if (cached) return cached;
     return MealImageService.getFallbackMealImage(title, ingredients, cuisineAnchor);
   },
 
   /**
-   * True when the URL is one of our curated catalog photos (i.e. not a real
-   * dish-specific photo). Used to decide whether the recipe screen should
-   * generate a dish-accurate AI image.
+   * True when the URL is one of our curated catalog photos.
    */
   isCatalogImage(url?: string | null): boolean {
     if (!url) return true;
@@ -239,59 +185,25 @@ export const MealImageService = {
   },
 
   /**
-   * Paid, dish-accurate image generation. Only call this when the user has
-   * explicitly opened a recipe (AtHomeMealDetails). Results are cached so each
-   * dish is generated at most once per session.
+   * Instant poster resolution — AI image generation has been removed in favor of
+   * real live cooking videos. Returns immediately with 0 network calls.
    */
-  generateMealImage(
+  async generateMealImage(
     title: string,
     ingredients: { name: string }[] = [],
     cuisineAnchor: string = 'african_caribbean'
   ): Promise<string> {
-    const cacheKey = title.toLowerCase().trim();
-    const pending = pendingGenerations.get(cacheKey);
-    if (pending) return pending;
-
-    const job = MealImageService.resolveMealImageAsync(title, ingredients, cuisineAnchor).finally(
-      () => {
-        pendingGenerations.delete(cacheKey);
-      }
-    );
-    pendingGenerations.set(cacheKey, job);
-    return job;
+    return MealImageService.getFallbackMealImage(title, ingredients, cuisineAnchor);
   },
 
   /**
-   * Asynchronous resolver with Fal.ai FLUX.1 Schnell priority.
+   * Async alias returning the curated poster immediately with 0 AI calls.
    */
   async resolveMealImageAsync(
     title: string,
     ingredients: { name: string }[] = [],
     cuisineAnchor: string = 'african_caribbean'
   ): Promise<string> {
-    const cacheKey = title.toLowerCase().trim();
-    if (imageResolutionCache.has(cacheKey)) {
-      return imageResolutionCache.get(cacheKey)!;
-    }
-
-    // 1. Secure Backend Cloudflare Workers AI FLUX.1 Schnell (Zero API keys in the mobile APK)
-    try {
-      const prompt = buildFalPrompt(title, ingredients, cuisineAnchor);
-      const cfRes = await apiClient<{ imageUrl?: string }>('/api/images/generate', {
-        method: 'POST',
-        skipAuth: true,
-        timeoutMs: 10000,
-        body: JSON.stringify({ prompt, mealType: cuisineAnchor }),
-      });
-      if (cfRes?.imageUrl) {
-        imageResolutionCache.set(cacheKey, cfRes.imageUrl);
-        return cfRes.imageUrl;
-      }
-    } catch {
-      // Fall through to verified authentic cultural library
-    }
-
-    // 2. Guaranteed verified authentic cultural fallback
     return MealImageService.getFallbackMealImage(title, ingredients, cuisineAnchor);
   },
 };
