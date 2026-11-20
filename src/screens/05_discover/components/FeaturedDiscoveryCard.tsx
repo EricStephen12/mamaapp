@@ -93,6 +93,7 @@ export const FeaturedDiscoveryCard: React.FC<FeaturedDiscoveryCardProps> = ({
       >
         {activeVideo?.videoUrl ? (
           <MealVideoPlayer
+            videoId={activeVideo.id}
             videoUrl={activeVideo.videoUrl}
             posterUrl={activeVideo.coverUrl || item.imageUrl}
             isActive={true}

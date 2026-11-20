@@ -285,6 +285,7 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
             if (videoData?.videoUrl) {
               return (
                 <MealVideoPlayer
+                  videoId={videoData.id}
                   videoUrl={videoData.videoUrl}
                   posterUrl={videoData.coverUrl || catalogImageUrl}
                   isActive={index === activeIndex && !isRolling}

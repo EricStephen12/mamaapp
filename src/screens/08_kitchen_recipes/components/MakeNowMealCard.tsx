@@ -132,6 +132,7 @@ export const MakeNowMealCard: React.FC<MakeNowMealCardProps> = ({
           <View style={styles.imageWrapper}>
             {activeVideoUrl ? (
               <MealVideoPlayer
+                videoId={resolvedVideo?.id}
                 videoUrl={activeVideoUrl}
                 posterUrl={resolvedVideo?.coverUrl || image}
                 isActive={true}

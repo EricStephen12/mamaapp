@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
+  Linking,
   StyleProp,
   ViewStyle,
 } from 'react-native';
@@ -13,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
 interface MealVideoPlayerProps {
+  videoId?: string;
   videoUrl: string;
   posterUrl?: string;
   isActive: boolean;
@@ -27,6 +29,7 @@ interface MealVideoPlayerProps {
 }
 
 export const MealVideoPlayer: React.FC<MealVideoPlayerProps> = ({
+  videoId,
   videoUrl,
   posterUrl,
   isActive,
@@ -94,6 +97,20 @@ export const MealVideoPlayer: React.FC<MealVideoPlayerProps> = ({
     });
   };
 
+  const openCreatorTikTok = (e: any) => {
+    e?.stopPropagation?.();
+    const handle = creator?.unique_id?.replace(/^@/, '').trim();
+    if (!handle) return;
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
+    const isNumericTikTokId = videoId && /^\d{10,}$/.test(videoId);
+    const targetUrl = isNumericTikTokId
+      ? `https://www.tiktok.com/@${encodeURIComponent(handle)}/video/${videoId}`
+      : `https://www.tiktok.com/@${encodeURIComponent(handle)}`;
+    Linking.openURL(targetUrl).catch(() => {});
+  };
+
   return (
     <View style={[styles.container, style]}>
       {/* Background Poster (guarantees zero black-flash before stream buffers or on error) */}
@@ -136,14 +153,22 @@ export const MealVideoPlayer: React.FC<MealVideoPlayerProps> = ({
         </TouchableOpacity>
       ) : null}
 
-      {/* Creator Attribution Pill (Bottom Left) */}
+      {/* Clickable Creator Attribution Pill (Bottom Left -> Opens Creator's TikTok) */}
       {!hasError && creator?.unique_id ? (
-        <View style={[styles.creatorPill, { bottom: creatorPillBottom }]} pointerEvents="none">
+        <TouchableOpacity
+          style={[styles.creatorPill, { bottom: creatorPillBottom }]}
+          onPress={openCreatorTikTok}
+          activeOpacity={0.8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="link"
+          accessibilityLabel={`Watch original video by @${creator.unique_id} on TikTok`}
+        >
           <Ionicons name="logo-tiktok" size={11} color="#FFFFFF" />
           <Text style={styles.creatorText} numberOfLines={1}>
             @{creator.unique_id}
           </Text>
-        </View>
+          <Ionicons name="open-outline" size={11} color="rgba(226, 232, 240, 0.85)" />
+        </TouchableOpacity>
       ) : null}
     </View>
   );
@@ -194,18 +219,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(15, 23, 42, 0.72)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.76)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
-    maxWidth: 155,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+    maxWidth: 175,
     zIndex: 20,
   },
   creatorText: {
     fontSize: 10,
     fontWeight: '600',
     color: '#E2E8F0',
+    flexShrink: 1,
   },
 });
