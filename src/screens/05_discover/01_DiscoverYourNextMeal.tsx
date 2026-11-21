@@ -33,6 +33,7 @@ import { MealImageService } from '../../services/mealImageService';
 import { pantryService } from '../../services/api/pantryService';
 import { isMealDietCompliant, getCurrentTimeOfDay } from '../../services/api/rollService';
 import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
+import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DiscoverYourNextMeal'>;
 
@@ -555,6 +556,12 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
       {/* 1. TOP BAR */}
       <View style={styles.topBar}>
         <View style={styles.brandGroup}>
+          <RegionalMamaAvatar
+            countryCode={kitchenPass.country}
+            cuisineAnchor={kitchenPass.cuisineAnchor}
+            size={34}
+            onPress={() => setCountryModalVisible(true)}
+          />
           <Text style={styles.brandTitle}>Mama</Text>
           <Text style={styles.periodPillText}>Discover</Text>
         </View>
@@ -683,7 +690,7 @@ const styles = StyleSheet.create({
   },
   brandGroup: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     gap: 8,
   },
   brandTitle: {

@@ -45,6 +45,7 @@ import { useUserDataBank } from '../../context/UserDataBankContext';
 import { WeeklyBalanceCard } from './components/WeeklyBalanceCard';
 import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
 import { SimmerDot } from '../../components/signature/SteamWisps';
+import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
 import { MealCardDeck } from './components/MealCardDeck';
 import { RollRevealModal } from './components/RollRevealModal';
 import { MamaPopUpModal } from './components/MamaPopUpModal';
@@ -785,9 +786,15 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
       <StatusBar style="dark" />
       <KitchenAtmosphere period={mealPeriod} />
 
-      {/* 1. COMPACT TOP STATUS BAR (Brand + Icons cluster) */}
+      {/* 1. COMPACT TOP STATUS BAR (Regional Mama Medallion + Brand + Icons cluster) */}
       <View style={styles.topBar}>
         <View style={styles.brandGroup}>
+          <RegionalMamaAvatar
+            countryCode={kitchenPass.country}
+            cuisineAnchor={kitchenPass.cuisineAnchor}
+            size={36}
+            onPress={() => setCountryModalVisible(true)}
+          />
           <Text style={styles.brandTitle}>Mama</Text>
           <TouchableOpacity
             onPress={handleCycleMealPeriod}
@@ -1014,7 +1021,7 @@ const styles = StyleSheet.create({
   },
   brandGroup: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     gap: 8,
   },
   brandTitle: {
