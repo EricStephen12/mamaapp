@@ -15,6 +15,7 @@
  */
 
 import { Platform } from 'react-native';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import Purchases, {
   CustomerInfo,
   LOG_LEVEL,
@@ -26,6 +27,13 @@ import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { preferencesStore } from './preferencesStore';
 
 export const PRO_ENTITLEMENT_ID = 'mama_kitchen_pro';
+
+/**
+ * Expo Go can't run native RevenueCat billing. Its "Preview API Mode" returns mock
+ * products (e.g. $9.99/mo) and the Paywall UI throws "document is not available".
+ * So in Expo Go we skip RevenueCat entirely and use Mama's own $1/mo preview flow.
+ */
+const IS_EXPO_GO = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 const IOS_KEY =
   process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ||
@@ -116,7 +124,7 @@ export const subscriptionService = {
    */
   async init(appUserId?: string | null): Promise<void> {
     const apiKey = getApiKey();
-    if (!apiKey || configured || Platform.OS === 'web') return;
+    if (!apiKey || configured || Platform.OS === 'web' || IS_EXPO_GO) return;
 
     try {
       Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.WARN);
