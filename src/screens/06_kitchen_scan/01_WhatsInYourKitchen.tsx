@@ -166,7 +166,9 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.countPill}>
             <Ionicons name="basket-outline" size={13} color={colors.primary} />
             <Text style={styles.countPillText}>
-              {kitchenItems.length > 0 ? `${kitchenItems.length} in house` : 'Empty kitchen'}
+              {kitchenItems.length > 0
+                ? `${kitchenItems.length} ${kitchenItems.length === 1 ? 'item' : 'items'}`
+                : 'Empty kitchen'}
             </Text>
           </View>
 

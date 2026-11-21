@@ -610,7 +610,9 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
           >
             <Ionicons name="basket-outline" size={13} color={colors.primary} />
             <Text style={styles.headerChipText}>
-              {pantryItems.length > 0 ? `${pantryItems.length} in house` : 'Kitchen'}
+              {pantryItems.length > 0
+                ? `${pantryItems.length} ${pantryItems.length === 1 ? 'item' : 'items'}`
+                : 'Kitchen'}
             </Text>
           </TouchableOpacity>
 
