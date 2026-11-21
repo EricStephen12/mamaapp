@@ -207,20 +207,21 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
 
   // Subscribe to kitchen pass preferences and keep meal synced when culinary preferences change
   const prevPrefsKeyRef = useRef<string>(
-    `${kitchenPass.cuisineAnchor}|${kitchenPass.bodyGoal}|${kitchenPass.timeLimitMinutes}|${(kitchenPass.dietaryRestrictions || []).join(',')}`
+    `${kitchenPass.country}|${kitchenPass.cuisineAnchor}|${kitchenPass.bodyGoal}|${kitchenPass.timeLimitMinutes}|${(kitchenPass.dietaryRestrictions || []).join(',')}`
   );
 
   useEffect(() => {
     const unsub = preferencesStore.subscribe((updated) => {
       setKitchenPass(updated);
-      const nextPrefsKey = `${updated.cuisineAnchor}|${updated.bodyGoal}|${updated.timeLimitMinutes}|${(updated.dietaryRestrictions || []).join(',')}`;
+      const nextPrefsKey = `${updated.country}|${updated.cuisineAnchor}|${updated.bodyGoal}|${updated.timeLimitMinutes}|${(updated.dietaryRestrictions || []).join(',')}`;
       if (nextPrefsKey !== prevPrefsKeyRef.current) {
         prevPrefsKeyRef.current = nextPrefsKey;
         const newDeck = getInitialMealDeck(mealPeriod, updated);
         setMealsDeck(newDeck);
         setActiveMealIndex(0);
-        const matchedMeal = newDeck[0];
         const currentPantry = pantryService.getCachedPantry().map((i) => i.name);
+        setPantryItems(currentPantry);
+        const matchedMeal = newDeck[0];
         const voice = MamaDialogueService.getSyncedMamaVoice({
           timeOfDay: mealPeriod,
           pass: updated,
@@ -242,6 +243,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
         rollService
           .rollNextMeal(mealPeriod, matchedMeal.title)
           .then(async (aiMeal) => {
+            if (prevPrefsKeyRef.current !== nextPrefsKey) return;
             const photoPromise = MealImageService.generateMealImage(
               aiMeal.title,
               aiMeal.ingredients,
@@ -251,6 +253,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
               photoPromise,
               new Promise<null>((resolve) => setTimeout(() => resolve(null), 3200)),
             ]);
+            if (prevPrefsKeyRef.current !== nextPrefsKey) return;
             const hydratedMeal: RolledMeal = fastPhotoUrl
               ? { ...aiMeal, imageUrl: fastPhotoUrl }
               : aiMeal;

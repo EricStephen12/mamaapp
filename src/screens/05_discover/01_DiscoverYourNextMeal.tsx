@@ -74,7 +74,7 @@ const DISCOVER_FILTERS: {
   { id: 'light_night', label: 'Light (<400 cal)', icon: 'moon-outline' },
 ];
 
-const CURATED_HEALTHY_DECK: RawDiscoveryItem[] = [
+const CURATED_HEALTHY_DECK_AFRICA: RawDiscoveryItem[] = [
   {
     id: 'healthy-grilled-tilapia-greens',
     categoryType: 'home',
@@ -238,6 +238,147 @@ const CURATED_HEALTHY_DECK: RawDiscoveryItem[] = [
   },
 ];
 
+const CURATED_HEALTHY_DECK_WESTERN: RawDiscoveryItem[] = [
+  {
+    id: 'west-lemon-herb-chicken-greens',
+    categoryType: 'home',
+    cookTimeOrDistance: '14 MIN',
+    title: 'Lemon Herb Chicken & Green Beans',
+    nutrition: '40g PROTEIN · CLEAN',
+    reason: 'Pan-seared chicken breast glazed with fresh lemon, garlic, and crisp green beans.',
+    imageUrl: '',
+    baseCostUsd: 2.8,
+    cuisineTags: ['clean_healthy', 'high_protein'],
+    healthCategory: 'clean_healthy',
+    ingredients: [
+      { name: 'Chicken Breast Fillet', amount: '200g' },
+      { name: 'Green Beans or Broccoli', amount: '2 cups' },
+      { name: 'Lemon & Garlic Clove', amount: '1/2 squeezed' },
+      { name: 'Olive Oil & Thyme', amount: '1 tbsp' },
+    ],
+    steps: [
+      'Season chicken breast with salt, black pepper, dried thyme, and minced garlic.',
+      'Pan-sear in olive oil for 5 mins per side until golden and juicy.',
+      'Toss green beans into the pan with a squeeze of fresh lemon for 3 mins until tender-crisp.',
+    ],
+  },
+  {
+    id: 'west-seared-salmon-garlic-spinach',
+    categoryType: 'home',
+    cookTimeOrDistance: '12 MIN',
+    title: 'Seared Salmon & Garlic Spinach',
+    nutrition: 'OMEGA-3 · 380 KCAL',
+    reason: 'Crispy-skin salmon fillet over warm olive oil wilted spinach—ready in 12 minutes.',
+    imageUrl: '',
+    baseCostUsd: 3.4,
+    cuisineTags: ['clean_healthy', 'high_protein', 'light_night'],
+    healthCategory: 'high_protein',
+    ingredients: [
+      { name: 'Salmon Fillet', amount: '1 fillet (180g)' },
+      { name: 'Fresh Baby Spinach', amount: '3 cups' },
+      { name: 'Garlic & Lemon Wedge', amount: '2 cloves' },
+      { name: 'Olive Oil', amount: '1 tsp' },
+    ],
+    steps: [
+      'Pat salmon dry, season with sea salt and pepper, and sear skin-side down for 4 mins.',
+      'Flip gently and cook 3 more minutes until flaky.',
+      'Wilt baby spinach in the same warm pan with minced garlic and serve immediately.',
+    ],
+  },
+  {
+    id: 'west-avocado-egg-sourdough',
+    categoryType: 'home',
+    cookTimeOrDistance: '10 MIN',
+    title: 'Avocado & Soft Eggs on Sourdough',
+    nutrition: 'GUT FRIENDLY · 350 KCAL',
+    reason: 'Toasted crusty sourdough with smashed lemon avocado and protein-rich soft eggs.',
+    imageUrl: '',
+    baseCostUsd: 2.2,
+    cuisineTags: ['clean_healthy', 'light_night'],
+    healthCategory: 'clean_healthy',
+    ingredients: [
+      { name: 'Sourdough Bread', amount: '2 slices' },
+      { name: 'Eggs', amount: '2 large' },
+      { name: 'Ripe Avocado', amount: '1/2 mashed' },
+      { name: 'Chili Flakes & Lemon', amount: 'Pinch' },
+    ],
+    steps: [
+      'Toast sourdough slices until crisp and golden.',
+      'Soft-boil or poach 2 eggs for 6-7 minutes.',
+      'Spread smashed avocado with lemon and sea salt over toast, top with eggs and chili flakes.',
+    ],
+  },
+  {
+    id: 'west-garlic-prawns-zucchini',
+    categoryType: 'home',
+    cookTimeOrDistance: '11 MIN',
+    title: 'Garlic Butter Prawns & Zucchini',
+    nutrition: 'LIGHT · 290 KCAL',
+    reason: 'Quick one-pan garlic prawns with seared zucchini rounds—light and bloat-free.',
+    imageUrl: '',
+    baseCostUsd: 3.1,
+    cuisineTags: ['light_night', 'high_protein'],
+    healthCategory: 'light_night',
+    ingredients: [
+      { name: 'Prawns / Shrimp', amount: '180g peeled' },
+      { name: 'Zucchini / Courgette', amount: '1 medium sliced' },
+      { name: 'Butter & Garlic', amount: '1 tbsp + 2 cloves' },
+      { name: 'Fresh Parsley & Lemon', amount: 'To finish' },
+    ],
+    steps: [
+      'Sauté sliced zucchini in a hot pan with a touch of butter for 3 mins.',
+      'Add garlic and prawns; sear for 3 mins until pink and curled.',
+      'Finish with lemon juice and chopped parsley and serve hot.',
+    ],
+  },
+  {
+    id: 'west-mediterranean-feta-scramble',
+    categoryType: 'home',
+    cookTimeOrDistance: '9 MIN',
+    title: 'Tomato, Spinach & Feta Scramble',
+    nutrition: '28g PROTEIN · LIGHT',
+    reason: 'Warm cherry tomatoes, wilted spinach, and creamy feta folded into fluffy eggs.',
+    imageUrl: '',
+    baseCostUsd: 2.0,
+    cuisineTags: ['clean_healthy', 'light_night'],
+    healthCategory: 'light_night',
+    ingredients: [
+      { name: 'Eggs', amount: '3 large' },
+      { name: 'Cherry Tomatoes & Spinach', amount: '1 cup' },
+      { name: 'Crumbled Feta Cheese', amount: '2 tbsp' },
+      { name: 'Olive Oil & Oregano', amount: '1 tsp' },
+    ],
+    steps: [
+      'Blister halved cherry tomatoes in olive oil for 2 mins with dried oregano.',
+      'Toss in spinach until just wilted, then pour in beaten eggs.',
+      'Fold gently on low heat, scatter crumbled feta on top, and plate warm.',
+    ],
+  },
+  {
+    id: 'west-turkey-sweet-potato-skillet',
+    categoryType: 'home',
+    cookTimeOrDistance: '15 MIN',
+    title: 'Herb Turkey & Sweet Potato Hash',
+    nutrition: '38g PROTEIN · BALANCED',
+    reason: 'Lean seasoned turkey mince cooked with tender sweet potato cubes and herbs.',
+    imageUrl: '',
+    baseCostUsd: 2.6,
+    cuisineTags: ['high_protein'],
+    healthCategory: 'high_protein',
+    ingredients: [
+      { name: 'Lean Turkey Mince', amount: '180g' },
+      { name: 'Sweet Potato', amount: '1 small diced fine' },
+      { name: 'Onion & Bell Pepper', amount: '1/2 diced' },
+      { name: 'Paprika & Olive Oil', amount: '1 tsp each' },
+    ],
+    steps: [
+      'Sauté finely diced sweet potato with olive oil and a splash of water covered for 6 mins.',
+      'Add diced onion, pepper, paprika, and turkey mince; brown for 6 mins.',
+      'Season with salt and pepper and serve straight from the skillet.',
+    ],
+  },
+];
+
 export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
   const { isInsideTabs, activeTab, setActiveTab } = useTabNavigation();
   const isDiscoverVisible = !isInsideTabs || activeTab === 'discover';
@@ -261,7 +402,10 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [passModalVisible, setPassModalVisible] = useState(false);
-  const [apiRawDeck, setApiRawDeck] = useState<RawDiscoveryItem[]>([]);
+  const [apiDeckState, setApiDeckState] = useState<{
+    regionKey: string;
+    meals: RawDiscoveryItem[];
+  }>({ regionKey: '', meals: [] });
   const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
   const [postVideos, setPostVideos] = useState<Record<string, MealVideoData>>({});
   const inFlightVideoRef = useRef<Set<string>>(new Set());
@@ -323,13 +467,15 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
 
   const dietKey = (kitchenPass.dietaryRestrictions || []).join(',');
   const pantrySig = [...pantryItems].sort().join(',');
+  const regionKey = `${kitchenPass.country}|${kitchenPass.cuisineAnchor}`;
 
   useEffect(() => {
     let isMounted = true;
+    const requestRegionKey = `${kitchenPass.country}|${kitchenPass.cuisineAnchor}`;
     AiMamaService.generateDiscoverDeck(kitchenPass, pantryItems)
       .then((meals) => {
         if (isMounted && Array.isArray(meals) && meals.length > 0) {
-          setApiRawDeck(meals);
+          setApiDeckState({ regionKey: requestRegionKey, meals });
         }
       })
       .catch(() => {});
@@ -348,25 +494,54 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
   ]);
 
   const filteredRawDeck = useMemo<RawDiscoveryItem[]>(() => {
-    // Dietary and permanent ban filter applied to curated list
-    const dietCompliantCurated = CURATED_HEALTHY_DECK.filter((m) =>
-      isMealDietCompliant(
-        {
-          id: m.id,
-          title: m.title,
-          subtitle: m.reason,
-          timeOfDay: 'dinner',
-          cookTimeMinutes: 15,
-          estCost: m.baseCostUsd,
-          ingredients: m.ingredients || [],
-          steps: m.steps || [],
-        },
-        kitchenPass
-      )
+    const isWesternCountry = [
+      'GB',
+      'UK',
+      'US',
+      'CA',
+      'EU',
+      'AU',
+      'NZ',
+      'FR',
+      'DE',
+      'IT',
+      'ES',
+      'NL',
+      'IE',
+    ].includes((kitchenPass.country || '').toUpperCase());
+
+    const regionalCuratedDeck =
+      kitchenPass.cuisineAnchor === 'global'
+        ? [...CURATED_HEALTHY_DECK_AFRICA, ...CURATED_HEALTHY_DECK_WESTERN]
+        : kitchenPass.cuisineAnchor === 'weeknight_comfort' ||
+            (kitchenPass.cuisineAnchor !== 'african_caribbean' && isWesternCountry)
+          ? CURATED_HEALTHY_DECK_WESTERN
+          : CURATED_HEALTHY_DECK_AFRICA;
+
+    const neverShow = (kitchenPass.neverShowDishes || []).map((t) => t.toLowerCase());
+
+    // Dietary and permanent ban filter applied to regional curated list
+    const dietCompliantCurated = regionalCuratedDeck.filter(
+      (m) =>
+        !neverShow.includes(m.title.toLowerCase()) &&
+        isMealDietCompliant(
+          {
+            id: m.id,
+            title: m.title,
+            subtitle: m.reason,
+            timeOfDay: 'dinner',
+            cookTimeMinutes: 15,
+            estCost: m.baseCostUsd,
+            ingredients: m.ingredients || [],
+            steps: m.steps || [],
+          },
+          kitchenPass
+        )
     );
 
+    const activeApiMeals = apiDeckState.regionKey === regionKey ? apiDeckState.meals : [];
     const seen = new Set<string>();
-    const combined = [...apiRawDeck, ...dietCompliantCurated].filter((m) => {
+    const combined = [...activeApiMeals, ...dietCompliantCurated].filter((m) => {
       const key = m.title.toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
@@ -382,7 +557,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
         (Array.isArray(item.cuisineTags) && item.cuisineTags.includes(activeFilter))
     );
     return matching.length > 0 ? matching : combined;
-  }, [activeFilter, apiRawDeck, kitchenPass]);
+  }, [activeFilter, apiDeckState, regionKey, kitchenPass]);
 
   const feedPosts = useMemo<FeedPostItem[]>(() => {
     const deckPhotos = MealImageService.getCarouselDeckImages(

@@ -1289,23 +1289,26 @@ Title Rules:
         diets.length > 0 && !diets.includes('none')
           ? `Strict Dietary Restrictions: ${diets.join(', ')}. NEVER include forbidden ingredients.`
           : '';
-      const likedHistory = (pass.likedDishes || []).slice(-10);
+      const isAfricanOrIsland = pass.cuisineAnchor === 'african_caribbean';
+      const baseExamples = isAfricanOrIsland
+        ? 'rice, yam, plantain, beans, noodles, soups, eggs, chicken, fish'
+        : 'pasta, potatoes, rice, bread/sourdough, tortillas, oats, chicken, salmon, eggs, fresh veggies';
 
-      const systemPrompt = `You are Mama, a warm home-cooking mother figure.
-Generate 5 distinct, realistic everyday home meals for a user in ${pass.countryName}.
-Cuisine preference: ${pass.cuisineLabel || 'Everyday Comfort'}
+      const systemPrompt = `You are Mama, a warm local home-cooking mother figure in ${pass.countryName}.
+Generate 5 distinct, realistic everyday home meals for a user living in ${pass.countryName}.
+Cuisine style: ${pass.cuisineLabel || 'Everyday Comfort'}
 Cooking gear: ${pass.cookingGearLabel || '1 Pan & Burner'}
 Max cook time: ${pass.timeLimitMinutes || 20} minutes
 Body goal: ${pass.bodyGoalLabel || 'Balanced Energy'}
 ${dietaryPrompt}
-${likedHistory.length > 0 ? `Flavor inspiration (loved by user): ${likedHistory.join(', ')}.` : ''}
 ${pantryItems.length > 0 ? `Available pantry items: ${pantryItems.join(', ')}` : ''}
 ${neverShow.length > 0 ? `Never suggest: ${neverShow.join(', ')}` : ''}
 
 Rules:
-1. Every dish title MUST be a real, simple 2-4 word everyday meal name people actually say at home (NO restaurant buzzwords like Skillet, Bowl, Sizzle, Medley, Artisan, Crusted, Velvety).
-2. Make all 5 dishes genuinely different from each other (vary the base: rice, pasta, yam, plantain, beans, potatoes, bread, noodles, soups, proteins).
-3. Output strictly JSON:
+1. STRICT REGIONAL IDENTITY: Every single dish MUST belong authentically to ${pass.countryName} (${pass.cuisineLabel || 'Everyday Comfort'}) using normal local supermarket staples. NEVER mix in dishes or specialty ingredients from unrelated continents.
+2. Every dish title MUST be a real, simple 2-4 word everyday meal name people actually say at home (NO restaurant buzzwords like Skillet, Bowl, Sizzle, Medley, Artisan, Crusted, Velvety).
+3. Make all 5 dishes genuinely different from each other (vary the base: ${baseExamples}).
+4. Output strictly JSON:
 {
   "meals": [
     {
@@ -1452,26 +1455,28 @@ Rules:
     ingredients: { name: string; amount: string }[];
     steps: string[];
   } | null> {
+    const isAfricanOrIsland = pass.cuisineAnchor === 'african_caribbean';
+
     const anglesByPeriod: Record<'morning' | 'lunch' | 'dinner' | 'late_night', string[]> = {
       morning: [
         'a quick, energizing breakfast that can be cooked in minutes with warm carbs and satisfying protein',
         'a vibrant, high-protein morning scramble, omelette, or savory porridge that fuels focus and energy',
-        'a simple, warm toasted or boiled comfort staple with a fragrant pepper or egg sauce',
+        'a simple, warm toasted or comforting morning staple with eggs or savory sauce',
       ],
       lunch: [
-        'a savory, aromatic grain or pasta skillet that hits the midday hunger spot',
-        'a hearty, nutrient-dense legume, root, or plantain combo with deep comforting home flavors',
-        'a fast, high-protein skillet sauté with peppers, onions, and bold spices',
+        'a savory, aromatic grain, rice, or pasta dish that hits the midday hunger spot',
+        'a hearty, nutrient-dense legume, root, or carb-and-protein home favorite',
+        'a fast, high-protein pan sauté with fresh vegetables, onions, and local seasoning',
       ],
       dinner: [
         'a deeply comforting evening home plate that warms the soul after a long day',
-        'a light, soothing pepper broth or seasoned pan-seared fish/protein with greens',
-        'a fast, budget-friendly 1-pan skillet dinner with intense flavors and zero wasted food',
-        'a rich tomato, pepper, or spiced stew paired with a tender cooked staple',
+        'a light, soothing broth or seasoned pan-seared fish or chicken with greens',
+        'a fast, budget-friendly 1-pan dinner with rich local flavors and zero wasted food',
+        'a comforting homestyle sauce or stew paired with a tender local staple',
       ],
       late_night: [
         'a quick, soothing under-10-minute late-night fix that is gentle on digestion',
-        'a cozy, savory warm egg or noodle dish with gentle spices',
+        'a cozy, savory warm egg, toast, or noodle dish with gentle spices',
       ],
     };
     const periodAngles = anglesByPeriod[timeOfDay] || anglesByPeriod.dinner;
@@ -1485,38 +1490,47 @@ Rules:
 
       let goalPrompt = '';
       if (pass.bodyGoal === 'curves_glutes') {
-        goalPrompt = 'Body & Wellness Goal: Curves & Glutes (Hips & Body Fullness). Prioritize wholesome natural protein (eggs, mackerel/fish, chicken, beans, beef) paired with complex slow-burning carbs (boiled yam, plantains, sweet potato, oats).';
+        goalPrompt = isAfricanOrIsland
+          ? 'Body & Wellness Goal: Curves & Glutes (Hips & Body Fullness). Prioritize wholesome natural protein (eggs, mackerel/fish, chicken, beans, beef) paired with complex slow-burning carbs (boiled yam, plantains, sweet potato, oats).'
+          : 'Body & Wellness Goal: Curves & Glutes (Hips & Body Fullness). Prioritize wholesome natural protein (eggs, salmon, chicken, beans, lean beef) paired with complex slow-burning carbs (sweet potato, potatoes, oats, sourdough, rice).';
       } else if (pass.bodyGoal === 'reduce_weight') {
-        goalPrompt = 'Body & Wellness Goal: Lean & Light (Weight Loss). Prioritize high protein, fresh leafy greens, fragrant pepper broths, and light cooking oil.';
+        goalPrompt =
+          'Body & Wellness Goal: Lean & Light (Weight Loss). Prioritize high protein, fresh leafy greens, light broths or pan-seared proteins, and light cooking oil.';
       } else if (pass.bodyGoal === 'add_weight') {
-        goalPrompt = 'Body & Wellness Goal: Gain Weight & Stamina (Healthy Bulk). Prioritize calorie-dense wholesome staples (yam, rice, beans, plantains, comforting stews).';
+        goalPrompt = isAfricanOrIsland
+          ? 'Body & Wellness Goal: Gain Weight & Stamina (Healthy Bulk). Prioritize calorie-dense wholesome staples (yam, rice, beans, plantains, comforting stews).'
+          : 'Body & Wellness Goal: Gain Weight & Stamina (Healthy Bulk). Prioritize calorie-dense wholesome staples (pasta, potatoes, rice, hearty proteins, avocado, olive oil).';
       } else {
-        goalPrompt = 'Body & Wellness Goal: Balanced Energy. Prioritize wholesome, balanced home staples that give steady stamina throughout the day.';
+        goalPrompt =
+          'Body & Wellness Goal: Balanced Energy. Prioritize wholesome, balanced home staples that give steady stamina throughout the day.';
       }
+
+      const emptyPantryExamples = isAfricanOrIsland
+        ? 'eggs, plantain, yam, indomie, rice, tomatoes'
+        : 'eggs, pasta, bread, potatoes, chicken, rice';
 
       const neverShow = pass.neverShowDishes || [];
       const sessionPassed = passedTitles || [];
-      const likedHistory = (pass.likedDishes || []).slice(-10);
 
-      const systemPrompt = `You are Mama, a loving, wise home-cook mother figure in Mama Kitchen.
+      const systemPrompt = `You are Mama, a loving, wise local home-cook mother figure in ${pass.countryName}.
 Suggest ONE realistic everyday home meal for ${timeOfDay}.
-User: ${pass.countryName} (${pass.currencyCode}), Cooking Gear: ${pass.cookingGearLabel || '1 Pan'}, Time: under ${pass.timeLimitMinutes || 15} mins, Cuisine: ${pass.cuisineLabel}.
+User Country: ${pass.countryName} (${pass.currencyCode}), Cooking Gear: ${pass.cookingGearLabel || '1 Pan'}, Time: under ${pass.timeLimitMinutes || 15} mins, Cuisine: ${pass.cuisineLabel}.
 Creative Direction: Explore ${randomAngle}.
 ${goalPrompt}
 ${dietaryPrompt}
-${likedHistory.length > 0 ? `Flavor inspiration (loved by user): ${likedHistory.join(', ')}.` : ''}
 ${pantryItems.length > 0
   ? `Pantry Staples at Home: ${pantryItems.join(', ')}. Prioritize using 2+ of these exact items so user can cook immediately without shopping!`
-  : `EMPTY PANTRY: User has no food at home and is deciding what to cook to pick up 2-3 cheap, basic staples at the market (e.g. eggs, plantain, yam, indomie, rice, pasta). Set "pantryNote" to "Market run: 3 simple staples to pick up".`}
+  : `EMPTY PANTRY: User has no food at home and is deciding what to cook to pick up 2-3 cheap, basic local staples at the market (e.g. ${emptyPantryExamples}). Set "pantryNote" to "Market run: 3 simple staples to pick up".`}
 ${neverShow.length > 0 ? `NEVER suggest: ${neverShow.join(', ')}.` : ''}
 ${sessionPassed.length > 0 ? `Avoid recent skips: ${sessionPassed.join(', ')}.` : ''}
 
 Rules:
-1. Authentic everyday home favorite matching ${pass.cuisineLabel}. Short title (2-4 words, real home dish name). No buzzwords like "skillet", "crispy", "golden", "frittata", "bowl", "hash", "loaded".
-2. Realistic home ingredients with amounts (e.g. "2 large", "1 cup", "1 tbsp").
-3. 3 practical steps with real times.
-4. "mamaTip": warm 1-sentence cooking/nutrition tip from Mama (<18 words, zero emojis).
-5. "estCost": base USD between 1.0 and 3.5.
+1. STRICT REGIONAL IDENTITY: You are the local Mama of ${pass.countryName} (${pass.cuisineLabel}). Suggest ONLY an authentic everyday home meal eaten in ${pass.countryName} using normal local grocery ingredients. NEVER mix in dishes or specialty ingredients from unrelated continents.
+2. Short title (2-4 words, real home dish name). No buzzwords like "skillet", "crispy", "golden", "frittata", "bowl", "hash", "loaded".
+3. Realistic home ingredients with amounts (e.g. "2 large", "1 cup", "1 tbsp").
+4. 3 practical steps with real times.
+5. "mamaTip": warm 1-sentence cooking/nutrition tip from Mama (<18 words, zero emojis).
+6. "estCost": base USD between 1.0 and 3.5.
 
 Strictly output JSON:
 {

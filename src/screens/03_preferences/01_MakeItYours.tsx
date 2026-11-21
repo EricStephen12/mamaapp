@@ -25,7 +25,7 @@ import {
   BodyGoal,
 } from '../../services/preferencesStore';
 import { pantryService } from '../../services/api/pantryService';
-import { getCurrentTimeOfDay } from '../../services/api/rollService';
+import { getCurrentTimeOfDay, rollService } from '../../services/api/rollService';
 import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
 import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
 import { MamaSealStamp } from '../../components/signature/MamaSealStamp';
@@ -44,20 +44,15 @@ const BODY_GOAL_OPTIONS: {
   { id: 'balanced', title: 'Balanced', icon: 'fitness-outline' },
 ];
 
-const STARTER_STAPLES = [
+const COMMON_PANTRY_STAPLES = [
   'Eggs',
   'Onions',
   'Tomatoes',
   'Rice',
-  'Plantains',
-  'Yam',
-  'Beans',
+  'Cooking Oil',
   'Chicken',
   'Pasta',
   'Bread',
-  'Indomie',
-  'Cooking Oil',
-  'Sardines',
   'Potatoes',
 ];
 
@@ -201,8 +196,6 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
     const customBudget =
       Number.isFinite(parsedBudget) && parsedBudget > 0 ? parsedBudget : undefined;
 
-    preferencesStore.updateCountryAndCurrency(selectedCountryId, undefined, customBudget);
-
     // Commit any typed allergy or pantry item that the user didn't press '+' on yet
     const baseDiets = selectedDiets.filter((d) => d !== 'none');
     const pendingDiet = customDietInput.trim();
@@ -220,6 +213,14 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
         ? [pendingPantry, ...kitchenItems]
         : kitchenItems;
 
+    // Reset cached AI meals & sync the new Mama's pantry BEFORE notifying preference subscribers
+    rollService.resetForRegionChange();
+    pantryService
+      .syncItems(finalKitchenItems.map((name) => ({ name, category: 'pantryStaples' })))
+      .catch(() => {});
+
+    preferencesStore.updateCountryAndCurrency(selectedCountryId, undefined, customBudget, true);
+
     // Gear, time and flavor keep their smart defaults (editable later in settings)
     preferencesStore.updateKitchenPass({
       dietaryRestrictions: finalDiets,
@@ -227,10 +228,6 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
       bodyGoalLabel: chosenGoal ? chosenGoal.title : 'Balanced',
       hasCompletedOnboarding: true,
     });
-
-    pantryService
-      .syncItems(finalKitchenItems.map((name) => ({ name, category: 'pantryStaples' })))
-      .catch(() => {});
 
     preferencesStore.completeOnboarding();
     playRevealThudHaptics();
@@ -254,7 +251,10 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const allDisplayedStaples = Array.from(new Set([...kitchenItems, ...STARTER_STAPLES]));
+  const countryStaples = selectedCountry.popularStaples || [];
+  const allDisplayedStaples = Array.from(
+    new Set([...kitchenItems, ...countryStaples, ...COMMON_PANTRY_STAPLES])
+  );
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'left', 'right']}>
@@ -347,6 +347,9 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
                         Haptics.selectionAsync().catch(() => {});
                         setSelectedCountryId(country.id);
                         setCustomBudgetInput('');
+                        if (country.popularStaples && country.popularStaples.length > 0) {
+                          setKitchenItems([...country.popularStaples]);
+                        }
                       }}
                       activeOpacity={0.75}
                     >

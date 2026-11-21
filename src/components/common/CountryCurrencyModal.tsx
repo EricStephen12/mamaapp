@@ -20,6 +20,8 @@ import {
   SUPPORTED_CURRENCIES,
   SupportedCountry,
 } from '../../services/preferencesStore';
+import { pantryService } from '../../services/api/pantryService';
+import { rollService } from '../../services/api/rollService';
 
 interface CountryCurrencyModalProps {
   visible: boolean;
@@ -58,7 +60,21 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
 
   const handleSave = () => {
     const budgetNum = parseFloat(weeklyBudgetString.replace(/[^0-9.]/g, '')) || fallbackBudget;
-    
+    const countryChanged = selectedCountryId !== currentPass.country;
+
+    // When switching to a different country / Mama, hand over the kitchen BEFORE
+    // notifying preferencesStore listeners so the new roll & Discover deck immediately
+    // read the new Mama's pantry staples and never reuse old cached AI meals.
+    if (countryChanged) {
+      rollService.resetForRegionChange();
+      const matched = SUPPORTED_COUNTRIES.find((c) => c.id === selectedCountryId);
+      if (matched && matched.popularStaples?.length > 0) {
+        pantryService
+          .syncItems(matched.popularStaples.map((name) => ({ name, category: 'pantryStaples' })))
+          .catch(() => {});
+      }
+    }
+
     preferencesStore.updateCountryAndCurrency(
       selectedCountryId,
       selectedCurrencyCode,

@@ -34,6 +34,8 @@ function compactMeal(meal: RolledMeal): RolledMeal {
     imageUrl: meal.imageUrl,
     pantryNote: meal.pantryNote ? clip(meal.pantryNote, 70) : undefined,
     mamaTip: meal.mamaTip ? clip(meal.mamaTip, 110) : undefined,
+    country: meal.country,
+    cuisineAnchor: meal.cuisineAnchor,
     ingredients: meal.ingredients.slice(0, 7).map((i) => ({
       name: clip(i.name, 32),
       amount: clip(i.amount, 24),

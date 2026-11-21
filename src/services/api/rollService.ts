@@ -25,6 +25,9 @@ export interface RolledMeal {
   steps: string[];
   /** 'ai' = generated live by Mama AI. 'catalog' = built-in fallback when the AI was unreachable. */
   source?: 'ai' | 'catalog';
+  /** Region / cuisine metadata so cached AI meals never bleed across continents */
+  country?: string;
+  cuisineAnchor?: string;
 }
 
 export function getCurrentTimeOfDay(): 'morning' | 'lunch' | 'dinner' | 'late_night' {
@@ -184,6 +187,8 @@ function normaliseAiMeal(raw: any, timeOfDay: TimeOfDay, pass: UserKitchenPass):
     ingredients,
     steps: raw.steps.filter((s: unknown) => typeof s === 'string' && s.trim().length > 0),
     source: 'ai',
+    country: pass.country,
+    cuisineAnchor: pass.cuisineAnchor,
   };
 
   if (meal.steps.length === 0) return null;
@@ -275,6 +280,31 @@ function getFilteredCatalogMeals(
   ];
   const otherPeriods = allPeriods.filter((p) => p !== timeOfDay);
 
+  const isWesternCountry = [
+    'GB',
+    'UK',
+    'US',
+    'CA',
+    'EU',
+    'AU',
+    'NZ',
+    'FR',
+    'DE',
+    'IT',
+    'ES',
+    'NL',
+    'IE',
+    'PT',
+    'BE',
+    'CH',
+    'AT',
+    'SE',
+    'NO',
+    'DK',
+    'PL',
+    'GR',
+  ].includes((currentPass.country || '').toUpperCase());
+
   let primaryList: RolledMeal[] = [];
   let adjacentList: RolledMeal[] = [];
 
@@ -300,7 +330,6 @@ function getFilteredCatalogMeals(
       ]);
     }
   } else {
-    const isWesternCountry = ['GB', 'US', 'CA', 'EU', 'AU'].includes(currentPass.country);
     const catalog = isWesternCountry ? EVERYDAY_MEALS_COMFORT : EVERYDAY_MEALS;
     primaryList = [...(catalog[timeOfDay] || catalog.dinner)];
     if (includeAdjacentPeriods) {
@@ -321,13 +350,22 @@ function getFilteredCatalogMeals(
     }
   }
 
-  // 2. Filter strictly by dietary restrictions (expand to adjacent periods if primary period has no compliant dishes)
+  // 2. Filter strictly by dietary restrictions (expand ONLY within the same Mama's catalog)
   let compliant = candidateMeals.filter((m) => isMealDietCompliant(m, currentPass));
   if (compliant.length === 0 && !includeAdjacentPeriods) {
-    const fallbackAdjacent = otherPeriods.flatMap((p) => [
-      ...(EVERYDAY_MEALS[p] || []),
-      ...(EVERYDAY_MEALS_COMFORT[p] || []),
-    ]);
+    const fallbackAdjacent =
+      anchor === 'global'
+        ? otherPeriods.flatMap((p) => [
+            ...(EVERYDAY_MEALS[p] || []),
+            ...(EVERYDAY_MEALS_COMFORT[p] || []),
+          ])
+        : otherPeriods.flatMap((p) => {
+            const regionalCatalog =
+              anchor === 'weeknight_comfort' || (anchor !== 'african_caribbean' && isWesternCountry)
+                ? EVERYDAY_MEALS_COMFORT
+                : EVERYDAY_MEALS;
+            return regionalCatalog[p] || [];
+          });
     compliant = [...primaryList, ...fallbackAdjacent].filter((m) =>
       isMealDietCompliant(m, currentPass)
     );
@@ -1453,6 +1491,14 @@ export const rollService = {
     sessionPassedTitles.length = 0;
   },
 
+  /** Clear prefetched & cached AI meals when the user switches country/Mama */
+  resetForRegionChange() {
+    prefetchedMeal = null;
+    prefetchInFlight = null;
+    sessionPassedTitles.length = 0;
+    aiMealCache.clear().catch(() => {});
+  },
+
   async rollNextMeal(
     overrideTimeOfDay?: 'morning' | 'lunch' | 'dinner' | 'late_night',
     currentDishTitle?: string
@@ -1521,7 +1567,13 @@ export const rollService = {
     // Start background prefetch for the next roll while we return a cached AI meal or catalog meal immediately
     startPrefetch(timeOfDay, kitchenPass, pantryNames, passedTitles, recentCookedTitles);
 
-    const cachedAiMeal = await aiMealCache.pick(timeOfDay, isUsableMeal);
+    const cachedAiMeal = await aiMealCache.pick(
+      timeOfDay,
+      (m) =>
+        isUsableMeal(m) &&
+        m.country === kitchenPass.country &&
+        m.cuisineAnchor === kitchenPass.cuisineAnchor
+    );
     if (cachedAiMeal) {
       return { ...cachedAiMeal, id: `${cachedAiMeal.id}-${Date.now()}` };
     }

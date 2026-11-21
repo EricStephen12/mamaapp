@@ -178,6 +178,58 @@ export const SUPPORTED_CURRENCIES: SupportedCurrency[] = [
   { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
 ];
 
+export function getMamaProfileForCountry(countryCode: string): {
+  cuisineAnchor: string;
+  cuisineLabel: string;
+  cookingGear: string;
+  cookingGearLabel: string;
+} {
+  const code = (countryCode || '').trim().toUpperCase();
+  // Europe & UK
+  if (['GB', 'UK', 'EU', 'FR', 'IT', 'DE', 'ES', 'NL', 'IE', 'PT', 'BE', 'CH', 'AT', 'SE', 'NO', 'DK', 'PL', 'GR'].includes(code)) {
+    return {
+      cuisineAnchor: 'weeknight_comfort',
+      cuisineLabel: 'British & European Comfort',
+      cookingGear: 'one_pan',
+      cookingGearLabel: '1 Pan & Stovetop',
+    };
+  }
+  // North America & Western
+  if (['US', 'CA', 'AU', 'NZ'].includes(code)) {
+    return {
+      cuisineAnchor: 'weeknight_comfort',
+      cuisineLabel: 'Everyday Comfort & Classics',
+      cookingGear: 'one_pan',
+      cookingGearLabel: '1 Pan & Stovetop',
+    };
+  }
+  // Island & Caribbean
+  if (['JM', 'TT', 'BB', 'BS', 'GD', 'LC', 'PR', 'DO', 'HT', 'CU', 'FJ'].includes(code)) {
+    return {
+      cuisineAnchor: 'african_caribbean',
+      cuisineLabel: 'Island & Caribbean Soul',
+      cookingGear: 'one_pan',
+      cookingGearLabel: '1 Pan & Burner',
+    };
+  }
+  // Asia
+  if (['CN', 'JP', 'KR', 'IN', 'PH', 'SG', 'MY', 'TH', 'VN', 'ID', 'PK', 'BD', 'LK', 'TW', 'HK', 'AE', 'SA'].includes(code)) {
+    return {
+      cuisineAnchor: 'weeknight_comfort',
+      cuisineLabel: 'Asian Fresh & Stir-Fry',
+      cookingGear: 'one_pan',
+      cookingGearLabel: '1 Wok / Pan',
+    };
+  }
+  // Africa (Default Mama)
+  return {
+    cuisineAnchor: 'african_caribbean',
+    cuisineLabel: 'African & Caribbean Heritage',
+    cookingGear: 'one_pan',
+    cookingGearLabel: '1 Pan & Burner',
+  };
+}
+
 export type BodyGoal = 'balanced' | 'curves_glutes' | 'reduce_weight' | 'add_weight';
 
 export const BODY_GOAL_CONFIG: Record<
@@ -450,9 +502,11 @@ export const preferencesStore = {
   updateCountryAndCurrency(
     countryId: string,
     customCurrencyCode?: string,
-    customWeeklyBudget?: number
+    customWeeklyBudget?: number,
+    syncCuisineToCountry: boolean = false
   ): UserKitchenPass {
     const foundCountry = SUPPORTED_COUNTRIES.find((c) => c.id === countryId);
+    const countryChanged = countryId !== currentKitchenPass.country;
 
     const countryName = foundCountry ? foundCountry.name : countryId;
     const currencyCode =
@@ -473,6 +527,8 @@ export const preferencesStore = {
         : Number(scaled.toFixed(2));
     }
 
+    const mamaProfile = getMamaProfileForCountry(countryId);
+
     return this.updateKitchenPass({
       country: countryId,
       countryName,
@@ -480,6 +536,12 @@ export const preferencesStore = {
       currencySymbol,
       weeklyBudget,
       spentThisWeek,
+      ...(countryChanged || syncCuisineToCountry
+        ? {
+            cuisineAnchor: mamaProfile.cuisineAnchor,
+            cuisineLabel: mamaProfile.cuisineLabel,
+          }
+        : {}),
     });
   },
 
