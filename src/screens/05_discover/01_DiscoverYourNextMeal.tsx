@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Image,
   Animated,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -74,311 +75,6 @@ const DISCOVER_FILTERS: {
   { id: 'light_night', label: 'Light (<400 cal)', icon: 'moon-outline' },
 ];
 
-const CURATED_HEALTHY_DECK_AFRICA: RawDiscoveryItem[] = [
-  {
-    id: 'healthy-grilled-tilapia-greens',
-    categoryType: 'home',
-    cookTimeOrDistance: '14 MIN',
-    title: 'Grilled Pepper Tilapia & Steamed Greens',
-    nutrition: 'LOW OIL · 340 KCAL',
-    reason: 'Lean fish seared with fresh pepper, onions, and crisp leafy greens.',
-    imageUrl: '',
-    baseCostUsd: 2.6,
-    cuisineTags: ['clean_healthy', 'high_protein'],
-    healthCategory: 'clean_healthy',
-    ingredients: [
-      { name: 'Tilapia / White Fish Fillet', amount: '1 fillet' },
-      { name: 'Fresh Spinach or Ugu', amount: '2 cups' },
-      { name: 'Scotch Bonnet & Onion', amount: '1/2 sliced' },
-      { name: 'Light Olive / Vegetable Oil', amount: '1 tsp' },
-    ],
-    steps: [
-      'Season fish fillet lightly with thyme, garlic, salt, and pepper.',
-      'Pan-sear with 1 tsp oil over medium-high heat for 4 mins per side until golden.',
-      'Toss fresh greens and sliced onions in the warm pan for 2 mins until tender-crisp.',
-    ],
-  },
-  {
-    id: 'protein-suya-chicken-beans-power',
-    categoryType: 'home',
-    cookTimeOrDistance: '15 MIN',
-    title: 'Suya-Spiced Chicken & Honey Beans',
-    nutrition: '42g PROTEIN · CURVES & MUSCLE',
-    reason: 'Double protein from smoky suya chicken breast and slow-energy honey beans.',
-    imageUrl: '',
-    baseCostUsd: 2.5,
-    cuisineTags: ['high_protein'],
-    healthCategory: 'high_protein',
-    ingredients: [
-      { name: 'Chicken Breast', amount: '200g cubed' },
-      { name: 'Cooked Honey / Black Beans', amount: '1 cup' },
-      { name: 'Suya Yaji Spice', amount: '1 tbsp' },
-      { name: 'Red Onion & Tomato', amount: '1/2 sliced' },
-    ],
-    steps: [
-      'Toss cubed chicken breast in suya spice and a pinch of salt.',
-      'Sear in a hot skillet for 7 mins until charred and juicy.',
-      'Warm the beans alongside and top with crisp raw red onion and tomato.',
-    ],
-  },
-  {
-    id: 'healthy-efo-spinach-chicken-bowl',
-    categoryType: 'home',
-    cookTimeOrDistance: '15 MIN',
-    title: 'Light Efo Spinach & Seared Chicken',
-    nutrition: 'CLEAN · 370 KCAL',
-    reason: 'Zero heavy palm oil—bright tomatoes, peppers, and iron-rich spinach with lean chicken.',
-    imageUrl: '',
-    baseCostUsd: 2.4,
-    cuisineTags: ['clean_healthy', 'high_protein'],
-    healthCategory: 'clean_healthy',
-    ingredients: [
-      { name: 'Chicken Breast Strips', amount: '180g' },
-      { name: 'Fresh Spinach', amount: '3 cups' },
-      { name: 'Plum Tomatoes & Bell Pepper', amount: '2 diced' },
-      { name: 'Onions & Garlic', amount: '1/2 bulb' },
-    ],
-    steps: [
-      'Sear seasoned chicken strips in a hot non-stick skillet for 6 mins until golden.',
-      'Add diced tomatoes, bell pepper, and onions; simmer 4 mins until saucy.',
-      'Fold in fresh spinach for 2 mins until wilted and serve warm.',
-    ],
-  },
-  {
-    id: 'light-catfish-pepper-soup',
-    categoryType: 'home',
-    cookTimeOrDistance: '15 MIN',
-    title: 'Aromatic Fish Pepper Soup',
-    nutrition: 'LIGHT · 280 KCAL',
-    reason: 'Zero oil, soothing warm spices, and lean fish—perfect for a light, bloat-free night.',
-    imageUrl: '',
-    baseCostUsd: 2.5,
-    cuisineTags: ['light_night', 'clean_healthy'],
-    healthCategory: 'light_night',
-    ingredients: [
-      { name: 'Fresh Fish Steaks', amount: '2 pieces' },
-      { name: 'Pepper Soup Spice', amount: '1 tbsp' },
-      { name: 'Scent Leaf / Parsley', amount: '1 handful' },
-      { name: 'Scotch Bonnet & Onion', amount: 'To taste' },
-    ],
-    steps: [
-      'Bring 2 cups of water to a boil with diced onions, pepper soup spice, and seasoning.',
-      'Gently lower fish pieces into the broth and simmer for 9 mins.',
-      'Scatter torn scent leaves on top and enjoy hot.',
-    ],
-  },
-  {
-    id: 'healthy-avocado-egg-plantain-plate',
-    categoryType: 'home',
-    cookTimeOrDistance: '12 MIN',
-    title: 'Roasted Plantain, Boiled Eggs & Avocado',
-    nutrition: 'GUT FRIENDLY · LOW OIL',
-    reason: 'Oven/air-charred sweet plantain paired with protein-rich boiled eggs and fresh avocado.',
-    imageUrl: '',
-    baseCostUsd: 1.9,
-    cuisineTags: ['clean_healthy'],
-    healthCategory: 'clean_healthy',
-    ingredients: [
-      { name: 'Ripe Plantain', amount: '1 medium' },
-      { name: 'Eggs', amount: '2 large' },
-      { name: 'Fresh Avocado', amount: '1/2 sliced' },
-      { name: 'Black Pepper & Sea Salt', amount: 'To taste' },
-    ],
-    steps: [
-      'Boil eggs for 8 minutes, peel, and halve.',
-      'Pan-roast or air-fry plantain slices with just a brush of oil for 8 mins.',
-      'Plate with sliced avocado and cracked black pepper.',
-    ],
-  },
-  {
-    id: 'protein-pepper-steak-egg-skillet',
-    categoryType: 'home',
-    cookTimeOrDistance: '12 MIN',
-    title: 'Peppered Beef Strips & 3-Egg Scramble',
-    nutrition: '39g PROTEIN · HIGH ENERGY',
-    reason: 'Fast, high-protein skillet built for recovery and fullness without heavy carbs.',
-    imageUrl: '',
-    baseCostUsd: 2.8,
-    cuisineTags: ['high_protein'],
-    healthCategory: 'high_protein',
-    ingredients: [
-      { name: 'Lean Beef Strips', amount: '150g' },
-      { name: 'Eggs', amount: '3 large' },
-      { name: 'Spring Onions & Bell Pepper', amount: '1/2 cup' },
-      { name: 'Cooking Oil', amount: '1 tsp' },
-    ],
-    steps: [
-      'Flash-sear seasoned beef strips in a hot pan for 4 mins with bell peppers.',
-      'Push to one side and scramble the eggs softly for 2 mins.',
-      'Garnish with chopped spring onions and serve immediately.',
-    ],
-  },
-  {
-    id: 'light-veggie-egg-drop-stirfry',
-    categoryType: 'home',
-    cookTimeOrDistance: '10 MIN',
-    title: 'Crisp Cabbage, Carrot & Egg Stir-Fry',
-    nutrition: 'LIGHT · 310 KCAL',
-    reason: 'Crunchy ribbons of cabbage and sweet carrot tossed with fluffy eggs for a light evening.',
-    imageUrl: '',
-    baseCostUsd: 1.5,
-    cuisineTags: ['light_night', 'clean_healthy'],
-    healthCategory: 'light_night',
-    ingredients: [
-      { name: 'Shredded Cabbage & Carrot', amount: '2 cups' },
-      { name: 'Eggs', amount: '2 large' },
-      { name: 'Garlic & Ginger', amount: '1 tsp minced' },
-      { name: 'Light Soy Sauce / Salt', amount: '1 tsp' },
-    ],
-    steps: [
-      'Scramble 2 eggs in a hot skillet for 1 min and set aside.',
-      'Stir-fry garlic, ginger, cabbage, and carrot on high heat for 3 mins so they stay crisp.',
-      'Return eggs to the pan, toss with a splash of soy sauce or salt, and plate.',
-    ],
-  },
-];
-
-const CURATED_HEALTHY_DECK_WESTERN: RawDiscoveryItem[] = [
-  {
-    id: 'west-lemon-herb-chicken-greens',
-    categoryType: 'home',
-    cookTimeOrDistance: '14 MIN',
-    title: 'Lemon Herb Chicken & Green Beans',
-    nutrition: '40g PROTEIN · CLEAN',
-    reason: 'Pan-seared chicken breast glazed with fresh lemon, garlic, and crisp green beans.',
-    imageUrl: '',
-    baseCostUsd: 2.8,
-    cuisineTags: ['clean_healthy', 'high_protein'],
-    healthCategory: 'clean_healthy',
-    ingredients: [
-      { name: 'Chicken Breast Fillet', amount: '200g' },
-      { name: 'Green Beans or Broccoli', amount: '2 cups' },
-      { name: 'Lemon & Garlic Clove', amount: '1/2 squeezed' },
-      { name: 'Olive Oil & Thyme', amount: '1 tbsp' },
-    ],
-    steps: [
-      'Season chicken breast with salt, black pepper, dried thyme, and minced garlic.',
-      'Pan-sear in olive oil for 5 mins per side until golden and juicy.',
-      'Toss green beans into the pan with a squeeze of fresh lemon for 3 mins until tender-crisp.',
-    ],
-  },
-  {
-    id: 'west-seared-salmon-garlic-spinach',
-    categoryType: 'home',
-    cookTimeOrDistance: '12 MIN',
-    title: 'Seared Salmon & Garlic Spinach',
-    nutrition: 'OMEGA-3 · 380 KCAL',
-    reason: 'Crispy-skin salmon fillet over warm olive oil wilted spinach—ready in 12 minutes.',
-    imageUrl: '',
-    baseCostUsd: 3.4,
-    cuisineTags: ['clean_healthy', 'high_protein', 'light_night'],
-    healthCategory: 'high_protein',
-    ingredients: [
-      { name: 'Salmon Fillet', amount: '1 fillet (180g)' },
-      { name: 'Fresh Baby Spinach', amount: '3 cups' },
-      { name: 'Garlic & Lemon Wedge', amount: '2 cloves' },
-      { name: 'Olive Oil', amount: '1 tsp' },
-    ],
-    steps: [
-      'Pat salmon dry, season with sea salt and pepper, and sear skin-side down for 4 mins.',
-      'Flip gently and cook 3 more minutes until flaky.',
-      'Wilt baby spinach in the same warm pan with minced garlic and serve immediately.',
-    ],
-  },
-  {
-    id: 'west-avocado-egg-sourdough',
-    categoryType: 'home',
-    cookTimeOrDistance: '10 MIN',
-    title: 'Avocado & Soft Eggs on Sourdough',
-    nutrition: 'GUT FRIENDLY · 350 KCAL',
-    reason: 'Toasted crusty sourdough with smashed lemon avocado and protein-rich soft eggs.',
-    imageUrl: '',
-    baseCostUsd: 2.2,
-    cuisineTags: ['clean_healthy', 'light_night'],
-    healthCategory: 'clean_healthy',
-    ingredients: [
-      { name: 'Sourdough Bread', amount: '2 slices' },
-      { name: 'Eggs', amount: '2 large' },
-      { name: 'Ripe Avocado', amount: '1/2 mashed' },
-      { name: 'Chili Flakes & Lemon', amount: 'Pinch' },
-    ],
-    steps: [
-      'Toast sourdough slices until crisp and golden.',
-      'Soft-boil or poach 2 eggs for 6-7 minutes.',
-      'Spread smashed avocado with lemon and sea salt over toast, top with eggs and chili flakes.',
-    ],
-  },
-  {
-    id: 'west-garlic-prawns-zucchini',
-    categoryType: 'home',
-    cookTimeOrDistance: '11 MIN',
-    title: 'Garlic Butter Prawns & Zucchini',
-    nutrition: 'LIGHT · 290 KCAL',
-    reason: 'Quick one-pan garlic prawns with seared zucchini rounds—light and bloat-free.',
-    imageUrl: '',
-    baseCostUsd: 3.1,
-    cuisineTags: ['light_night', 'high_protein'],
-    healthCategory: 'light_night',
-    ingredients: [
-      { name: 'Prawns / Shrimp', amount: '180g peeled' },
-      { name: 'Zucchini / Courgette', amount: '1 medium sliced' },
-      { name: 'Butter & Garlic', amount: '1 tbsp + 2 cloves' },
-      { name: 'Fresh Parsley & Lemon', amount: 'To finish' },
-    ],
-    steps: [
-      'Sauté sliced zucchini in a hot pan with a touch of butter for 3 mins.',
-      'Add garlic and prawns; sear for 3 mins until pink and curled.',
-      'Finish with lemon juice and chopped parsley and serve hot.',
-    ],
-  },
-  {
-    id: 'west-mediterranean-feta-scramble',
-    categoryType: 'home',
-    cookTimeOrDistance: '9 MIN',
-    title: 'Tomato, Spinach & Feta Scramble',
-    nutrition: '28g PROTEIN · LIGHT',
-    reason: 'Warm cherry tomatoes, wilted spinach, and creamy feta folded into fluffy eggs.',
-    imageUrl: '',
-    baseCostUsd: 2.0,
-    cuisineTags: ['clean_healthy', 'light_night'],
-    healthCategory: 'light_night',
-    ingredients: [
-      { name: 'Eggs', amount: '3 large' },
-      { name: 'Cherry Tomatoes & Spinach', amount: '1 cup' },
-      { name: 'Crumbled Feta Cheese', amount: '2 tbsp' },
-      { name: 'Olive Oil & Oregano', amount: '1 tsp' },
-    ],
-    steps: [
-      'Blister halved cherry tomatoes in olive oil for 2 mins with dried oregano.',
-      'Toss in spinach until just wilted, then pour in beaten eggs.',
-      'Fold gently on low heat, scatter crumbled feta on top, and plate warm.',
-    ],
-  },
-  {
-    id: 'west-turkey-sweet-potato-skillet',
-    categoryType: 'home',
-    cookTimeOrDistance: '15 MIN',
-    title: 'Herb Turkey & Sweet Potato Hash',
-    nutrition: '38g PROTEIN · BALANCED',
-    reason: 'Lean seasoned turkey mince cooked with tender sweet potato cubes and herbs.',
-    imageUrl: '',
-    baseCostUsd: 2.6,
-    cuisineTags: ['high_protein'],
-    healthCategory: 'high_protein',
-    ingredients: [
-      { name: 'Lean Turkey Mince', amount: '180g' },
-      { name: 'Sweet Potato', amount: '1 small diced fine' },
-      { name: 'Onion & Bell Pepper', amount: '1/2 diced' },
-      { name: 'Paprika & Olive Oil', amount: '1 tsp each' },
-    ],
-    steps: [
-      'Sauté finely diced sweet potato with olive oil and a splash of water covered for 6 mins.',
-      'Add diced onion, pepper, paprika, and turkey mince; brown for 6 mins.',
-      'Season with salt and pepper and serve straight from the skillet.',
-    ],
-  },
-];
-
 export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
   const { isInsideTabs, activeTab, setActiveTab } = useTabNavigation();
   const isDiscoverVisible = !isInsideTabs || activeTab === 'discover';
@@ -405,7 +101,10 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
   const [apiDeckState, setApiDeckState] = useState<{
     regionKey: string;
     meals: RawDiscoveryItem[];
-  }>({ regionKey: '', meals: [] });
+    status: 'loading' | 'ready' | 'error';
+  }>({ regionKey: '', meals: [], status: 'loading' });
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
   const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
   const [postVideos, setPostVideos] = useState<Record<string, MealVideoData>>({});
   const inFlightVideoRef = useRef<Set<string>>(new Set());
@@ -467,18 +166,25 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
 
   const dietKey = (kitchenPass.dietaryRestrictions || []).join(',');
   const pantrySig = [...pantryItems].sort().join(',');
-  const regionKey = `${kitchenPass.country}|${kitchenPass.cuisineAnchor}`;
+  const regionKey = `${kitchenPass.country}|${kitchenPass.cuisineAnchor}|${retryNonce}`;
 
   useEffect(() => {
     let isMounted = true;
-    const requestRegionKey = `${kitchenPass.country}|${kitchenPass.cuisineAnchor}`;
+    const requestRegionKey = `${kitchenPass.country}|${kitchenPass.cuisineAnchor}|${retryNonce}`;
     AiMamaService.generateDiscoverDeck(kitchenPass, pantryItems)
       .then((meals) => {
-        if (isMounted && Array.isArray(meals) && meals.length > 0) {
-          setApiDeckState({ regionKey: requestRegionKey, meals });
+        if (!isMounted) return;
+        if (Array.isArray(meals) && meals.length > 0) {
+          setApiDeckState({ regionKey: requestRegionKey, meals, status: 'ready' });
+        } else {
+          setApiDeckState({ regionKey: requestRegionKey, meals: [], status: 'error' });
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (isMounted) {
+          setApiDeckState({ regionKey: requestRegionKey, meals: [], status: 'error' });
+        }
+      });
     return () => {
       isMounted = false;
     };
@@ -491,61 +197,60 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
     kitchenPass.bodyGoal,
     dietKey,
     pantrySig,
+    retryNonce,
   ]);
 
+  const isFeedLoading = apiDeckState.regionKey !== regionKey || apiDeckState.status === 'loading';
+
+  const handleLoadMore = useCallback(async () => {
+    if (isLoadingMore || isFeedLoading) return;
+    setIsLoadingMore(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    try {
+      const existingTitles = apiDeckState.meals.map((m) => m.title);
+      const moreMeals = await AiMamaService.generateDiscoverDeck(
+        kitchenPass,
+        pantryItems,
+        existingTitles
+      );
+      if (Array.isArray(moreMeals) && moreMeals.length > 0) {
+        setApiDeckState((prev) => {
+          if (prev.regionKey !== regionKey) return prev;
+          const seen = new Set(prev.meals.map((m) => m.title.toLowerCase()));
+          const fresh = moreMeals.filter((m) => !seen.has(m.title.toLowerCase()));
+          return {
+            ...prev,
+            meals: [...prev.meals, ...fresh],
+            status: 'ready',
+          };
+        });
+      }
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [apiDeckState.meals, isFeedLoading, isLoadingMore, kitchenPass, pantryItems, regionKey]);
+
   const filteredRawDeck = useMemo<RawDiscoveryItem[]>(() => {
-    const isWesternCountry = [
-      'GB',
-      'UK',
-      'US',
-      'CA',
-      'EU',
-      'AU',
-      'NZ',
-      'FR',
-      'DE',
-      'IT',
-      'ES',
-      'NL',
-      'IE',
-    ].includes((kitchenPass.country || '').toUpperCase());
-
-    const regionalCuratedDeck =
-      kitchenPass.cuisineAnchor === 'global'
-        ? [...CURATED_HEALTHY_DECK_AFRICA, ...CURATED_HEALTHY_DECK_WESTERN]
-        : kitchenPass.cuisineAnchor === 'weeknight_comfort' ||
-            (kitchenPass.cuisineAnchor !== 'african_caribbean' && isWesternCountry)
-          ? CURATED_HEALTHY_DECK_WESTERN
-          : CURATED_HEALTHY_DECK_AFRICA;
-
-    const neverShow = (kitchenPass.neverShowDishes || []).map((t) => t.toLowerCase());
-
-    // Dietary and permanent ban filter applied to regional curated list
-    const dietCompliantCurated = regionalCuratedDeck.filter(
-      (m) =>
-        !neverShow.includes(m.title.toLowerCase()) &&
-        isMealDietCompliant(
-          {
-            id: m.id,
-            title: m.title,
-            subtitle: m.reason,
-            timeOfDay: 'dinner',
-            cookTimeMinutes: 15,
-            estCost: m.baseCostUsd,
-            ingredients: m.ingredients || [],
-            steps: m.steps || [],
-          },
-          kitchenPass
-        )
-    );
-
     const activeApiMeals = apiDeckState.regionKey === regionKey ? apiDeckState.meals : [];
+    const neverShow = (kitchenPass.neverShowDishes || []).map((t) => t.toLowerCase());
     const seen = new Set<string>();
-    const combined = [...activeApiMeals, ...dietCompliantCurated].filter((m) => {
+    const combined = activeApiMeals.filter((m) => {
       const key = m.title.toLowerCase();
-      if (seen.has(key)) return false;
+      if (seen.has(key) || neverShow.includes(key)) return false;
       seen.add(key);
-      return true;
+      return isMealDietCompliant(
+        {
+          id: m.id,
+          title: m.title,
+          subtitle: m.reason,
+          timeOfDay: 'dinner',
+          cookTimeMinutes: 15,
+          estCost: m.baseCostUsd,
+          ingredients: m.ingredients || [],
+          steps: m.steps || [],
+        },
+        kitchenPass
+      );
     });
 
     if (activeFilter === 'all') {
@@ -834,7 +539,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
       <Animated.View style={{ flex: 1, opacity: contentFade }}>
         <FlatList
           data={feedPosts}
-          extraData={{ activePostId, postVideos, isDiscoverVisible, savedItemIds }}
+          extraData={{ activePostId, postVideos, isDiscoverVisible, savedItemIds, isLoadingMore }}
           keyExtractor={(item) => item.id}
           renderItem={renderFeedPost}
           showsVerticalScrollIndicator={false}
@@ -842,6 +547,60 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
           initialNumToRender={3}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
+          ListEmptyComponent={
+            <View style={styles.emptyFeedBox}>
+              {isFeedLoading ? (
+                <>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.emptyFeedTitle}>
+                    Finding fresh {kitchenPass.countryName} home ideas
+                  </Text>
+                  <Text style={styles.emptyFeedSub}>
+                    Tailoring dishes to your kitchen and local ingredients...
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="compass-outline" size={32} color={colors.primary} />
+                  <Text style={styles.emptyFeedTitle}>
+                    Couldn&apos;t load {kitchenPass.countryName} ideas
+                  </Text>
+                  <Text style={styles.emptyFeedSub}>
+                    Check your connection and tap below to refresh.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.retryFeedBtn}
+                    onPress={() => setRetryNonce((n) => n + 1)}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="refresh" size={16} color="#FFFFFF" />
+                    <Text style={styles.retryFeedBtnText}>Try Again</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          }
+          ListFooterComponent={
+            feedPosts.length > 0 ? (
+              <TouchableOpacity
+                style={styles.loadMoreBtn}
+                onPress={handleLoadMore}
+                activeOpacity={0.84}
+                disabled={isLoadingMore}
+              >
+                {isLoadingMore ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <>
+                    <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+                    <Text style={styles.loadMoreBtnText}>
+                      More {kitchenPass.countryName} Dishes
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : undefined
+          }
         />
       </Animated.View>
 
@@ -1097,6 +856,68 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF',
+  },
+  emptyFeedBox: {
+    marginTop: 48,
+    marginHorizontal: 18,
+    paddingVertical: 44,
+    paddingHorizontal: 26,
+    borderRadius: 24,
+    backgroundColor: colors.linen200,
+    borderWidth: 1,
+    borderColor: 'rgba(102, 112, 74, 0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  emptyFeedTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.text.primary,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  emptyFeedSub: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.text.secondary,
+    textAlign: 'center',
+  },
+  retryFeedBtn: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 999,
+  },
+  retryFeedBtnText: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  loadMoreBtn: {
+    marginTop: 8,
+    marginBottom: 24,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: 'rgba(102, 112, 74, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(102, 112, 74, 0.3)',
+    minWidth: 210,
+  },
+  loadMoreBtnText: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: colors.primary,
   },
 });
 

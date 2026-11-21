@@ -146,7 +146,13 @@ export const aiMealCache = {
     return pool[Math.floor(Math.random() * pool.length)];
   },
 
-  /** Wipe cache (used on sign out / account deletion) */
+  /** Return all cached AI meals matching the given predicate (newest first) */
+  async getMatching(isUsable: (meal: RolledMeal) => boolean): Promise<RolledMeal[]> {
+    await hydrate();
+    return cachedMeals.filter(isUsable);
+  },
+
+  /** Wipe cache (used on sign out / account deletion / country switch) */
   async clear(): Promise<void> {
     cachedMeals = [];
     hydrated = true;

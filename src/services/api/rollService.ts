@@ -123,8 +123,8 @@ export function isMealDietCompliant(meal: RolledMeal, pass: UserKitchenPass): bo
 // Total time a roll will wait for the live AI before falling back. Groq usually answers in
 // 1-3s; the old 7s cap was shorter than the AI call's own timeout + backend fallback,
 // so slow rolls were silently replaced by catalog meals.
-const AI_DIRECT_TIMEOUT_MS = 8000;
-const AI_PREFETCH_TIMEOUT_MS = 8000;
+const AI_DIRECT_TIMEOUT_MS = 16000;
+const AI_PREFETCH_TIMEOUT_MS = 16000;
 
 let prefetchedMeal: { key: string; meal: RolledMeal } | null = null;
 let prefetchInFlight: { key: string; promise: Promise<RolledMeal | null> } | null = null;
@@ -1497,6 +1497,77 @@ export const rollService = {
     prefetchInFlight = null;
     sessionPassedTitles.length = 0;
     aiMealCache.clear().catch(() => {});
+  },
+
+  /** Return previously generated live AI meals cached on-device for THIS exact country & cuisine */
+  async getCachedAiDeck(
+    timeOfDay: 'morning' | 'lunch' | 'dinner' | 'late_night',
+    pass?: UserKitchenPass
+  ): Promise<RolledMeal[]> {
+    const currentPass = pass || preferencesStore.getKitchenPass();
+    const neverShowLower = toLowerList(currentPass.neverShowDishes || []);
+    const matched = await aiMealCache.getMatching(
+      (m) =>
+        m.country === currentPass.country &&
+        m.cuisineAnchor === currentPass.cuisineAnchor &&
+        !neverShowLower.includes(m.title.toLowerCase()) &&
+        isMealDietCompliant(m, currentPass)
+    );
+    const samePeriod = matched.filter((m) => m.timeOfDay === timeOfDay);
+    return samePeriod.length > 0 ? samePeriod : matched;
+  },
+
+  /**
+   * Generate a fresh 5-card live AI Home deck tailored specifically to the active country,
+   * time of day, and user's kitchen pantry. Zero hardcoded mock dishes.
+   */
+  async generateLiveDailyDeck(
+    overrideTimeOfDay?: 'morning' | 'lunch' | 'dinner' | 'late_night',
+    pass?: UserKitchenPass,
+    overridePantry?: string[]
+  ): Promise<RolledMeal[]> {
+    const timeOfDay = overrideTimeOfDay || getCurrentTimeOfDay();
+    const currentPass = pass || preferencesStore.getKitchenPass();
+    let pantryNames = overridePantry;
+    if (!pantryNames) {
+      try {
+        const items = await pantryService.fetchAll();
+        pantryNames = items.map((i) => i.name);
+      } catch {
+        pantryNames = pantryService.getCachedPantry().map((i) => i.name);
+      }
+    }
+
+    const rawMeals = await AiMamaService.generateDailyDeckWithAI(
+      timeOfDay,
+      currentPass,
+      pantryNames,
+      sessionPassedTitles
+    );
+
+    const seen = new Set<string>();
+    const neverShowLower = toLowerList(currentPass.neverShowDishes || []);
+    const normalized: RolledMeal[] = [];
+
+    for (const raw of rawMeals) {
+      const meal = normaliseAiMeal(raw, timeOfDay, currentPass);
+      if (!meal) continue;
+      const key = meal.title.toLowerCase();
+      if (seen.has(key) || neverShowLower.includes(key)) continue;
+      seen.add(key);
+      normalized.push(meal);
+    }
+
+    if (normalized.length > 0) {
+      // Persist to on-device AI cache stamped with this country & cuisine
+      for (let i = normalized.length - 1; i >= 0; i--) {
+        aiMealCache.add(normalized[i]).catch(() => {});
+      }
+      return normalized;
+    }
+
+    // Only reuse previously generated live AI meals for THIS exact country if offline
+    return this.getCachedAiDeck(timeOfDay, currentPass);
   },
 
   async rollNextMeal(

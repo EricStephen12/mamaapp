@@ -26,7 +26,7 @@ async function callGroqChat(
     jsonMode = false,
     temperature = 0.65,
     maxTokens = 380,
-    timeoutMs = 7000,
+    timeoutMs = 18000,
   } = options;
 
   // All AI completions run through the secure backend server so zero API keys exist in the APK
@@ -64,6 +64,7 @@ export interface AIDiscoveryMeal {
   imageUrl: string;
   baseCostUsd: number;
   cuisineTags: string[];
+  healthCategory?: 'clean_healthy' | 'high_protein' | 'light_night';
   steps: string[];
   ingredients: { name: string; amount: string }[];
 }
@@ -80,370 +81,6 @@ export function sanitizeDishTitle(rawTitle: string): string {
     .trim();
   return cleaned.length >= 3 ? cleaned : rawTitle.trim();
 }
-
-const REGIONAL_FALLBACK_MEALS: Record<string, AIDiscoveryMeal[]> = {
-  african_caribbean: [
-    {
-      id: 'fb-indomie-egg',
-      categoryType: 'home',
-      cookTimeOrDistance: '8 MIN',
-      title: 'Indomie & Fried Egg',
-      nutrition: 'High Energy Comfort',
-      reason: 'Quick peppered noodles with a fried egg and sliced onions.',
-      imageUrl: '',
-      baseCostUsd: 1.5,
-      cuisineTags: ['quick', 'african_caribbean'],
-      steps: [
-        'Boil 1.5 cups water with seasoning packet and a pinch of dry chili.',
-        'Add noodles and simmer for 3 minutes until tender and saucy.',
-        'Fry egg in hot oil until edges crisp, place on steaming noodles.',
-      ],
-      ingredients: [
-        { name: 'Instant Noodles', amount: '1 pack' },
-        { name: 'Egg', amount: '1-2 large' },
-        { name: 'Sliced Onions & Pepper', amount: 'To taste' },
-      ],
-    },
-    {
-      id: 'fb-dodo-egg',
-      categoryType: 'home',
-      cookTimeOrDistance: '12 MIN',
-      title: 'Dodo & Fried Egg',
-      nutrition: 'Sweet & Savory Balance',
-      reason: 'Sweet fried plantain slices paired with seasoned eggs.',
-      imageUrl: '',
-      baseCostUsd: 2.0,
-      cuisineTags: ['african_caribbean'],
-      steps: [
-        'Dice ripe plantains into cubes and shallow fry in oil until golden.',
-        'Whisk eggs with diced tomatoes, onions, and salt.',
-        'Pour into hot pan and fold softly with plantains; eat warm.',
-      ],
-      ingredients: [
-        { name: 'Ripe Plantain', amount: '1 medium' },
-        { name: 'Eggs', amount: '2' },
-        { name: 'Tomato & Onion', amount: '1 small' },
-      ],
-    },
-    {
-      id: 'fb-jollof-spag',
-      categoryType: 'home',
-      cookTimeOrDistance: '15 MIN',
-      title: 'Jollof Spaghetti',
-      nutrition: 'Rich Tomato Stew',
-      reason: 'Spiced pasta simmered in rich tomato stew and aromatics.',
-      imageUrl: '',
-      baseCostUsd: 2.2,
-      cuisineTags: ['african_caribbean'],
-      steps: [
-        'Sauté chopped onions and tomato paste in cooking oil until fragrant.',
-        'Add water, curry powder, thyme, and a bouillon cube; bring to boil.',
-        'Snap spaghetti in half, simmer in stew until sauce coats the pasta.',
-      ],
-      ingredients: [
-        { name: 'Spaghetti', amount: '150g' },
-        { name: 'Tomato Paste / Stew', amount: '2 tbsp' },
-        { name: 'Curry & Thyme', amount: '1 tsp' },
-      ],
-    },
-    {
-      id: 'fb-yam-egg',
-      categoryType: 'home',
-      cookTimeOrDistance: '16 MIN',
-      title: 'Yam & Egg Sauce',
-      nutrition: 'Hearty Traditional Comfort',
-      reason: 'Soft boiled yam slices paired with pepper and tomato egg sauce.',
-      imageUrl: '',
-      baseCostUsd: 2.4,
-      cuisineTags: ['african_caribbean'],
-      steps: [
-        'Peel and boil yam slices in salted water until fork-tender (12 mins).',
-        'Sauté onions and diced tomatoes in oil, pour whisked eggs on top.',
-        'Fold eggs gently and serve hot with boiled yam.',
-      ],
-      ingredients: [
-        { name: 'Puna Yam', amount: '3-4 slices' },
-        { name: 'Eggs', amount: '2' },
-        { name: 'Tomato & Onion', amount: '1 diced' },
-      ],
-    },
-    {
-      id: 'fb-rice-stew',
-      categoryType: 'home',
-      cookTimeOrDistance: '18 MIN',
-      title: 'White Rice & Stew',
-      nutrition: 'Classic Home Comfort',
-      reason: 'Fluffy white rice served with rich tomato and pepper stew.',
-      imageUrl: '',
-      baseCostUsd: 2.1,
-      cuisineTags: ['african_caribbean'],
-      steps: [
-        'Steam washed rice with a pinch of salt until tender and fluffy.',
-        'Warm pepper stew in a pan until aromatic.',
-        'Ladle stew generously over the hot rice.',
-      ],
-      ingredients: [
-        { name: 'White Rice', amount: '1 cup' },
-        { name: 'Tomato & Pepper Stew', amount: '1 cup' },
-        { name: 'Boiled Egg or Fish', amount: '1' },
-      ],
-    },
-    {
-      id: 'fb-ewa-dodo',
-      categoryType: 'home',
-      cookTimeOrDistance: '14 MIN',
-      title: 'Beans & Fried Plantain',
-      nutrition: 'High Fiber & Protein',
-      reason: 'Warm stewed beans paired with sweet fried plantain.',
-      imageUrl: '',
-      baseCostUsd: 1.9,
-      cuisineTags: ['african_caribbean'],
-      steps: [
-        'Warm cooked beans with palm oil and pepper sauce in a pan.',
-        'Fry plantain slices until golden brown.',
-        'Plate sweet plantain alongside warm beans.',
-      ],
-      ingredients: [
-        { name: 'Cooked Beans', amount: '1.5 cups' },
-        { name: 'Ripe Plantain', amount: '1' },
-        { name: 'Pepper Sauce', amount: '2 tbsp' },
-      ],
-    },
-    {
-      id: 'fb-pepper-soup-yam',
-      categoryType: 'home',
-      cookTimeOrDistance: '18 MIN',
-      title: 'Yam Pepper Soup',
-      nutrition: 'Warming Herbal Broth',
-      reason: 'Tender yam cubes simmered in aromatic pepper soup broth.',
-      imageUrl: '',
-      baseCostUsd: 2.1,
-      cuisineTags: ['african_caribbean'],
-      steps: [
-        'Simmer water with pepper soup spices, diced onions, and chili.',
-        'Add cubed yam and simmer for 14 minutes until tender.',
-        'Serve hot with broth.',
-      ],
-      ingredients: [
-        { name: 'Puna Yam', amount: '3 slices' },
-        { name: 'Pepper Soup Spice', amount: '1 tbsp' },
-        { name: 'Onion & Herbs', amount: 'To taste' },
-      ],
-    },
-    {
-      id: 'fb-chicken-suya-skillet',
-      categoryType: 'home',
-      cookTimeOrDistance: '14 MIN',
-      title: 'Chicken Suya & Onions',
-      nutrition: 'High Protein',
-      reason: 'Tender seared chicken coated in suya spice with sliced onions.',
-      imageUrl: '',
-      baseCostUsd: 2.7,
-      cuisineTags: ['african_caribbean'],
-      steps: [
-        'Thinly slice chicken and toss in suya spice with vegetable oil.',
-        'Sear in a hot pan undisturbed for 4 minutes until browned.',
-        'Toss with sliced red onions and serve hot.',
-      ],
-      ingredients: [
-        { name: 'Chicken Breast / Thighs', amount: '250g' },
-        { name: 'Suya Spice / Yaji', amount: '1.5 tbsp' },
-        { name: 'Red Onion', amount: '1 large' },
-      ],
-    },
-    {
-      id: 'fb-asaro-yam-porridge',
-      categoryType: 'home',
-      cookTimeOrDistance: '20 MIN',
-      title: 'Yam Porridge (Asaro)',
-      nutrition: 'Comforting Pottage',
-      reason: 'Yam slow-simmered in peppered palm oil and onions.',
-      imageUrl: '',
-      baseCostUsd: 2.2,
-      cuisineTags: ['african_caribbean'],
-      steps: [
-        'Peel and cube yam into medium chunks in a pot.',
-        'Add pepper base, palm oil, salt, and 1.5 cups water; cover and boil.',
-        'Mash a few yam chunks to thicken the porridge and serve warm.',
-      ],
-      ingredients: [
-        { name: 'Puna Yam', amount: '4 chunks' },
-        { name: 'Palm Oil', amount: '2 tbsp' },
-        { name: 'Pepper & Onion Blend', amount: '3 tbsp' },
-      ],
-    },
-  ],
-  weeknight_comfort: [
-    {
-      id: 'fb-sourdough-eggs',
-      categoryType: 'home',
-      cookTimeOrDistance: '8 MIN',
-      title: 'Toast & Scrambled Eggs',
-      nutrition: 'Fast Everyday Comfort',
-      reason: 'Toasted bread with buttery scrambled eggs and black pepper.',
-      imageUrl: '',
-      baseCostUsd: 1.8,
-      cuisineTags: ['weeknight_comfort'],
-      steps: [
-        'Toast bread slices in a pan with butter until crisp.',
-        'Whisk eggs with a splash of milk; fold on low heat until soft.',
-        'Spoon eggs onto hot toast with salt and pepper.',
-      ],
-      ingredients: [
-        { name: 'Bread', amount: '2 slices' },
-        { name: 'Eggs', amount: '2' },
-        { name: 'Butter', amount: '1 tbsp' },
-      ],
-    },
-    {
-      id: 'fb-garlic-rice-bowl',
-      categoryType: 'home',
-      cookTimeOrDistance: '12 MIN',
-      title: 'Garlic Rice & Egg',
-      nutrition: 'Quick Comfort',
-      reason: 'Pan-toasted rice tossed with garlic butter and a fried egg.',
-      imageUrl: '',
-      baseCostUsd: 1.6,
-      cuisineTags: ['weeknight_comfort'],
-      steps: [
-        'Melt butter in a pan, fry minced garlic until fragrant.',
-        'Toss in cooked rice and soy sauce; stir continuously for 3 minutes.',
-        'Top with a fried egg.',
-      ],
-      ingredients: [
-        { name: 'Cooked Rice', amount: '1.5 cups' },
-        { name: 'Garlic & Butter', amount: '2 cloves, 1 tbsp' },
-        { name: 'Egg', amount: '1' },
-      ],
-    },
-    {
-      id: 'fb-penne-tomato',
-      categoryType: 'home',
-      cookTimeOrDistance: '14 MIN',
-      title: 'Tomato & Garlic Pasta',
-      nutrition: 'Everyday Comfort',
-      reason: 'Pasta tossed in simmered tomatoes, garlic, and olive oil.',
-      imageUrl: '',
-      baseCostUsd: 2.0,
-      cuisineTags: ['weeknight_comfort'],
-      steps: [
-        'Boil pasta in salted water until tender.',
-        'Simmer olive oil, garlic, and diced tomatoes for 5 minutes.',
-        'Toss pasta in sauce with cheese and black pepper.',
-      ],
-      ingredients: [
-        { name: 'Pasta', amount: '150g' },
-        { name: 'Tomatoes & Garlic', amount: '2 ripe, 2 cloves' },
-        { name: 'Olive Oil & Herbs', amount: '1 tbsp' },
-      ],
-    },
-    {
-      id: 'fb-cheddar-quesadilla',
-      categoryType: 'home',
-      cookTimeOrDistance: '9 MIN',
-      title: 'Cheese Quesadilla',
-      nutrition: 'Fast Fix',
-      reason: 'Toasted tortilla packed with melted cheddar and onions.',
-      imageUrl: '',
-      baseCostUsd: 1.7,
-      cuisineTags: ['weeknight_comfort'],
-      steps: [
-        'Place flatbread in a dry hot pan.',
-        'Scatter grated cheddar and sliced onions inside; fold in half.',
-        'Toast both sides until cheese melts and tortilla is crisp.',
-      ],
-      ingredients: [
-        { name: 'Tortilla or Flatbread', amount: '1-2' },
-        { name: 'Cheddar Cheese', amount: '60g' },
-        { name: 'Onion', amount: '1/2 sliced' },
-      ],
-    },
-    {
-      id: 'fb-sausage-hash',
-      categoryType: 'home',
-      cookTimeOrDistance: '15 MIN',
-      title: 'Sausage & Potatoes',
-      nutrition: 'Hearty Fuel',
-      reason: 'Pan-fried potatoes and sliced sausage with onions.',
-      imageUrl: '',
-      baseCostUsd: 2.3,
-      cuisineTags: ['weeknight_comfort'],
-      steps: [
-        'Dice potatoes and slice sausages thinly.',
-        'Fry in oil on medium-high until potatoes are tender and browned.',
-        'Season with paprika and salt; serve hot.',
-      ],
-      ingredients: [
-        { name: 'Sausage', amount: '2' },
-        { name: 'Potato', amount: '1 medium' },
-        { name: 'Cooking Oil', amount: '1 tbsp' },
-      ],
-    },
-    {
-      id: 'fb-shakshuka-skillet',
-      categoryType: 'home',
-      cookTimeOrDistance: '15 MIN',
-      title: 'Eggs in Tomato Sauce',
-      nutrition: 'High Protein',
-      reason: 'Eggs gently poached in warm tomato sauce with bread.',
-      imageUrl: '',
-      baseCostUsd: 2.1,
-      cuisineTags: ['weeknight_comfort'],
-      steps: [
-        'Simmer diced tomatoes, onions, and garlic in oil for 6 minutes.',
-        'Make gentle wells in the sauce and crack fresh eggs inside.',
-        'Cover pan on low heat until egg whites are set.',
-      ],
-      ingredients: [
-        { name: 'Eggs', amount: '2-3' },
-        { name: 'Tomatoes', amount: '1 can' },
-        { name: 'Bread or Toast', amount: '2 slices' },
-      ],
-    },
-    {
-      id: 'fb-golden-chicken-skillet',
-      categoryType: 'home',
-      cookTimeOrDistance: '16 MIN',
-      title: 'Garlic Butter Chicken',
-      nutrition: 'High Protein Dinner',
-      reason: 'Tender pan-seared chicken with garlic and butter.',
-      imageUrl: '',
-      baseCostUsd: 2.8,
-      cuisineTags: ['weeknight_comfort'],
-      steps: [
-        'Cut chicken into bite-sized pieces and season with salt and pepper.',
-        'Sear in a hot pan with butter and garlic slices for 6 to 8 minutes.',
-        'Serve hot straight from the pan.',
-      ],
-      ingredients: [
-        { name: 'Chicken Breast / Thighs', amount: '250g' },
-        { name: 'Garlic & Butter', amount: '3 cloves, 1 tbsp' },
-        { name: 'Black Pepper & Salt', amount: 'To taste' },
-      ],
-    },
-    {
-      id: 'fb-tuna-melt-skillet',
-      categoryType: 'home',
-      cookTimeOrDistance: '8 MIN',
-      title: 'Tuna Melt Sandwich',
-      nutrition: 'Quick Comfort',
-      reason: 'Flaked tuna with sweet corn and melted cheese on toasted bread.',
-      imageUrl: '',
-      baseCostUsd: 1.9,
-      cuisineTags: ['weeknight_comfort'],
-      steps: [
-        'Flake canned tuna and mix with sweet corn and a spoon of mayo.',
-        'Layer between bread slices with cheddar cheese.',
-        'Toast in a pan with butter until bread is browned and cheese melts.',
-      ],
-      ingredients: [
-        { name: 'Canned Tuna', amount: '1 tin' },
-        { name: 'Sweet Corn', amount: '2 tbsp' },
-        { name: 'Bread & Cheese', amount: '2 slices, 50g' },
-      ],
-    },
-  ],
-};
 
 export function buildIntelligentPantryRecipe(pantryItems: string[], pass: UserKitchenPass): AIRecipeResult {
   const currencyCode = pass.currencyCode || 'USD';
@@ -1275,13 +912,20 @@ Title Rules:
   }
 
   /**
-   * Generate a culturally-tailored Discover Deck using live Groq AI (with offline regional fallback)
+   * Generate a 100% live AI Discover Deck authentically tailored to the user's country and pantry.
+   * Zero hardcoded mock data: returns [] if the AI server is unreachable so the UI can show retry.
    */
   static async generateDiscoverDeck(
     pass: UserKitchenPass,
-    pantryItems: string[] = []
+    pantryItems: string[] = [],
+    avoidTitles: string[] = []
   ): Promise<AIDiscoveryMeal[]> {
-    const neverShow = (pass.neverShowDishes || []).map((t) => t.toLowerCase());
+    const neverShow = Array.from(
+      new Set([
+        ...(pass.neverShowDishes || []),
+        ...avoidTitles,
+      ].map((t) => t.trim()).filter(Boolean))
+    );
     const diets = (pass.dietaryRestrictions || []).map((d) => d.toLowerCase());
 
     try {
@@ -1289,25 +933,22 @@ Title Rules:
         diets.length > 0 && !diets.includes('none')
           ? `Strict Dietary Restrictions: ${diets.join(', ')}. NEVER include forbidden ingredients.`
           : '';
-      const isAfricanOrIsland = pass.cuisineAnchor === 'african_caribbean';
-      const baseExamples = isAfricanOrIsland
-        ? 'rice, yam, plantain, beans, noodles, soups, eggs, chicken, fish'
-        : 'pasta, potatoes, rice, bread/sourdough, tortillas, oats, chicken, salmon, eggs, fresh veggies';
 
-      const systemPrompt = `You are Mama, a warm local home-cooking mother figure in ${pass.countryName}.
-Generate 5 distinct, realistic everyday home meals for a user living in ${pass.countryName}.
-Cuisine style: ${pass.cuisineLabel || 'Everyday Comfort'}
+      const systemPrompt = `You are Mama, a warm local home-cooking mother figure living in ${pass.countryName}.
+Generate 6 distinct, authentic everyday home meals actually eaten by people in ${pass.countryName}.
+Country: ${pass.countryName} (${pass.currencyCode})
+Cuisine style: ${pass.cuisineLabel || pass.countryName + ' Everyday Home Cooking'}
 Cooking gear: ${pass.cookingGearLabel || '1 Pan & Burner'}
 Max cook time: ${pass.timeLimitMinutes || 20} minutes
 Body goal: ${pass.bodyGoalLabel || 'Balanced Energy'}
 ${dietaryPrompt}
-${pantryItems.length > 0 ? `Available pantry items: ${pantryItems.join(', ')}` : ''}
-${neverShow.length > 0 ? `Never suggest: ${neverShow.join(', ')}` : ''}
+${pantryItems.length > 0 ? `User's kitchen pantry: ${pantryItems.join(', ')}. Where possible, cook these ingredients in authentic ${pass.countryName} style.` : ''}
+${neverShow.length > 0 ? `NEVER suggest or repeat: ${neverShow.join(', ')}` : ''}
 
 Rules:
-1. STRICT REGIONAL IDENTITY: Every single dish MUST belong authentically to ${pass.countryName} (${pass.cuisineLabel || 'Everyday Comfort'}) using normal local supermarket staples. NEVER mix in dishes or specialty ingredients from unrelated continents.
-2. Every dish title MUST be a real, simple 2-4 word everyday meal name people actually say at home (NO restaurant buzzwords like Skillet, Bowl, Sizzle, Medley, Artisan, Crusted, Velvety).
-3. Make all 5 dishes genuinely different from each other (vary the base: ${baseExamples}).
+1. STRICT COUNTRY IDENTITY: Every single dish MUST be an authentic, recognizable everyday home meal from ${pass.countryName} (using normal local grocery staples in ${pass.countryName}). NEVER mix in dishes or specialty ingredients from other countries or continents.
+2. Every dish title MUST be a real, simple 2-4 word everyday meal name people actually say at home (NO buzzwords like Skillet, Bowl, Sizzle, Medley, Artisan, Crusted, Velvety).
+3. Make all 6 dishes genuinely varied across bases and proteins, and tag each with one healthCategory: "clean_healthy", "high_protein", or "light_night" (include 2 of each).
 4. Output strictly JSON:
 {
   "meals": [
@@ -1318,6 +959,7 @@ Rules:
       "nutrition": string,
       "reason": string,
       "baseCostUsd": number,
+      "healthCategory": "clean_healthy" | "high_protein" | "light_night",
       "steps": [string, string, string],
       "ingredients": [{ "name": string, "amount": string }]
     }
@@ -1327,112 +969,229 @@ Rules:
       const data = await callGroqChat(
         [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Generate 5 varied everyday ${pass.cuisineLabel} meals now. Output JSON.` },
+          {
+            role: 'user',
+            content: `Generate 6 authentic everyday home meals from ${pass.countryName} now (seed ${Date.now() % 10000}). Output JSON.`,
+          },
         ],
-        { jsonMode: true, temperature: 0.85, maxTokens: 1100, timeoutMs: 7000 }
+        { jsonMode: true, temperature: 0.85, maxTokens: 1500, timeoutMs: 18000 }
       );
 
       const content = data?.choices?.[0]?.message?.content;
       if (!content) {
-        throw new Error('Groq returned empty discover response');
+        throw new Error('AI returned empty discover response');
       }
       const parsed = JSON.parse(content);
       if (!Array.isArray(parsed?.meals) || parsed.meals.length === 0) {
-        throw new Error('Groq returned empty discover meals array');
+        throw new Error('AI returned empty discover meals array');
       }
-      return parsed.meals.map((m: any, idx: number) => ({
-        id: m.id || `ai-disc-${Date.now()}-${idx}`,
-        categoryType: 'home' as const,
-        cookTimeOrDistance: String(m.cookTimeOrDistance || '15 MIN').toUpperCase(),
-        title: sanitizeDishTitle(m.title || 'Home Meal'),
-        nutrition: m.nutrition || 'Balanced Home Meal',
-        reason: m.reason || `Cooks easily with ${pass.cookingGearLabel}.`,
-        imageUrl: '',
-        baseCostUsd: typeof m.baseCostUsd === 'number' && Number.isFinite(m.baseCostUsd)
-          ? (m.baseCostUsd > 50 ? Math.max(1.0, Math.min(4.0, Number((m.baseCostUsd / 1400).toFixed(2)))) : m.baseCostUsd)
-          : 2.2,
-        cuisineTags: [pass.cuisineAnchor || 'african_caribbean'],
-        steps: Array.isArray(m.steps) && m.steps.length > 0 ? m.steps : ['Prep ingredients.', 'Cook on medium heat.', 'Serve warm.'],
-        ingredients:
-          Array.isArray(m.ingredients) && m.ingredients.length > 0
-            ? m.ingredients
-            : [{ name: 'Kitchen Staples', amount: '1 portion' }],
-      }));
+      const allowedHealth = new Set(['clean_healthy', 'high_protein', 'light_night']);
+      return parsed.meals.map((m: any, idx: number) => {
+        const healthCategory = allowedHealth.has(m.healthCategory)
+          ? (m.healthCategory as 'clean_healthy' | 'high_protein' | 'light_night')
+          : (['clean_healthy', 'high_protein', 'light_night'][idx % 3] as
+              | 'clean_healthy'
+              | 'high_protein'
+              | 'light_night');
+        return {
+          id: m.id || `ai-disc-${Date.now()}-${idx}`,
+          categoryType: 'home' as const,
+          cookTimeOrDistance: String(m.cookTimeOrDistance || '15 MIN').toUpperCase(),
+          title: sanitizeDishTitle(m.title || 'Home Meal'),
+          nutrition: m.nutrition || 'Balanced Home Meal',
+          reason: m.reason || `Cooks easily with ${pass.cookingGearLabel}.`,
+          imageUrl: '',
+          baseCostUsd:
+            typeof m.baseCostUsd === 'number' && Number.isFinite(m.baseCostUsd)
+              ? m.baseCostUsd > 50
+                ? Math.max(1.0, Math.min(4.0, Number((m.baseCostUsd / 1400).toFixed(2))))
+                : m.baseCostUsd
+              : 2.2,
+          cuisineTags: [pass.cuisineAnchor || 'african_caribbean', healthCategory],
+          healthCategory,
+          steps:
+            Array.isArray(m.steps) && m.steps.length > 0
+              ? m.steps
+              : ['Prep ingredients.', 'Cook on medium heat.', 'Serve warm.'],
+          ingredients:
+            Array.isArray(m.ingredients) && m.ingredients.length > 0
+              ? m.ingredients
+              : [{ name: 'Kitchen Staples', amount: '1 portion' }],
+        };
+      });
     } catch {
       try {
         const srvDisc = await apiClient<{ meals?: any[] }>('/api/discover', {
           method: 'POST',
           skipAuth: true,
-          timeoutMs: 7500,
+          timeoutMs: 14000,
           body: JSON.stringify({ pantryItems, kitchenPass: pass }),
         });
         if (Array.isArray(srvDisc?.meals) && srvDisc.meals.length > 0) {
-          return srvDisc.meals.map((m: any, idx: number) => ({
-            id: m.id || `ai-disc-${Date.now()}-${idx}`,
-            categoryType: 'home' as const,
-            cookTimeOrDistance: `${m.cookTimeMinutes || 15} MIN`,
-            title: sanitizeDishTitle(m.title || 'Home Meal'),
-            nutrition: m.nutrition || 'Balanced Home Meal',
-            reason: m.subtitle || `Cooks easily with ${pass.cookingGearLabel}.`,
-            imageUrl: '',
-            baseCostUsd: typeof m.baseCostUsd === 'number' ? m.baseCostUsd : 2.2,
-            cuisineTags: Array.isArray(m.cuisineTags) ? m.cuisineTags : [pass.cuisineAnchor || 'african_caribbean'],
-            steps: Array.isArray(m.steps) && m.steps.length > 0 ? m.steps : ['Prep ingredients.', 'Cook on medium heat.', 'Serve warm.'],
-            ingredients: Array.isArray(m.ingredients) && m.ingredients.length > 0 ? m.ingredients : [{ name: 'Kitchen Staples', amount: '1 portion' }],
-          }));
+          return srvDisc.meals.map((m: any, idx: number) => {
+            const healthCategory = (['clean_healthy', 'high_protein', 'light_night'][idx % 3] as
+              | 'clean_healthy'
+              | 'high_protein'
+              | 'light_night');
+            return {
+              id: m.id || `ai-disc-${Date.now()}-${idx}`,
+              categoryType: 'home' as const,
+              cookTimeOrDistance: `${m.cookTimeMinutes || 15} MIN`,
+              title: sanitizeDishTitle(m.title || 'Home Meal'),
+              nutrition: m.nutrition || 'Balanced Home Meal',
+              reason: m.subtitle || `Cooks easily with ${pass.cookingGearLabel}.`,
+              imageUrl: '',
+              baseCostUsd: typeof m.baseCostUsd === 'number' ? m.baseCostUsd : 2.2,
+              cuisineTags: Array.isArray(m.cuisineTags)
+                ? [...m.cuisineTags, healthCategory]
+                : [pass.cuisineAnchor || 'african_caribbean', healthCategory],
+              healthCategory,
+              steps:
+                Array.isArray(m.steps) && m.steps.length > 0
+                  ? m.steps
+                  : ['Prep ingredients.', 'Cook on medium heat.', 'Serve warm.'],
+              ingredients:
+                Array.isArray(m.ingredients) && m.ingredients.length > 0
+                  ? m.ingredients
+                  : [{ name: 'Kitchen Staples', amount: '1 portion' }],
+            };
+          });
         }
       } catch {
-        // Fall through to offline regional catalog
+        // Return empty array instead of fake mock data
       }
     }
 
-    let baseMeals: AIDiscoveryMeal[] = [];
-    if (pass.cuisineAnchor === 'african_caribbean') {
-      baseMeals = [...REGIONAL_FALLBACK_MEALS.african_caribbean];
-    } else if (pass.cuisineAnchor === 'weeknight_comfort') {
-      baseMeals = [...REGIONAL_FALLBACK_MEALS.weeknight_comfort];
-    } else if (pass.cuisineAnchor === 'global') {
-      baseMeals = [
-        ...REGIONAL_FALLBACK_MEALS.african_caribbean.slice(0, 5),
-        ...REGIONAL_FALLBACK_MEALS.weeknight_comfort.slice(0, 5),
-      ];
-    } else {
-      const isWestern = ['GB', 'US', 'CA', 'EU', 'AU'].includes(pass.country);
-      baseMeals = isWestern
-        ? [...REGIONAL_FALLBACK_MEALS.weeknight_comfort]
-        : [...REGIONAL_FALLBACK_MEALS.african_caribbean];
+    return [];
+  }
+
+  /**
+   * Generate a full 5-card live AI Home deck tailored specifically to the user's country,
+   * time of day, and actual kitchen pantry ingredients. Zero hardcoded mock meals.
+   */
+  static async generateDailyDeckWithAI(
+    timeOfDay: 'morning' | 'lunch' | 'dinner' | 'late_night',
+    pass: UserKitchenPass,
+    pantryItems: string[] = [],
+    avoidTitles: string[] = []
+  ): Promise<
+    {
+      id: string;
+      title: string;
+      subtitle: string;
+      timeOfDay: 'morning' | 'lunch' | 'dinner' | 'late_night';
+      cookTimeMinutes: number;
+      estCost: number;
+      pantryNote: string;
+      mamaTip?: string;
+      ingredients: { name: string; amount: string }[];
+      steps: string[];
+    }[]
+  > {
+    const diets = (pass.dietaryRestrictions || []).filter(
+      (d) => d && d.toLowerCase() !== 'none' && d.toLowerCase() !== 'no preference'
+    );
+    const neverShow = Array.from(
+      new Set([...(pass.neverShowDishes || []), ...avoidTitles].map((t) => t.trim()).filter(Boolean))
+    );
+
+    const dietaryPrompt =
+      diets.length > 0
+        ? `Strict Dietary Requirements: ${diets.join(', ')}. NEVER include forbidden ingredients.`
+        : '';
+
+    const systemPrompt = `You are Mama, a warm, wise local home-cooking mother figure living in ${pass.countryName}.
+Generate 5 distinct, authentic everyday ${timeOfDay} home meals actually cooked in ${pass.countryName}.
+Country: ${pass.countryName} (${pass.currencyCode})
+Cuisine Style: ${pass.cuisineLabel || pass.countryName + ' Home Cooking'}
+Cooking Gear: ${pass.cookingGearLabel || '1 Pan'}
+Max Cook Time: ${pass.timeLimitMinutes || 20} minutes
+Body Goal: ${pass.bodyGoalLabel || 'Balanced Energy'}
+${dietaryPrompt}
+${
+  pantryItems.length > 0
+    ? `User's Kitchen Pantry: ${pantryItems.join(', ')}. Cook these ingredients in authentic ${pass.countryName} style wherever possible, and include iconic ${pass.countryName} home favorites.`
+    : `User's pantry is empty — suggest simple 3-ingredient everyday ${pass.countryName} market staples.`
+}
+${neverShow.length > 0 ? `NEVER suggest: ${neverShow.join(', ')}.` : ''}
+
+Rules:
+1. STRICT COUNTRY IDENTITY: Every single dish MUST be a genuine, recognizable home dish from ${pass.countryName} using normal local groceries from ${pass.countryName}. NEVER include dishes or specialty ingredients from unrelated countries or continents.
+2. Short, real home dish titles (2-4 words). No buzzwords like "skillet", "crispy", "golden", "frittata", "bowl", "hash", "loaded".
+3. Realistic ingredients with amounts (e.g. "2 large", "1 cup", "1 tbsp") and 3 clear practical steps.
+4. "mamaTip": warm 1-sentence cooking/nutrition tip from Mama (<18 words, zero emojis).
+5. "estCost": base USD between 1.0 and 3.5.
+
+Strictly output JSON:
+{
+  "meals": [
+    {
+      "id": string,
+      "title": string,
+      "subtitle": string,
+      "cookTimeMinutes": number,
+      "estCost": number,
+      "pantryNote": string,
+      "mamaTip": string,
+      "ingredients": [{ "name": string, "amount": string }],
+      "steps": [string, string, string]
     }
+  ]
+}`;
 
-    if (neverShow.length > 0) {
-      const allowed = baseMeals.filter((m) => !neverShow.includes(m.title.toLowerCase()));
-      if (allowed.length > 0) baseMeals = allowed;
+    try {
+      const data = await callGroqChat(
+        [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: `Generate 5 distinct authentic ${pass.countryName} ${timeOfDay} home meals now (seed ${Date.now() % 10000}). Output pure JSON.`,
+          },
+        ],
+        { jsonMode: true, temperature: 0.85, maxTokens: 1550, timeoutMs: 18000 }
+      );
+
+      const content = data?.choices?.[0]?.message?.content;
+      if (!content) return [];
+      const parsed = JSON.parse(content);
+      if (!Array.isArray(parsed?.meals) || parsed.meals.length === 0) return [];
+
+      return parsed.meals
+        .filter((m: any) => m && typeof m.title === 'string' && Array.isArray(m.steps) && m.steps.length > 0)
+        .map((m: any, idx: number) => ({
+          id: m.id || `ai-deck-${Date.now()}-${idx}`,
+          title: sanitizeDishTitle(m.title),
+          subtitle: typeof m.subtitle === 'string' ? m.subtitle : `Fresh ${pass.countryName} home favorite.`,
+          timeOfDay,
+          cookTimeMinutes:
+            typeof m.cookTimeMinutes === 'number' && Number.isFinite(m.cookTimeMinutes)
+              ? Math.max(5, Math.min(60, Math.round(m.cookTimeMinutes)))
+              : 15,
+          estCost:
+            typeof m.estCost === 'number' && Number.isFinite(m.estCost)
+              ? m.estCost > 50
+                ? Math.max(1.0, Math.min(4.0, Number((m.estCost / 1400).toFixed(2))))
+                : m.estCost
+              : 2.0,
+          pantryNote:
+            typeof m.pantryNote === 'string' && m.pantryNote.trim()
+              ? m.pantryNote
+              : pantryItems.length > 0
+                ? 'Tailored to your kitchen'
+                : 'Simple local staples',
+          mamaTip: typeof m.mamaTip === 'string' ? m.mamaTip : undefined,
+          ingredients:
+            Array.isArray(m.ingredients) && m.ingredients.length > 0
+              ? m.ingredients.map((i: any) => ({
+                  name: String(i?.name || 'Staple'),
+                  amount: String(i?.amount || 'to taste'),
+                }))
+              : [{ name: 'Local Kitchen Staples', amount: '1 portion' }],
+          steps: m.steps.filter((s: unknown) => typeof s === 'string' && s.trim().length > 0),
+        }));
+    } catch {
+      return [];
     }
-
-    const isVegan = diets.some((d) => d.includes('vegan'));
-    const isVegetarian = isVegan || diets.some((d) => d.includes('vegetarian'));
-    const isDairyFree = diets.some((d) => d.includes('dairy'));
-    const isGlutenFree = diets.some((d) => d.includes('gluten'));
-
-    const meatTerms = ['chicken', 'beef', 'fish', 'tuna', 'sausage', 'meat', 'pork', 'shrimp', 'salmon'];
-    const nonVeganTerms = [...meatTerms, 'egg', 'cheese', 'milk', 'butter', 'cheddar'];
-    const dairyTerms = ['cheese', 'milk', 'butter', 'cheddar'];
-    const glutenTerms = ['bread', 'spaghetti', 'pasta', 'indomie', 'noodles', 'sourdough', 'tortilla', 'flatbread'];
-
-    if (diets.length > 0 && !diets.includes('no preference') && !diets.includes('none')) {
-      const compliant = baseMeals.filter((m) => {
-        const text = `${m.title} ${m.reason} ${m.ingredients.map((i) => i.name).join(' ')}`.toLowerCase();
-        if (isVegan && nonVeganTerms.some((t) => text.includes(t))) return false;
-        if (isVegetarian && meatTerms.some((t) => text.includes(t))) return false;
-        if (isDairyFree && dairyTerms.some((t) => text.includes(t))) return false;
-        if (isGlutenFree && glutenTerms.some((t) => text.includes(t))) return false;
-        return true;
-      });
-      if (compliant.length > 0) {
-        baseMeals = compliant;
-      }
-    }
-
-    return baseMeals;
   }
 
   /**
@@ -1553,7 +1312,7 @@ Strictly output JSON:
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        { jsonMode: true, temperature: 0.85, maxTokens: 380, timeoutMs: 7000 }
+        { jsonMode: true, temperature: 0.85, maxTokens: 420, timeoutMs: 16000 }
       );
 
       const content = data?.choices?.[0]?.message?.content;
@@ -1585,14 +1344,16 @@ Strictly output JSON:
           ? parsed.ingredients
           : [{ name: 'Staple', amount: '1 portion' }],
         steps: Array.isArray(parsed.steps) ? parsed.steps : ['Prepare ingredients in pan.', 'Cook until browned.', 'Serve warm.'],
+        country: pass.country,
+        cuisineAnchor: pass.cuisineAnchor,
       };
-      if (!cachedAiRolledMeals.some((m) => m.title === aiMeal.title)) {
+      if (!cachedAiRolledMeals.some((m) => m.title === aiMeal.title && m.country === pass.country)) {
         cachedAiRolledMeals.unshift(aiMeal);
         if (cachedAiRolledMeals.length > 12) cachedAiRolledMeals.pop();
       }
       if (__DEV__) {
         console.log(
-          `[Mama AI] Rolled "${aiMeal.title}" · ${aiMeal.cookTimeMinutes} min · pantry: ${
+          `[Mama AI] Rolled "${aiMeal.title}" · ${aiMeal.cookTimeMinutes} min · country: ${pass.countryName} · pantry: ${
             pantryItems.length > 0 ? pantryItems.join(', ') : 'EMPTY (market run)'
           } · note: ${aiMeal.pantryNote}`
         );
@@ -1600,12 +1361,12 @@ Strictly output JSON:
       return aiMeal;
     } catch (groqErr) {
       if (__DEV__) console.warn('[Mama AI] Groq roll failed, trying backend /api/roll:', String(groqErr));
-      // Fallback 1: Try backend /api/roll or /api/discover if client Groq call is rate-limited
+      // Fallback 1: Try backend /api/roll if client Groq call is rate-limited
       try {
         const backendRolled = await apiClient<any>('/api/roll', {
           method: 'POST',
           skipAuth: true,
-          timeoutMs: 8000,
+          timeoutMs: 14000,
           body: JSON.stringify({
             timeOfDay,
             pantryItems,
@@ -1623,20 +1384,24 @@ Strictly output JSON:
             id: backendRolled.id || `ai-srv-${Date.now()}`,
             title: cleanTitle,
             timeOfDay,
+            country: pass.country,
+            cuisineAnchor: pass.cuisineAnchor,
           };
-          if (!cachedAiRolledMeals.some((m) => m.title === aiMeal.title)) {
+          if (!cachedAiRolledMeals.some((m) => m.title === aiMeal.title && m.country === pass.country)) {
             cachedAiRolledMeals.unshift(aiMeal);
             if (cachedAiRolledMeals.length > 12) cachedAiRolledMeals.pop();
           }
           return aiMeal;
         }
       } catch {
-        // Backend unavailable (e.g. Render cold start). We intentionally do NOT fall back to
-        // /api/discover here: it ignores time of day and could serve breakfast at dinner.
+        // Backend unavailable (e.g. Render cold start).
       }
-      // Fallback 2: Return an unpassed meal from cachedAiRolledMeals if offline
+      // Fallback 2: Only reuse cached live AI meal from the SAME country & cuisine
       const unpassedCached = cachedAiRolledMeals.find(
-        (m) => !passedTitles.includes(m.title)
+        (m) =>
+          m.country === pass.country &&
+          m.cuisineAnchor === pass.cuisineAnchor &&
+          !passedTitles.includes(m.title)
       );
       if (unpassedCached) {
         return { ...unpassedCached, id: `${unpassedCached.id}-${Date.now()}` };

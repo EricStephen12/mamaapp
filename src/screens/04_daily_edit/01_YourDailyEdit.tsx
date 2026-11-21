@@ -40,8 +40,6 @@ import {
   RolledMeal,
   getCurrentTimeOfDay,
   getTimeOfDayHeading,
-  getInitialMeal,
-  getInitialMealDeck,
 } from '../../services/api/rollService';
 import { useShake } from '../../hooks/useShake';
 import { useUserDataBank } from '../../context/UserDataBankContext';
@@ -84,62 +82,133 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
     pantryService.getCachedPantry().map((i) => i.name)
   );
 
-  // Dynamic multi-meal deck for buttery-smooth swipeable carousel
-  const [mealsDeck, setMealsDeck] = useState<RolledMeal[]>(() =>
-    getInitialMealDeck(mealPeriod, kitchenPass)
-  );
+  // 100% live AI multi-meal deck (zero hardcoded mock catalog cards)
+  const [mealsDeck, setMealsDeck] = useState<RolledMeal[]>([]);
+  const [isLoadingDeck, setIsLoadingDeck] = useState<boolean>(true);
   const [activeMealIndex, setActiveMealIndex] = useState<number>(0);
   const rolledMeal = mealsDeck[activeMealIndex] || mealsDeck[0];
   const [isRolling, setIsRolling] = useState(false);
   const [lastRolledMeal, setLastRolledMeal] = useState<RolledMeal | null>(null);
   const [showUndoBanner, setShowUndoBanner] = useState(false);
   const undoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const deckRequestIdRef = useRef<number>(0);
 
   // Dynamic Mama Live Dialogue — directly synchronized with pantry, budget, and active dish
   const [mamaQuote, setMamaQuote] = useState<string>(() => {
-    const initial = getInitialMeal(mealPeriod, kitchenPass);
     const cachedPantry = pantryService.getCachedPantry().map((i) => i.name);
     const voice = MamaDialogueService.getSyncedMamaVoice({
       timeOfDay: mealPeriod,
       pass: kitchenPass,
       pantryItems: cachedPantry,
-      activeDish: {
-        title: initial.title,
-        cookTimeMinutes: initial.cookTimeMinutes,
-        estCost: initial.estCost,
-        gear: kitchenPass.cookingGearLabel,
-        mamaTip: initial.mamaTip,
-      },
       actionHint: 'init',
     });
     return voice.quote;
   });
   const [mamaPose, setMamaPose] = useState<MamaPose>('cooking');
 
+  /** Fetch a fresh 5-card 100% live AI deck tailored to the active country & pantry */
+  const loadLiveDeckForPass = useCallback(
+    async (
+      targetPeriod: MealPeriod,
+      targetPass: UserKitchenPass,
+      targetPantry: string[],
+      clearCurrent: boolean = false
+    ) => {
+      const reqId = ++deckRequestIdRef.current;
+      if (clearCurrent) {
+        setMealsDeck([]);
+        setActiveMealIndex(0);
+      }
+      setIsLoadingDeck(true);
+
+      // Show same-country cached live AI dishes immediately if available (empty on brand-new country)
+      const cachedSameCountry = await rollService.getCachedAiDeck(targetPeriod, targetPass);
+      if (deckRequestIdRef.current !== reqId) return;
+      if (cachedSameCountry.length > 0 && !clearCurrent) {
+        setMealsDeck(cachedSameCountry);
+        setActiveMealIndex(0);
+      }
+
+      try {
+        const liveMeals = await rollService.generateLiveDailyDeck(
+          targetPeriod,
+          targetPass,
+          targetPantry
+        );
+        if (deckRequestIdRef.current !== reqId) return;
+
+        if (liveMeals.length > 0) {
+          setMealsDeck(liveMeals);
+          setActiveMealIndex(0);
+
+          const leadMeal = liveMeals[0];
+          const voice = MamaDialogueService.getSyncedMamaVoice({
+            timeOfDay: targetPeriod,
+            pass: targetPass,
+            pantryItems: targetPantry,
+            activeDish: {
+              title: leadMeal.title,
+              cookTimeMinutes: leadMeal.cookTimeMinutes,
+              estCost: leadMeal.estCost,
+              gear: targetPass.cookingGearLabel,
+              mamaTip: leadMeal.mamaTip,
+            },
+            actionHint: 'init',
+          });
+          setMamaQuote(voice.quote);
+          setMamaPose(voice.pose);
+
+          // Hydrate real dish photos in parallel for every live AI card
+          liveMeals.forEach((meal) => {
+            MealImageService.generateMealImage(
+              meal.title,
+              meal.ingredients,
+              targetPass.cuisineAnchor
+            )
+              .then((photoUrl) => {
+                if (photoUrl && deckRequestIdRef.current === reqId) {
+                  setMealsDeck((prev) =>
+                    prev.map((m) => (m.title === meal.title ? { ...m, imageUrl: photoUrl } : m))
+                  );
+                }
+              })
+              .catch(() => {});
+          });
+
+          AiMamaService.getLiveMamaDialogue({
+            timeOfDay: targetPeriod,
+            pass: targetPass,
+            pantryItems: targetPantry,
+            activeDish: {
+              title: leadMeal.title,
+              cookTimeMinutes: leadMeal.cookTimeMinutes,
+              estCost: leadMeal.estCost,
+              gear: targetPass.cookingGearLabel,
+            },
+            actionHint: 'init',
+          })
+            .then((aiQuote) => {
+              if (aiQuote && aiQuote.length > 5 && deckRequestIdRef.current === reqId) {
+                setMamaQuote(aiQuote);
+              }
+            })
+            .catch(() => {});
+        }
+      } finally {
+        if (deckRequestIdRef.current === reqId) {
+          setIsLoadingDeck(false);
+        }
+      }
+    },
+    []
+  );
+
   const handleCycleMealPeriod = () => {
     Haptics.selectionAsync().catch(() => {});
     const order: MealPeriod[] = ['morning', 'lunch', 'dinner', 'late_night'];
     const nextPeriod = order[(order.indexOf(mealPeriod) + 1) % order.length];
     setMealPeriod(nextPeriod);
-    const newDeck = getInitialMealDeck(nextPeriod, kitchenPass);
-    setMealsDeck(newDeck);
-    setActiveMealIndex(0);
-    const nextMeal = newDeck[0];
-    const voice = MamaDialogueService.getSyncedMamaVoice({
-      timeOfDay: nextPeriod,
-      pass: kitchenPass,
-      pantryItems,
-      activeDish: {
-        title: nextMeal.title,
-        cookTimeMinutes: nextMeal.cookTimeMinutes,
-        estCost: nextMeal.estCost,
-        gear: kitchenPass.cookingGearLabel,
-        mamaTip: nextMeal.mamaTip,
-      },
-      actionHint: 'init',
-    });
-    setMamaQuote(voice.quote);
-    setMamaPose(voice.pose);
+    loadLiveDeckForPass(nextPeriod, kitchenPass, pantryItems, true);
   };
 
   const handleSelectMealIndex = useCallback(
@@ -216,108 +285,16 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
       const nextPrefsKey = `${updated.country}|${updated.cuisineAnchor}|${updated.bodyGoal}|${updated.timeLimitMinutes}|${(updated.dietaryRestrictions || []).join(',')}`;
       if (nextPrefsKey !== prevPrefsKeyRef.current) {
         prevPrefsKeyRef.current = nextPrefsKey;
-        const newDeck = getInitialMealDeck(mealPeriod, updated);
-        setMealsDeck(newDeck);
-        setActiveMealIndex(0);
         const currentPantry = pantryService.getCachedPantry().map((i) => i.name);
         setPantryItems(currentPantry);
-        const matchedMeal = newDeck[0];
-        const voice = MamaDialogueService.getSyncedMamaVoice({
-          timeOfDay: mealPeriod,
-          pass: updated,
-          pantryItems: currentPantry,
-          activeDish: {
-            title: matchedMeal.title,
-            cookTimeMinutes: matchedMeal.cookTimeMinutes,
-            estCost: matchedMeal.estCost,
-            gear: updated.cookingGearLabel,
-            mamaTip: matchedMeal.mamaTip,
-          },
-          actionHint: 'init',
-        });
-        setMamaQuote(voice.quote);
-        setMamaPose(voice.pose);
-
         setPendingRolledMeal(null);
-        setIsRolling(true);
-        rollService
-          .rollNextMeal(mealPeriod, matchedMeal.title)
-          .then(async (aiMeal) => {
-            if (prevPrefsKeyRef.current !== nextPrefsKey) return;
-            const photoPromise = MealImageService.generateMealImage(
-              aiMeal.title,
-              aiMeal.ingredients,
-              updated.cuisineAnchor
-            ).catch(() => null);
-            const fastPhotoUrl = await Promise.race([
-              photoPromise,
-              new Promise<null>((resolve) => setTimeout(() => resolve(null), 3200)),
-            ]);
-            if (prevPrefsKeyRef.current !== nextPrefsKey) return;
-            const hydratedMeal: RolledMeal = fastPhotoUrl
-              ? { ...aiMeal, imageUrl: fastPhotoUrl }
-              : aiMeal;
-
-            setMealsDeck((prev) => [
-              hydratedMeal,
-              ...prev.filter((m) => m.title !== hydratedMeal.title),
-            ]);
-            setActiveMealIndex(0);
-
-            if (!fastPhotoUrl) {
-              photoPromise.then((lateUrl) => {
-                if (lateUrl) {
-                  setMealsDeck((prev) =>
-                    prev.map((m) => (m.title === aiMeal.title ? { ...m, imageUrl: lateUrl } : m))
-                  );
-                }
-              });
-            }
-            const aiSyncVoice = MamaDialogueService.getSyncedMamaVoice({
-              timeOfDay: mealPeriod,
-              pass: updated,
-              pantryItems: currentPantry,
-              activeDish: {
-                title: aiMeal.title,
-                cookTimeMinutes: aiMeal.cookTimeMinutes,
-                estCost: aiMeal.estCost,
-                gear: updated.cookingGearLabel,
-                mamaTip: aiMeal.mamaTip,
-              },
-              actionHint: 'init',
-            });
-            setMamaQuote(aiSyncVoice.quote);
-            setMamaPose(aiSyncVoice.pose);
-
-            AiMamaService.getLiveMamaDialogue({
-              timeOfDay: mealPeriod,
-              pass: updated,
-              pantryItems: currentPantry,
-              activeDish: {
-                title: aiMeal.title,
-                cookTimeMinutes: aiMeal.cookTimeMinutes,
-                estCost: aiMeal.estCost,
-                gear: updated.cookingGearLabel,
-              },
-              actionHint: 'init',
-            })
-              .then((aiQuote) => {
-                if (aiQuote && aiQuote.length > 5) {
-                  setMamaQuote(aiQuote);
-                }
-              })
-              .catch(() => {});
-          })
-          .catch(() => {})
-          .finally(() => {
-            setIsRolling(false);
-          });
+        loadLiveDeckForPass(mealPeriod, updated, currentPantry, true);
       }
     });
     return unsub;
-  }, [mealPeriod]);
+  }, [mealPeriod, loadLiveDeckForPass]);
 
-  // Initial meal roll & pantry load
+  // Initial live AI deck & pantry load
   useEffect(() => {
     let cancelled = false;
     Animated.parallel([
@@ -327,40 +304,24 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
 
     pantryService
       .fetchAll()
-      .then(async (items) => {
+      .then((items) => {
         if (cancelled) return;
         const itemNames = items.map((i) => i.name);
         setPantryItems(itemNames);
-
         const currentPass = preferencesStore.getKitchenPass();
-        const initialDeck = getInitialMealDeck(mealPeriod, currentPass);
-        setMealsDeck(initialDeck);
-        setActiveMealIndex(0);
-        const initialDish = initialDeck[0];
-        const voice = MamaDialogueService.getSyncedMamaVoice({
-          timeOfDay: mealPeriod,
-          pass: currentPass,
-          pantryItems: itemNames,
-          activeDish: {
-            title: initialDish.title,
-            cookTimeMinutes: initialDish.cookTimeMinutes,
-            estCost: initialDish.estCost,
-            gear: currentPass.cookingGearLabel,
-            mamaTip: initialDish.mamaTip,
-          },
-          actionHint: 'init',
-        });
-        setMamaQuote(voice.quote);
-        setMamaPose(voice.pose);
+        loadLiveDeckForPass(getCurrentTimeOfDay(), currentPass, itemNames, false);
       })
       .catch(() => {
-        // Keep initial dish if offline
+        if (cancelled) return;
+        const currentPass = preferencesStore.getKitchenPass();
+        const cachedNames = pantryService.getCachedPantry().map((i) => i.name);
+        loadLiveDeckForPass(getCurrentTimeOfDay(), currentPass, cachedNames, false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [mealPeriod, contentFade, contentY]);
+  }, [contentFade, contentY, loadLiveDeckForPass]);
 
   // Listen for meals chosen from Discover or Kitchen Match
   useEffect(() => {
@@ -867,6 +828,8 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
             onSelectMealIndex={handleSelectMealIndex}
             kitchenPass={kitchenPass}
             isRolling={isRolling}
+            isLoadingDeck={isLoadingDeck}
+            onRetryDeck={() => loadLiveDeckForPass(mealPeriod, kitchenPass, pantryItems, true)}
             onPressCard={handleCookMeal}
             onRollPress={handleRollAgain}
             onCyclePeriod={handleCycleMealPeriod}

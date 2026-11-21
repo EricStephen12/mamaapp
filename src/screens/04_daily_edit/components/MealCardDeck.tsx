@@ -8,6 +8,7 @@ import {
   Animated,
   Dimensions,
   FlatList,
+  ActivityIndicator,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
@@ -30,6 +31,8 @@ interface MealCardDeckProps {
   onSelectMealIndex: (index: number) => void;
   kitchenPass: UserKitchenPass;
   isRolling: boolean;
+  isLoadingDeck?: boolean;
+  onRetryDeck?: () => void;
   onPressCard: () => void;
   onRollPress: () => void;
   onCyclePeriod?: () => void;
@@ -52,6 +55,8 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
   onSelectMealIndex,
   kitchenPass,
   isRolling,
+  isLoadingDeck = false,
+  onRetryDeck,
   onPressCard,
   onRollPress,
 }) => {
@@ -343,39 +348,76 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
     <View style={styles.modalCardContainer}>
       {/* 1. THE FULL-SPACE AUTO-SCROLLING TILTED CAROUSEL */}
       <View style={styles.carouselStage}>
-        <Animated.FlatList
-          ref={flatListRef}
-          data={meals}
-          extraData={{ deckVideos, activeIndex, isRolling }}
-          keyExtractor={(item, index) => `${item.id || item.title}-${index}`}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={SNAP_INTERVAL}
-          snapToAlignment="start"
-          decelerationRate="fast"
-          contentContainerStyle={styles.flatListContent}
-          getItemLayout={(_, index) => ({
-            length: SNAP_INTERVAL,
-            offset: SNAP_INTERVAL * index,
-            index,
-          })}
-          initialNumToRender={6}
-          maxToRenderPerBatch={6}
-          windowSize={5}
-          removeClippedSubviews={false}
-          onScrollBeginDrag={() => {
-            isUserScrollingRef.current = true;
-            lastUserTouchRef.current = Date.now();
-          }}
-          onScrollEndDrag={handleScrollEndDrag}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-            { useNativeDriver: true }
-          )}
-          scrollEventThrottle={16}
-          onMomentumScrollEnd={handleScrollEnd}
-          renderItem={renderCardItem}
-        />
+        {meals.length === 0 ? (
+          <View style={styles.emptyPosterCard}>
+            <SteamWisps triggerKey={kitchenPass.country} style={styles.emptySteam} />
+            {isLoadingDeck || isRolling ? (
+              <>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.emptyPosterTitle}>
+                  Setting up {kitchenPass.countryName}&apos;s kitchen
+                </Text>
+                <Text style={styles.emptyPosterSub}>
+                  Picking fresh everyday home dishes for you...
+                </Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="restaurant-outline" size={32} color={colors.primary} />
+                <Text style={styles.emptyPosterTitle}>
+                  Couldn&apos;t load {kitchenPass.countryName} dishes
+                </Text>
+                <Text style={styles.emptyPosterSub}>
+                  Check your connection and tap below to try again.
+                </Text>
+                {onRetryDeck ? (
+                  <TouchableOpacity
+                    style={styles.emptyRetryBtn}
+                    onPress={onRetryDeck}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="refresh" size={16} color="#FFFFFF" />
+                    <Text style={styles.emptyRetryBtnText}>Try Again</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            )}
+          </View>
+        ) : (
+          <Animated.FlatList
+            ref={flatListRef}
+            data={meals}
+            extraData={{ deckVideos, activeIndex, isRolling }}
+            keyExtractor={(item, index) => `${item.id || item.title}-${index}`}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={SNAP_INTERVAL}
+            snapToAlignment="start"
+            decelerationRate="fast"
+            contentContainerStyle={styles.flatListContent}
+            getItemLayout={(_, index) => ({
+              length: SNAP_INTERVAL,
+              offset: SNAP_INTERVAL * index,
+              index,
+            })}
+            initialNumToRender={6}
+            maxToRenderPerBatch={6}
+            windowSize={5}
+            removeClippedSubviews={false}
+            onScrollBeginDrag={() => {
+              isUserScrollingRef.current = true;
+              lastUserTouchRef.current = Date.now();
+            }}
+            onScrollEndDrag={handleScrollEndDrag}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+              { useNativeDriver: true }
+            )}
+            scrollEventThrottle={16}
+            onMomentumScrollEnd={handleScrollEnd}
+            renderItem={renderCardItem}
+          />
+        )}
       </View>
 
       {/* 2. DISH TITLE & METADATA */}
@@ -721,5 +763,49 @@ const styles = StyleSheet.create({
     top: 46,
     left: 12,
     zIndex: 15,
+  },
+  emptyPosterCard: {
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    alignSelf: 'center',
+    borderRadius: 28,
+    backgroundColor: colors.linen200,
+    borderWidth: 1,
+    borderColor: 'rgba(102, 112, 74, 0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    gap: 10,
+  },
+  emptySteam: {
+    marginBottom: 4,
+  },
+  emptyPosterTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text.primary,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  emptyPosterSub: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.text.secondary,
+    textAlign: 'center',
+  },
+  emptyRetryBtn: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 999,
+  },
+  emptyRetryBtnText: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 });
