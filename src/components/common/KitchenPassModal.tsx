@@ -209,6 +209,90 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
     onClose();
   };
 
+  /** Upgrade (paywall) when Free, Manage / cancel (Customer Center) when Pro */
+  const handlePlanPress = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
+    if (isPlusActive) {
+      // Native RevenueCat Customer Center: manage, cancel, restore, refunds
+      const openedCustomerCenter = await subscriptionService.presentCustomerCenter();
+      if (openedCustomerCenter) {
+        const stillPro = await subscriptionService.checkProEntitlement();
+        setIsPlusActive(stillPro);
+        return;
+      }
+
+      const isLive = subscriptionService.isLive();
+      Alert.alert(
+        'Mama Kitchen Pro Active',
+        isLive
+          ? "You have Unlimited Daily Rolls, Free Healthy Remixes, and 2x XP. Manage or cancel anytime in your phone's App Store / Play Store subscriptions."
+          : 'You have Unlimited Daily Rolls, Free Instant Healthy Remixes, and 2x XP (+100 XP per home meal).',
+        isLive
+          ? [{ text: 'OK', style: 'cancel' }]
+          : [
+              { text: 'Keep Pro', style: 'cancel' },
+              {
+                text: 'Cancel Subscription',
+                style: 'destructive',
+                onPress: () => {
+                  subscriptionService.cancelPreview();
+                  setIsPlusActive(false);
+                },
+              },
+            ]
+      );
+      return;
+    }
+
+    // Hosted RevenueCat Paywall (Monthly / Yearly / Lifetime)
+    const paywallOutcome = await subscriptionService.presentPaywall();
+    if (paywallOutcome === 'purchased' || paywallOutcome === 'restored') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setIsPlusActive(true);
+      return;
+    }
+    if (paywallOutcome === 'cancelled') return;
+
+    // Graceful fallback when native Paywall UI isn't available (Expo Go / Web)
+    const price = await subscriptionService.getPlusPriceString();
+    Alert.alert(
+      `Mama Kitchen Pro (${price})`,
+      'Unlock the full Mama experience:\n\n• Unlimited Daily Dice Rolls\n• Free Instant "Make It Healthy" Remixes (0 XP)\n• 2x XP Multiplier (+100 XP per home meal)',
+      [
+        { text: 'Not Now', style: 'cancel' },
+        {
+          text: 'Restore Purchase',
+          onPress: async () => {
+            const restored = await subscriptionService.restore();
+            setIsPlusActive(restored);
+            if (!restored) {
+              Alert.alert(
+                'Nothing to restore',
+                'No active Mama Kitchen Pro subscription was found on this account.'
+              );
+            }
+          },
+        },
+        {
+          text: subscriptionService.isLive() ? 'Get Mama Pro' : 'Activate Pro Preview',
+          onPress: async () => {
+            const outcome = await subscriptionService.purchasePlus('monthly');
+            if (outcome === 'purchased' || outcome === 'preview') {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              setIsPlusActive(true);
+            } else if (outcome === 'error') {
+              Alert.alert(
+                'Purchase not completed',
+                'Something went wrong with the store. You have not been charged.'
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
@@ -294,91 +378,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
                     isPlusActive && styles.plusTogglePillActive,
                   ]}
                   activeOpacity={0.82}
-                  onPress={async () => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    if (isPlusActive) {
-                      // Present RevenueCat Customer Center natively when live
-                      const openedCustomerCenter = await subscriptionService.presentCustomerCenter();
-                      if (openedCustomerCenter) {
-                        const stillPro = await subscriptionService.checkProEntitlement();
-                        setIsPlusActive(stillPro);
-                        return;
-                      }
-
-                      const isLive = subscriptionService.isLive();
-                      Alert.alert(
-                        'Mama Kitchen Pro Active',
-                        isLive
-                          ? "You have Unlimited Daily Rolls, Free Healthy Remixes, and 2x XP. Manage or cancel anytime in your phone's App Store / Play Store subscriptions."
-                          : 'You have Unlimited Daily Rolls, Free Instant Healthy Remixes, and 2x XP (+100 XP per home meal).',
-                        isLive
-                          ? [{ text: 'OK', style: 'cancel' }]
-                          : [
-                              { text: 'Keep Pro', style: 'cancel' },
-                              {
-                                text: 'Switch to Free Plan',
-                                style: 'destructive',
-                                onPress: () => {
-                                  subscriptionService.cancelPreview();
-                                  setIsPlusActive(false);
-                                },
-                              },
-                            ]
-                      );
-                      return;
-                    }
-
-                    // Try RevenueCat Hosted Paywall first (Monthly / Yearly / Lifetime)
-                    const paywallOutcome = await subscriptionService.presentPaywall();
-                    if (paywallOutcome === 'purchased' || paywallOutcome === 'restored') {
-                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                      setIsPlusActive(true);
-                      return;
-                    }
-                    if (paywallOutcome === 'cancelled') {
-                      return;
-                    }
-
-                    // Graceful fallback when native Paywall UI isn't available (e.g. Expo Go / Web)
-                    const price = await subscriptionService.getPlusPriceString();
-                    Alert.alert(
-                      `Mama Kitchen Pro (${price})`,
-                      'Unlock the full Mama experience:\n\n• Unlimited Daily Dice Rolls\n• Free Instant "Make It Healthy" Remixes (0 XP)\n• 2x XP Multiplier (+100 XP per home meal)',
-                      [
-                        { text: 'Not Now', style: 'cancel' },
-                        {
-                          text: 'Restore Purchase',
-                          onPress: async () => {
-                            const restored = await subscriptionService.restore();
-                            setIsPlusActive(restored);
-                            if (!restored) {
-                              Alert.alert(
-                                'Nothing to restore',
-                                'No active Mama Kitchen Pro subscription was found on this account.'
-                              );
-                            }
-                          },
-                        },
-                        {
-                          text: subscriptionService.isLive() ? 'Get Mama Pro' : 'Activate Pro Preview',
-                          onPress: async () => {
-                            const outcome = await subscriptionService.purchasePlus('monthly');
-                            if (outcome === 'purchased' || outcome === 'preview') {
-                              Haptics.notificationAsync(
-                                Haptics.NotificationFeedbackType.Success
-                              ).catch(() => {});
-                              setIsPlusActive(true);
-                            } else if (outcome === 'error') {
-                              Alert.alert(
-                                'Purchase not completed',
-                                'Something went wrong with the store. You have not been charged.'
-                              );
-                            }
-                          },
-                        },
-                      ]
-                    );
-                  }}
+                  onPress={handlePlanPress}
                 >
                   <Text
                     style={[
@@ -392,6 +392,31 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
                   </Text>
                 </TouchableOpacity>
               </View>
+            </View>
+
+            {/* Mama Pro Plan Card: clear Upgrade / Manage subscription button */}
+            <View style={[styles.planCard, isPlusActive && styles.planCardActive]}>
+              <View style={styles.planCardTextWrap}>
+                <Text style={[styles.planCardTitle, isPlusActive && styles.planCardTitleActive]}>
+                  {isPlusActive ? 'Mama Kitchen Pro' : 'Upgrade to Mama Pro'}
+                </Text>
+                <Text style={[styles.planCardSub, isPlusActive && styles.planCardSubActive]}>
+                  {isPlusActive
+                    ? 'Unlimited rolls · Free healthy remix · 2x XP'
+                    : `Unlimited rolls, free healthy remix & 2x XP · ${preferencesStore.getLocalizedPlusPrice()}`}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.planCardBtn, isPlusActive && styles.planCardBtnActive]}
+                onPress={handlePlanPress}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={isPlusActive ? 'Manage or cancel subscription' : 'Upgrade to Mama Pro'}
+              >
+                <Text style={[styles.planCardBtnText, isPlusActive && styles.planCardBtnTextActive]}>
+                  {isPlusActive ? 'Manage' : 'Upgrade'}
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Body Goal */}
@@ -783,6 +808,59 @@ const styles = StyleSheet.create({
   },
   plusTogglePillTextActive: {
     color: '#FFFFFF',
+  },
+  planCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(102, 112, 74, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(102, 112, 74, 0.28)',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+  },
+  planCardActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  planCardTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  planCardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text.primary,
+  },
+  planCardTitleActive: {
+    color: '#FFFFFF',
+  },
+  planCardSub: {
+    fontSize: 11.5,
+    lineHeight: 15,
+    fontWeight: '500',
+    color: colors.text.secondary,
+  },
+  planCardSubActive: {
+    color: 'rgba(255, 255, 255, 0.85)',
+  },
+  planCardBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  planCardBtnActive: {
+    backgroundColor: '#FFFFFF',
+  },
+  planCardBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  planCardBtnTextActive: {
+    color: colors.primary,
   },
   profileLeft: {
     flexDirection: 'row',
