@@ -615,9 +615,18 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
               },
             },
             {
-              text: `Unlock Mama Plus (${price})`,
-              onPress: () => {
-                setPassModalVisible(true);
+              text: `Unlock Mama Pro (${price})`,
+              onPress: async () => {
+                const outcome = await subscriptionService.presentPaywallIfNeeded();
+                if (outcome === 'purchased' || outcome === 'restored') {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                  setToastMessage('Welcome to Mama Kitchen Pro! Unlimited rolls unlocked.');
+                  setPendingRolledMeal(null);
+                  setRollRevealVisible(true);
+                  executeRoll();
+                } else if (outcome === 'unavailable') {
+                  setPassModalVisible(true);
+                }
               },
             },
           ]
