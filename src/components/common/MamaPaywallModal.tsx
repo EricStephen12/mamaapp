@@ -8,8 +8,8 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
@@ -23,7 +23,7 @@ export interface MamaPaywallProps {
   onSubscribed?: () => void;
 }
 
-type PlanType = 'monthly' | 'yearly' | 'lifetime';
+type PlanType = 'monthly' | 'yearly';
 
 /**
  * Full Mama Kitchen Pro Paywall view.
@@ -33,13 +33,14 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
   onClose,
   onSubscribed,
 }) => {
+  const insets = useSafeAreaInsets();
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('monthly');
   const [loading, setLoading] = useState(false);
 
   const countryCode = preferencesStore.getKitchenPass().country || 'NG';
   const monthlyPrice = preferencesStore.getLocalizedPlusPrice();
 
-  // Currencies formatted for Yearly ($9.99 eq.) and Lifetime ($24.99 eq.)
+  // Currencies formatted for Yearly ($9.99 eq.)
   const currencyCode = preferencesStore.getKitchenPass().currencyCode || 'USD';
   const getYearlyPriceString = (): { total: string; perMonth: string } => {
     switch (currencyCode) {
@@ -64,31 +65,7 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
     }
   };
 
-  const getLifetimePriceString = (): string => {
-    switch (currencyCode) {
-      case 'NGN':
-        return '₦39,000 once';
-      case 'GBP':
-        return '£24.99 once';
-      case 'EUR':
-        return '€24.99 once';
-      case 'GHS':
-        return 'GH₵390 once';
-      case 'KES':
-        return 'KSh3,490 once';
-      case 'ZAR':
-        return 'R490 once';
-      case 'CAD':
-        return 'CA$34.99 once';
-      case 'AUD':
-        return 'A$39.99 once';
-      default:
-        return '$24.99 once';
-    }
-  };
-
   const yearly = getYearlyPriceString();
-  const lifetime = getLifetimePriceString();
 
   const handlePurchase = async () => {
     if (loading) return;
@@ -135,25 +112,32 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
     }
   };
 
+  const topInset = Math.max(insets.top, 24);
+  const bottomInset = Math.max(insets.bottom, 18);
+
   return (
     <View style={styles.container}>
       <KitchenAtmosphere period="dinner" />
 
-      {/* Top Header bar with Close and Restore */}
-      <View style={styles.topBar}>
+      {/* Top Header bar with Safe-Area aware Close and Restore */}
+      <View style={[styles.topBar, { paddingTop: topInset + 10 }]}>
         <TouchableOpacity
           style={styles.closeBtn}
           onPress={onClose}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+          accessibilityRole="button"
           accessibilityLabel="Close paywall"
         >
-          <Ionicons name="close" size={22} color={colors.text.primary} />
+          <Ionicons name="close" size={24} color={colors.text.primary} />
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={styles.restoreBtn}
           onPress={handleRestore}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
           disabled={loading}
+          accessibilityRole="button"
+          accessibilityLabel="Restore purchases"
         >
           <Text style={styles.restoreText}>Restore</Text>
         </TouchableOpacity>
@@ -161,7 +145,7 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
 
       <ScrollView
         style={styles.scrollArea}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset + 96 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Hero Branding */}
@@ -295,40 +279,6 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
           </View>
         </TouchableOpacity>
 
-        {/* Lifetime Option */}
-        <TouchableOpacity
-          style={[
-            styles.planOption,
-            selectedPlan === 'lifetime' && styles.planOptionActive,
-          ]}
-          onPress={() => {
-            Haptics.selectionAsync().catch(() => {});
-            setSelectedPlan('lifetime');
-          }}
-          activeOpacity={0.88}
-        >
-          <View style={styles.planRadio}>
-            <View
-              style={[
-                styles.planRadioInner,
-                selectedPlan === 'lifetime' && styles.planRadioInnerActive,
-              ]}
-            />
-          </View>
-          <View style={styles.planInfo}>
-            <View style={styles.planTitleRow}>
-              <Text style={styles.planTitle}>Lifetime Kitchen</Text>
-              <View style={styles.pillTag}>
-                <Text style={styles.pillTagText}>ONE-TIME</Text>
-              </View>
-            </View>
-            <Text style={styles.planSub}>Pay once, yours forever</Text>
-          </View>
-          <View style={styles.planPriceCol}>
-            <Text style={styles.planPriceMain}>{lifetime}</Text>
-          </View>
-        </TouchableOpacity>
-
         {/* Legal / Guarantee note */}
         <Text style={styles.legalNote}>
           {"Cancel anytime in your phone's App Store / Google Play subscriptions. No hidden fees."}
@@ -336,7 +286,7 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
       </ScrollView>
 
       {/* Floating Bottom CTA Button */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: bottomInset + 12 }]}>
         <TouchableOpacity
           style={[styles.ctaButton, loading && styles.ctaButtonDisabled]}
           onPress={handlePurchase}
@@ -349,9 +299,7 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
             <Text style={styles.ctaButtonText}>
               {selectedPlan === 'monthly'
                 ? `Unlock Monthly (${monthlyPrice})`
-                : selectedPlan === 'yearly'
-                ? `Unlock Yearly (${yearly.total})`
-                : `Unlock Lifetime (${lifetime})`}
+                : `Unlock Yearly (${yearly.total})`}
             </Text>
           )}
         </TouchableOpacity>
@@ -383,17 +331,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 18 : 16,
-    paddingBottom: 8,
+    paddingBottom: 10,
     zIndex: 10,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(36, 40, 32, 0.08)',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(36, 40, 32, 0.10)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  restoreBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(102, 112, 74, 0.12)',
   },
   restoreText: {
     fontSize: 13,
@@ -405,12 +358,11 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 22,
-    paddingTop: 10,
-    paddingBottom: 110,
+    paddingTop: 8,
   },
   heroSection: {
     alignItems: 'center',
-    marginBottom: 22,
+    marginBottom: 20,
   },
   avatarWrap: {
     position: 'relative',
@@ -455,7 +407,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderWidth: 1,
     borderColor: 'rgba(218, 216, 204, 0.7)',
-    marginBottom: 24,
+    marginBottom: 22,
   },
   perkRow: {
     flexDirection: 'row',
@@ -593,7 +545,6 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(218, 216, 204, 0.6)',
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 18,
   },
   ctaButton: {
     backgroundColor: colors.primary,
