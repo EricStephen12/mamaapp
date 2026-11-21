@@ -30,6 +30,7 @@ import {
 import { subscriptionService } from '../../services/subscriptionService';
 import { CountryCurrencyModal } from '../../components/common/CountryCurrencyModal';
 import { KitchenPassModal } from '../../components/common/KitchenPassModal';
+import { MamaPaywallModal } from '../../components/common/MamaPaywallModal';
 import { MamaDialogueService, MealPeriod } from '../../services/mamaDialogueService';
 import { AiMamaService } from '../../services/aiMamaService';
 import { decisionsService } from '../../services/api/decisionsService';
@@ -61,6 +62,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [passModalVisible, setPassModalVisible] = useState(false);
+  const [paywallModalVisible, setPaywallModalVisible] = useState(false);
   const [rollRevealVisible, setRollRevealVisible] = useState(false);
   const [pendingRolledMeal, setPendingRolledMeal] = useState<RolledMeal | null>(null);
   const [mamaModalVisible, setMamaModalVisible] = useState(false);
@@ -625,7 +627,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
                   setRollRevealVisible(true);
                   executeRoll();
                 } else if (outcome === 'unavailable') {
-                  setPassModalVisible(true);
+                  setPaywallModalVisible(true);
                 }
               },
             },
@@ -984,6 +986,18 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
         visible={passModalVisible}
         onClose={() => setPassModalVisible(false)}
         initialTab={passModalInitialTab}
+      />
+
+      {/* Mama Kitchen Pro Paywall Modal */}
+      <MamaPaywallModal
+        visible={paywallModalVisible}
+        onClose={() => setPaywallModalVisible(false)}
+        onSubscribed={() => {
+          setToastMessage('Welcome to Mama Kitchen Pro! Unlimited rolls unlocked.');
+          setPendingRolledMeal(null);
+          setRollRevealVisible(true);
+          executeRoll();
+        }}
       />
 
       {/* Preserved undo handlers for reference */}

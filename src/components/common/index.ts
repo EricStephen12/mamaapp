@@ -6,4 +6,5 @@ export * from './TactileToast';
 export * from './RollingDice';
 export * from './CountryCurrencyModal';
 export * from './KitchenPassModal';
+export * from './MamaPaywallModal';
 

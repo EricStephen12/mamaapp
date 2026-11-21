@@ -20,6 +20,7 @@ import { preferencesStore, BodyGoal, FREE_DAILY_ROLL_LIMIT } from '../../service
 import { subscriptionService } from '../../services/subscriptionService';
 import { authService } from '../../services/api/authService';
 import { useUserDataBank } from '../../context/UserDataBankContext';
+import { MamaPaywallContent } from './MamaPaywallModal';
 
 interface KitchenPassModalProps {
   visible: boolean;
@@ -84,6 +85,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
   const [customDietInput, setCustomDietInput] = useState<string>('');
   const [hiddenDishes, setHiddenDishes] = useState<string[]>(currentPass.neverShowDishes || []);
   const [isPlusActive, setIsPlusActive] = useState<boolean>(preferencesStore.isMamaPlus());
+  const [showPaywall, setShowPaywall] = useState<boolean>(false);
   const [shakeEnabled, setShakeEnabled] = useState<boolean>(
     currentPass.shakeToRollEnabled !== false
   );
@@ -111,6 +113,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
       setHiddenDishes(pass.neverShowDishes || []);
       setIsPlusActive(pass.planTier === 'plus');
       setShakeEnabled(pass.shakeToRollEnabled !== false);
+      setShowPaywall(false);
     }
   }, [visible]);
 
@@ -245,154 +248,110 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
       return;
     }
 
-    // Hosted RevenueCat Paywall (Monthly / Yearly / Lifetime)
-    const paywallOutcome = await subscriptionService.presentPaywall();
-    if (paywallOutcome === 'purchased' || paywallOutcome === 'restored') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      setIsPlusActive(true);
-      return;
+    // Try native RevenueCat Paywall if running with native StoreKit/Play Billing
+    if (subscriptionService.isLive()) {
+      const paywallOutcome = await subscriptionService.presentPaywall();
+      if (paywallOutcome === 'purchased' || paywallOutcome === 'restored') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        setIsPlusActive(true);
+        return;
+      }
+      if (paywallOutcome === 'cancelled') return;
     }
-    if (paywallOutcome === 'cancelled') return;
 
-    // Graceful fallback when native Paywall UI isn't available (Expo Go / Web)
-    const price = await subscriptionService.getPlusPriceString();
-    Alert.alert(
-      `Mama Kitchen Pro (${price})`,
-      'Unlock the full Mama experience:\n\n• Unlimited Daily Dice Rolls\n• Free Instant "Make It Healthy" Remixes (0 XP)\n• 2x XP Multiplier (+100 XP per home meal)',
-      [
-        { text: 'Not Now', style: 'cancel' },
-        {
-          text: 'Restore Purchase',
-          onPress: async () => {
-            const restored = await subscriptionService.restore();
-            setIsPlusActive(restored);
-            if (!restored) {
-              Alert.alert(
-                'Nothing to restore',
-                'No active Mama Kitchen Pro subscription was found on this account.'
-              );
-            }
-          },
-        },
-        {
-          text: subscriptionService.isLive() ? 'Get Mama Pro' : 'Activate Pro Preview',
-          onPress: async () => {
-            const outcome = await subscriptionService.purchasePlus('monthly');
-            if (outcome === 'purchased' || outcome === 'preview') {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-              setIsPlusActive(true);
-            } else if (outcome === 'error') {
-              Alert.alert(
-                'Purchase not completed',
-                'Something went wrong with the store. You have not been charged.'
-              );
-            }
-          },
-        },
-      ]
-    );
+    // Present full in-app Mama Paywall UI (works seamlessly in Expo Go & dev builds)
+    setShowPaywall(true);
   };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.overlay}
-      >
-        <TouchableOpacity style={styles.backdropArea} activeOpacity={1} onPress={onClose} />
+      {showPaywall ? (
+        <MamaPaywallContent
+          onClose={() => setShowPaywall(false)}
+          onSubscribed={() => {
+            setIsPlusActive(true);
+            setShowPaywall(false);
+          }}
+        />
+      ) : (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.overlay}
+        >
+          <TouchableOpacity style={styles.backdropArea} activeOpacity={1} onPress={onClose} />
 
-        <View style={styles.sheetContainer}>
-          {/* Drag Handle */}
-          <View style={styles.dragHandleWrap}>
-            <View style={styles.dragHandle} />
-          </View>
-
-          {/* Sheet Header */}
-          <View style={styles.header}>
-            <Text style={styles.sheetTitle}>Kitchen Pass</Text>
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={onClose}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="close" size={20} color={colors.text.secondary} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            style={styles.scrollArea}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Clean Warm Profile Card: Name, Email, XP Earned & Perks */}
-            <View style={styles.profileCard}>
-              <View style={styles.profileRow}>
-                <View style={styles.profileLeft}>
-                  <View style={styles.avatarCircle}>
-                    <Ionicons name="person" size={18} color={colors.primary} />
-                  </View>
-                  <View style={styles.profileTextWrap}>
-                    <Text style={styles.profileName} numberOfLines={1}>
-                      {(isLoggedIn && user) || user
-                        ? user?.name?.trim() || user?.email?.split('@')[0] || "Mama's Child"
-                        : 'Guest'}
-                    </Text>
-                    <Text style={styles.profileEmail} numberOfLines={1}>
-                      {user?.email || 'Not signed in'}
-                    </Text>
-                  </View>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.xpPill}
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    Alert.alert(
-                      'Your Mama XP',
-                      'Earn +50 XP every time you eat at home.\n\n• Spend 50 XP on any dish to unlock a "Make It Healthy" remix.\n• Keep stacking your XP for upcoming Partner Grocery & Food Discounts (Coming Soon)!'
-                    );
-                  }}
-                >
-                  <Ionicons name="flame" size={14} color={colors.primary} />
-                  <Text style={styles.xpPillText}>
-                    {preferencesStore.getXpBalance()} XP
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.xpPerkHintRow}>
-                <View style={styles.xpPerkLeftWrap}>
-                  <Ionicons name="leaf-outline" size={13} color={colors.primary} />
-                  <Text style={styles.xpPerkHintText} numberOfLines={1}>
-                    {isPlusActive
-                      ? 'Mama Plus • Unlimited Rolls, Free Healthy & 2x XP'
-                      : `Free Plan • ${preferencesStore.getRemainingDailyRolls()}/${FREE_DAILY_ROLL_LIMIT} Rolls left today`}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={[
-                    styles.plusTogglePill,
-                    isPlusActive && styles.plusTogglePillActive,
-                  ]}
-                  activeOpacity={0.82}
-                  onPress={handlePlanPress}
-                >
-                  <Text
-                    style={[
-                      styles.plusTogglePillText,
-                      isPlusActive && styles.plusTogglePillTextActive,
-                    ]}
-                  >
-                    {isPlusActive
-                      ? 'Plus ✓'
-                      : `Plus · ${preferencesStore.getLocalizedPlusPrice()}`}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+          <View style={styles.sheetContainer}>
+            {/* Drag Handle */}
+            <View style={styles.dragHandleWrap}>
+              <View style={styles.dragHandle} />
             </View>
+
+            {/* Sheet Header */}
+            <View style={styles.header}>
+              <Text style={styles.sheetTitle}>Kitchen Pass</Text>
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={onClose}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close" size={20} color={colors.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.scrollArea}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Clean Warm Profile Card: Name, Email, XP Earned & Perks */}
+              <View style={styles.profileCard}>
+                <View style={styles.profileRow}>
+                  <View style={styles.profileLeft}>
+                    <View style={styles.avatarCircle}>
+                      <Ionicons name="person" size={18} color={colors.primary} />
+                    </View>
+                    <View style={styles.profileTextWrap}>
+                      <Text style={styles.profileName} numberOfLines={1}>
+                        {(isLoggedIn && user) || user
+                          ? user?.name?.trim() || user?.email?.split('@')[0] || "Mama's Child"
+                          : 'Guest'}
+                      </Text>
+                      <Text style={styles.profileEmail} numberOfLines={1}>
+                        {user?.email || 'Not signed in'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.xpPill}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      Alert.alert(
+                        'Your Mama XP',
+                        'Earn +50 XP every time you eat at home.\n\n• Spend 50 XP on any dish to unlock a "Make It Healthy" remix.\n• Keep stacking your XP for upcoming Partner Grocery & Food Discounts (Coming Soon)!'
+                      );
+                    }}
+                  >
+                    <Ionicons name="flame" size={14} color={colors.primary} />
+                    <Text style={styles.xpPillText}>
+                      {preferencesStore.getXpBalance()} XP
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.xpPerkHintRow}>
+                  <View style={styles.xpPerkLeftWrap}>
+                    <Ionicons name="leaf-outline" size={13} color={colors.primary} />
+                    <Text style={styles.xpPerkHintText} numberOfLines={1}>
+                      {isPlusActive
+                        ? 'Mama Kitchen Pro • Unlimited Rolls & 2x XP'
+                        : `Free Plan • ${preferencesStore.getRemainingDailyRolls()}/${FREE_DAILY_ROLL_LIMIT} Rolls left today`}
+                    </Text>
+                  </View>
+                </View>
+              </View>
 
             {/* Mama Pro Plan Card: clear Upgrade / Manage subscription button */}
             <View style={[styles.planCard, isPlusActive && styles.planCardActive]}>
@@ -697,6 +656,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
+      )}
     </Modal>
   );
 };
