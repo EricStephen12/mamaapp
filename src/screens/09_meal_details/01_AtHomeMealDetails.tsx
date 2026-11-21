@@ -33,6 +33,9 @@ import { getCurrentTimeOfDay } from '../../services/api/rollService';
 import { MealImageService } from '../../services/mealImageService';
 import { VideoService, MealVideoData } from '../../services/videoService';
 import { MealVideoPlayer } from '../../components/MealVideoPlayer';
+import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
+import { SteamWisps } from '../../components/signature/SteamWisps';
+import { MamaSealStamp, KitchenTicketDivider } from '../../components/signature/MamaSealStamp';
 import {
   InteractiveCookModal,
   DishRewardModal,
@@ -639,6 +642,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <StatusBar style="dark" />
+      <KitchenAtmosphere period={getCurrentTimeOfDay()} />
 
       {/* Masthead Header */}
       <View style={styles.masthead}>
@@ -718,6 +722,8 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
                   ) : null}
                 </>
               )}
+              <SteamWisps triggerKey={title} style={styles.heroSteam} />
+              <MamaSealStamp size={48} variant="frosted" style={styles.heroSeal} />
               <View style={styles.timeTag}>
                 <Ionicons name="time-outline" size={13} color={colors.primary} />
                 <Text style={styles.timeTagText}>{cookTime}</Text>
@@ -747,12 +753,19 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
             onPress={handleTapMamaTip}
             activeOpacity={0.85}
           >
-            <MamaCharacter pose={mamaPose} size={56} isSpeaking={true} />
+            <MamaCharacter
+              pose={mamaPose}
+              size={56}
+              isSpeaking={true}
+              reactionKey={completedSteps.length}
+            />
             <View style={styles.mamaCoachTextWrap}>
               <Text style={styles.mamaCoachName}>MAMA&apos;S TIP</Text>
               <Text style={styles.mamaCoachBody}>{mamaNote}</Text>
             </View>
           </TouchableOpacity>
+
+          <KitchenTicketDivider label="MAMA KITCHEN" />
 
           {/* Section: Minimal Tactile Ingredient Tiles */}
           <View style={styles.sectionCard}>
@@ -1622,6 +1635,18 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sub,
     fontWeight: '700',
     color: colors.snow100,
+  },
+  heroSteam: {
+    position: 'absolute',
+    top: 10,
+    alignSelf: 'center',
+    zIndex: 15,
+  },
+  heroSeal: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    zIndex: 25,
   },
 });
 

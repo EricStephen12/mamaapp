@@ -43,6 +43,8 @@ import {
 import { useShake } from '../../hooks/useShake';
 import { useUserDataBank } from '../../context/UserDataBankContext';
 import { WeeklyBalanceCard } from './components/WeeklyBalanceCard';
+import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
+import { SimmerDot } from '../../components/signature/SteamWisps';
 import { MealCardDeck } from './components/MealCardDeck';
 import { RollRevealModal } from './components/RollRevealModal';
 import { MamaPopUpModal } from './components/MamaPopUpModal';
@@ -781,6 +783,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar style="dark" />
+      <KitchenAtmosphere period={mealPeriod} />
 
       {/* 1. COMPACT TOP STATUS BAR (Brand + Icons cluster) */}
       <View style={styles.topBar}>
@@ -790,8 +793,9 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
             onPress={handleCycleMealPeriod}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
           >
+            <SimmerDot period={mealPeriod} />
             <Text style={styles.periodPillText}>{periodTitle}</Text>
             <Ionicons name="chevron-down" size={11} color={colors.text.muted} />
           </TouchableOpacity>

@@ -18,6 +18,11 @@ import { RolledMeal } from '../../../services/api/rollService';
 import { UserKitchenPass, convertMealCost } from '../../../services/preferencesStore';
 import { MealImageService } from '../../../services/mealImageService';
 import { RollingDice } from '../../../components/common/RollingDice';
+import { VideoService, MealVideoData } from '../../../services/videoService';
+import { MealVideoPlayer } from '../../../components/MealVideoPlayer';
+import { SteamWisps } from '../../../components/signature/SteamWisps';
+import { MamaSealStamp } from '../../../components/signature/MamaSealStamp';
+import { playRevealThudHaptics } from '../../../utils/mamaHaptics';
 
 interface RollRevealModalProps {
   visible: boolean;
@@ -33,13 +38,6 @@ interface RollRevealModalProps {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const MODAL_WIDTH = Math.min(SCREEN_WIDTH - 40, 356);
 
-const MAMA_ROLL_HINTS = [
-  'Mama is checking your kitchen...',
-  'Balancing spices & quick cook time...',
-  'Creating an authentic home recipe...',
-  'Plating your dish...',
-];
-
 export const RollRevealModal: React.FC<RollRevealModalProps> = ({
   visible,
   meal,
@@ -53,6 +51,7 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const diceOpacity = useRef(new Animated.Value(1)).current;
   const diceScale = useRef(new Animated.Value(0.88)).current;
+  const auraPulse = useRef(new Animated.Value(0)).current;
 
   const cardOpacity = useRef(new Animated.Value(0)).current;
   const cardScale = useRef(new Animated.Value(0.88)).current;
@@ -60,12 +59,12 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
 
   const [isRevealed, setIsRevealed] = useState(false);
   const [rollCycleKey, setRollCycleKey] = useState(0);
-  const [hintIndex, setHintIndex] = useState(0);
+  const [videoEntry, setVideoEntry] = useState<{ title: string; data: MealVideoData } | null>(null);
   const diceAnimFinishedRef = useRef(false);
   const hasTriggeredRevealRef = useRef(false);
   const isRollingRef = useRef(isRolling);
   const mealRef = useRef<RolledMeal | null>(meal);
-  const isWaitingForAi = isRolling || !meal;
+  const isWaitingForReveal = isRolling || !meal;
 
   useEffect(() => {
     isRollingRef.current = isRolling;
@@ -75,20 +74,57 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
     mealRef.current = meal;
   }, [meal]);
 
+  // Soft pulsing halo behind the pure 3D dice (replaces chatty AI loading text)
   useEffect(() => {
-    if (!visible || !isWaitingForAi) return;
-    const interval = setInterval(() => {
-      setHintIndex((prev) => (prev + 1) % MAMA_ROLL_HINTS.length);
-    }, 1800);
-    return () => clearInterval(interval);
-  }, [visible, isWaitingForAi]);
+    if (!visible || isRevealed) {
+      auraPulse.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(auraPulse, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(auraPulse, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [visible, isRevealed, auraPulse]);
+
+  // Resolve real cooking video as soon as the rolled meal arrives
+  useEffect(() => {
+    if (!visible || !meal?.title) return;
+    if (VideoService.getCachedVideo(meal.title)) return;
+
+    let isCancelled = false;
+    VideoService.resolveCookingVideo(meal.title, meal.ingredients?.map((i) => i.name))
+      .then((data) => {
+        if (!isCancelled && data) {
+          setVideoEntry({ title: meal.title, data });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [visible, meal?.title, meal?.ingredients]);
 
   const runLuxuryRevealTransition = useCallback(() => {
     if (hasTriggeredRevealRef.current) return;
     hasTriggeredRevealRef.current = true;
     setIsRevealed(true);
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    // Signature heavy counter-thud haptic on reveal
+    playRevealThudHaptics();
 
     Animated.parallel([
       Animated.timing(diceOpacity, {
@@ -189,8 +225,6 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
     if (!isRollingRef.current && mealRef.current) {
       runLuxuryRevealTransition();
     }
-    // Otherwise the AI is still generating: the effect above reveals the card the moment
-    // isRolling flips to false and meal arrives.
   }, [runLuxuryRevealTransition]);
 
   const handleClose = () => {
@@ -237,6 +271,10 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
       )
     : '';
 
+  const resolvedVideo = meal
+    ? (videoEntry?.title === meal.title ? videoEntry.data : VideoService.getCachedVideo(meal.title))
+    : null;
+
   const formattedHomeCost = meal
     ? convertMealCost(
         meal.estCost,
@@ -259,7 +297,7 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
           onPress={handleClose}
         />
 
-        {/* STAGE 1: PURE MINIMAL 3D DICE & LIVE MAMA HINTS */}
+        {/* STAGE 1: PURE ICONIC 3D DICE (Zero clutter / zero AI text) */}
         <Animated.View
           pointerEvents={isRevealed ? 'none' : 'auto'}
           style={[
@@ -270,30 +308,37 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
             },
           ]}
         >
-          {/* Always accessible close button so the user is never trapped */}
-          <TouchableOpacity
-            style={styles.stageOneCloseBtn}
-            onPress={handleClose}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityLabel="Close"
-          >
-            <Ionicons name="close" size={20} color="rgba(255, 255, 255, 0.85)" />
-          </TouchableOpacity>
+          {/* Subtle expanding linen/olive aura ring */}
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.diceHaloRing,
+              {
+                opacity: auraPulse.interpolate({
+                  inputRange: [0, 0.25, 1],
+                  outputRange: [0, 0.45, 0],
+                }),
+                transform: [
+                  {
+                    scale: auraPulse.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.82, 1.55],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
 
           <RollingDice
             key={`luxury-dice-${rollCycleKey}`}
             size={156}
-            isRolling={isWaitingForAi}
+            isRolling={isWaitingForReveal}
             onRollComplete={handleDiceComplete}
           />
-          {isWaitingForAi && (
-            <View style={styles.rollingHintWrap}>
-              <Text style={styles.rollingHintText}>{MAMA_ROLL_HINTS[hintIndex]}</Text>
-            </View>
-          )}
         </Animated.View>
 
-        {/* STAGE 2: MINIMAL LUXURY EDITORIAL CARD */}
+        {/* STAGE 2: SIGNATURE EDITORIAL REVEAL CARD */}
         <Animated.View
           pointerEvents={isRevealed && meal ? 'auto' : 'none'}
           style={[
@@ -306,12 +351,38 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
         >
           {meal ? (
             <>
-              {/* Full-Bleed Portrait Food Photography */}
+              {/* Full-Bleed Live Video or Poster with Rising Steam & Mama's Pick Seal */}
               <View style={styles.imagePosterWrap}>
-                <Image
-                  source={{ uri: imageUri }}
-                  style={styles.posterImage}
-                  resizeMode="cover"
+                {resolvedVideo?.videoUrl ? (
+                  <MealVideoPlayer
+                    videoId={resolvedVideo.id}
+                    videoUrl={resolvedVideo.videoUrl}
+                    posterUrl={resolvedVideo.coverUrl || imageUri}
+                    isActive={isRevealed}
+                    creator={resolvedVideo.author}
+                    soundPillTop={56}
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: imageUri }}
+                    style={styles.posterImage}
+                    resizeMode="cover"
+                  />
+                )}
+
+                {/* Delicate rising steam wisps on reveal */}
+                {isRevealed ? (
+                  <SteamWisps
+                    triggerKey={`reveal-${meal.title}-${rollCycleKey}`}
+                    style={styles.revealSteam}
+                  />
+                ) : null}
+
+                {/* Signature Embossed Mama's Pick Seal */}
+                <MamaSealStamp
+                  size={52}
+                  variant="frosted"
+                  style={styles.revealSeal}
                 />
 
                 {/* Subtle Close Circle */}
@@ -339,9 +410,6 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
                       {meal.pantryNote}
                     </Text>
                   </View>
-                ) : null}
-                {meal.source === 'catalog' ? (
-                  <Text style={styles.offlineNote}>Mama AI was unreachable · showing a house classic</Text>
                 ) : null}
               </View>
 
@@ -395,32 +463,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stageOneCloseBtn: {
+  diceHaloRing: {
     position: 'absolute',
-    top: -70,
-    right: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-  },
-  rollingHintWrap: {
-    marginTop: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
-  },
-  rollingHintText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FAF7F2',
-    letterSpacing: 0.3,
+    width: 196,
+    height: 196,
+    borderRadius: 98,
+    borderWidth: 1.5,
+    borderColor: 'rgba(248, 245, 239, 0.55)',
+    backgroundColor: 'rgba(102, 112, 74, 0.14)',
   },
   luxuryCard: {
     width: '100%',
@@ -447,6 +497,18 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  revealSteam: {
+    position: 'absolute',
+    top: 12,
+    alignSelf: 'center',
+    zIndex: 15,
+  },
+  revealSeal: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    zIndex: 25,
+  },
   closeIconBtn: {
     position: 'absolute',
     top: 12,
@@ -457,6 +519,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(18, 22, 16, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 25,
   },
   editorialBody: {
     alignItems: 'center',
@@ -492,12 +555,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: colors.primary,
-  },
-  offlineNote: {
-    fontSize: 11,
-    color: colors.text.muted,
-    marginTop: 4,
-    textAlign: 'center',
   },
   actionRow: {
     flexDirection: 'row',

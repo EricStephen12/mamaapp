@@ -23,6 +23,7 @@ interface MamaCharacterProps {
   size?: number;
   style?: ViewStyle;
   isSpeaking?: boolean;
+  reactionKey?: string | number;
   onPress?: () => void;
 }
 
@@ -31,10 +32,13 @@ export const MamaCharacter: React.FC<MamaCharacterProps> = ({
   size = 140,
   style,
   isSpeaking = true,
+  reactionKey,
   onPress,
 }) => {
   // 1. Idle breathing
   const breathAnim = useRef(new Animated.Value(0)).current;
+  const reactTilt = useRef(new Animated.Value(0)).current;
+  const isFirstReactionRef = useRef(true);
 
   // 2. Blinking eyes
   const blinkAnim = useRef(new Animated.Value(1)).current;
@@ -190,6 +194,31 @@ export const MamaCharacter: React.FC<MamaCharacterProps> = ({
     outputRange: [0, -3],
   });
 
+  // Living reaction tilt & nod whenever user swipes a card or locks in a meal
+  useEffect(() => {
+    if (reactionKey === undefined) return;
+    if (isFirstReactionRef.current) {
+      isFirstReactionRef.current = false;
+      return;
+    }
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(reactTilt, { toValue: -1, duration: 130, useNativeDriver: true }),
+        Animated.timing(reactTilt, { toValue: 0.7, duration: 150, useNativeDriver: true }),
+        Animated.spring(reactTilt, { toValue: 0, friction: 6, tension: 120, useNativeDriver: true }),
+      ]),
+      Animated.sequence([
+        Animated.timing(tapScale, { toValue: 1.07, duration: 120, useNativeDriver: true }),
+        Animated.spring(tapScale, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }),
+      ]),
+    ]).start();
+  }, [reactionKey, reactTilt, tapScale]);
+
+  const reactRotate = reactTilt.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ['-5deg', '0deg', '5deg'],
+  });
+
   const waveDeg = waveAnim.interpolate({
     inputRange: [-1, 0, 1],
     outputRange: ['-18deg', '0deg', '22deg'],
@@ -221,7 +250,7 @@ export const MamaCharacter: React.FC<MamaCharacterProps> = ({
           {
             width: size,
             height: size,
-            transform: [{ translateY: breathY }, { scale: tapScale }],
+            transform: [{ translateY: breathY }, { scale: tapScale }, { rotate: reactRotate }],
           },
         ]}
       >

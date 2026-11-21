@@ -14,6 +14,7 @@ import Svg, {
 } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
+import { playDiceRattleHaptics } from '../../utils/mamaHaptics';
 
 export interface RollingDiceProps {
   size?: number;
@@ -142,8 +143,13 @@ export const RollingDice: React.FC<RollingDiceProps> = ({
   }, [isRolling, hoverAnim]);
 
   const cycleTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const stopHapticsRef = useRef<(() => void) | null>(null);
 
   const startRollAnimation = useCallback(() => {
+    // Signature accelerating 3-tick dice rattle rhythm
+    if (stopHapticsRef.current) stopHapticsRef.current();
+    stopHapticsRef.current = playDiceRattleHaptics();
+
     // 1. Crisp, well-timed face shifts at jump apexes (avoids 60ms SVG re-render thrashing)
     let rollTicks = 0;
     const maxTicks = 4;
@@ -153,12 +159,6 @@ export const RollingDice: React.FC<RollingDiceProps> = ({
       rollTicks += 1;
       const nextIdx = Math.floor(Math.random() * VALID_DICE_CONFIGS.length);
       setConfig(VALID_DICE_CONFIGS[nextIdx]);
-
-      try {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      } catch {
-        // Haptics optional
-      }
 
       if (rollTicks >= maxTicks) {
         if (cycleTimerRef.current) clearInterval(cycleTimerRef.current);
@@ -314,6 +314,7 @@ export const RollingDice: React.FC<RollingDiceProps> = ({
   useEffect(() => {
     return () => {
       if (cycleTimerRef.current) clearInterval(cycleTimerRef.current);
+      if (stopHapticsRef.current) stopHapticsRef.current();
     };
   }, []);
 

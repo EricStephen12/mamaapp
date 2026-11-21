@@ -20,6 +20,9 @@ import { UserKitchenPass, convertMealCost } from '../../../services/preferencesS
 import { MealImageService } from '../../../services/mealImageService';
 import { VideoService, MealVideoData } from '../../../services/videoService';
 import { MealVideoPlayer } from '../../../components/MealVideoPlayer';
+import { SteamWisps } from '../../../components/signature/SteamWisps';
+import { MamaSealStamp } from '../../../components/signature/MamaSealStamp';
+import { playCardSnapHaptics } from '../../../utils/mamaHaptics';
 
 interface MealCardDeckProps {
   meals: RolledMeal[];
@@ -188,9 +191,7 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
     );
     if (newIndex !== activeIndexRef.current) {
       activeIndexRef.current = newIndex;
-      try {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      } catch {}
+      playCardSnapHaptics();
       onSelectMealIndex(newIndex);
     }
   };
@@ -313,27 +314,26 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
             <Text style={styles.posterTimeText}>{item.cookTimeMinutes} MIN</Text>
           </View>
 
+          {/* Signature Mama's Pick Seal + Delicate Rising Steam on Active Card */}
+          {index === activeIndex && !isRolling ? (
+            <>
+              <SteamWisps
+                triggerKey={`${item.title}-${activeIndex}`}
+                style={styles.cardSteamOverlay}
+              />
+              <MamaSealStamp
+                size={46}
+                variant="frosted"
+                style={styles.cardSealBadge}
+              />
+            </>
+          ) : null}
+
           {/* Check This Food CTA Badge (Bottom Right) */}
           <View style={styles.posterTapPill}>
             <Text style={styles.posterTapText}>Check this food</Text>
             <Ionicons name="chevron-forward" size={13} color="#FFFFFF" />
           </View>
-
-          {/* Live AI Processing Scrim when rolling a new meal */}
-          {isRolling && index === activeIndex && (
-            <View style={styles.rollingCardOverlay}>
-              <View style={styles.rollingBadgePill}>
-                <Ionicons name="dice-outline" size={14} color="#FBBF24" />
-                <Text style={styles.rollingBadgeText}>MAMA AI IS COOKING</Text>
-              </View>
-              <Text style={styles.rollingOverlayTitle}>
-                Creating a fresh meal for you...
-              </Text>
-              <Text style={styles.rollingOverlaySub}>
-                Checking your kitchen & preferences
-              </Text>
-            </View>
-          )}
         </TouchableOpacity>
       </Animated.View>
     );
@@ -378,20 +378,8 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
         />
       </View>
 
-      {/* 2. DISH TITLE & INGREDIENT HINT */}
-      {isRolling ? (
-        <View style={styles.titleSection}>
-          <Text style={styles.dishTitleText} numberOfLines={2}>
-            Mama is cooking up a fresh idea...
-          </Text>
-          <View style={styles.pantryNoteBadge}>
-            <Ionicons name="sparkles-outline" size={11} color={colors.primary} />
-            <Text style={styles.pantryNoteText} numberOfLines={1}>
-              Wait a moment while Mama plates your new meal
-            </Text>
-          </View>
-        </View>
-      ) : activeMeal ? (
+      {/* 2. DISH TITLE & METADATA */}
+      {activeMeal ? (
         <View style={styles.titleSection}>
           <Text style={styles.dishTitleText} numberOfLines={2}>
             {activeMeal.title}
@@ -431,7 +419,7 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
         </View>
       ) : null}
 
-      {/* 4. PRIMARY ACTION BUTTON (Roll Dice) */}
+      {/* 4. CLEAN PRIMARY ACTION BUTTON (Roll Dice) */}
       <View style={styles.bottomActionsWrap}>
         <TouchableOpacity
           style={[styles.bigRollPillButton, isRolling && styles.bigRollPillDisabled]}
@@ -439,11 +427,8 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
           disabled={isRolling}
           activeOpacity={0.88}
         >
-          <Ionicons name="dice" size={20} color="#FFFFFF" />
-          <Text style={styles.bigRollPillText}>
-            {isRolling ? 'Mama is rolling...' : 'Roll Dice'}
-          </Text>
-          <Ionicons name="shuffle" size={17} color="#FFFFFF" />
+          <Ionicons name="dice" size={19} color="#FFFFFF" />
+          <Text style={styles.bigRollPillText}>Roll Dice</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -724,5 +709,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: colors.text.secondary,
+  },
+  cardSteamOverlay: {
+    position: 'absolute',
+    top: 10,
+    alignSelf: 'center',
+    zIndex: 15,
+  },
+  cardSealBadge: {
+    position: 'absolute',
+    top: 46,
+    left: 12,
+    zIndex: 15,
   },
 });

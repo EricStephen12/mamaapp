@@ -31,7 +31,8 @@ import { TactileToast } from '../../components/common';
 import { AiMamaService, textMentionsPantryItem } from '../../services/aiMamaService';
 import { MealImageService } from '../../services/mealImageService';
 import { pantryService } from '../../services/api/pantryService';
-import { isMealDietCompliant } from '../../services/api/rollService';
+import { isMealDietCompliant, getCurrentTimeOfDay } from '../../services/api/rollService';
+import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DiscoverYourNextMeal'>;
 
@@ -549,6 +550,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar style="dark" />
+      <KitchenAtmosphere period={getCurrentTimeOfDay()} />
 
       {/* 1. TOP BAR */}
       <View style={styles.topBar}>
