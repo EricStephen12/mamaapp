@@ -35,7 +35,6 @@ import { isMealDietCompliant, getCurrentTimeOfDay } from '../../services/api/rol
 import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
 import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
 import { SteamWisps } from '../../components/signature/SteamWisps';
-import { MamaSealStamp } from '../../components/signature/MamaSealStamp';
 import { VideoService, MealVideoData } from '../../services/videoService';
 import { MealVideoPlayer } from '../../components/MealVideoPlayer';
 
@@ -524,8 +523,8 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
             posterUrl={videoData.coverUrl || item.resolvedImage}
             isActive={isCardActive}
             creator={videoData.author}
-            soundPillTop={66}
-            creatorPillBottom={124}
+            soundPillTop={14}
+            creatorPillBottom={108}
           />
         ) : (
           <Image
@@ -535,69 +534,38 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
           />
         )}
 
-        {/* Signature rising steam + embossed Mama's Pick seal on the centered post */}
+        {/* Delicate rising steam on the centered post */}
         {isCardActive ? (
-          <>
-            <SteamWisps triggerKey={`discover-${item.id}`} style={styles.feedSteamOverlay} />
-            <MamaSealStamp size={44} variant="frosted" style={styles.feedSealBadge} />
-          </>
+          <SteamWisps triggerKey={`discover-${item.id}`} style={styles.feedSteamOverlay} />
         ) : null}
 
-        {/* Top Row: Health Badge + Pantry Match (Left) + Dopamine Heart Button (Right) */}
-        <View style={styles.feedTopRow}>
-          <View style={styles.topBadgesCluster}>
-            <View style={styles.healthGlassBadge}>
-              <Ionicons name="leaf" size={12} color="#4ADE80" />
-              <Text style={styles.healthGlassText}>
-                {item.nutrition || 'FRESH HOME PICK'}
-              </Text>
-            </View>
-
-            {item.matchingPantryCount > 0 && (
-              <View style={styles.pantryGlassBadge}>
-                <Ionicons name="basket" size={11} color="#4ADE80" />
-                <Text style={styles.pantryGlassText}>
-                  {item.matchingPantryCount} in kitchen
-                </Text>
-              </View>
-            )}
-          </View>
-
-          <TouchableOpacity
-            style={[styles.heartCircleBtn, isLiked && styles.heartCircleBtnActive]}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleToggleLikePost(item);
-            }}
-            activeOpacity={0.8}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons
-              name={isLiked ? 'heart' : 'heart-outline'}
-              size={20}
-              color="#FFFFFF"
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Bottom Scrim Overlay: Dish Title + Time/Cost + Check Food Pill */}
+        {/* Clean Bottom Scrim: Dish Title + Time/Cost + Heart Icon */}
         <View style={styles.feedBottomScrim}>
           <Text style={styles.feedTitle} numberOfLines={2}>
             {item.title}
           </Text>
 
           <View style={styles.feedBottomMetaRow}>
-            <View style={styles.feedTimeCostRow}>
-              <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.85)" />
-              <Text style={styles.feedTimeCostText}>
-                {item.cookTimeOrDistance} · {item.formattedCost}
-              </Text>
-            </View>
+            <Text style={styles.feedTimeCostText}>
+              {item.cookTimeOrDistance} · {item.formattedCost}
+            </Text>
 
-            <View style={styles.checkFoodPill}>
-              <Text style={styles.checkFoodPillText}>Cook</Text>
-              <Ionicons name="arrow-forward" size={12} color="#FFFFFF" />
-            </View>
+            <TouchableOpacity
+              style={[styles.heartCircleBtn, isLiked && styles.heartCircleBtnActive]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleToggleLikePost(item);
+              }}
+              activeOpacity={0.8}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel={isLiked ? 'Remove from saved' : 'Save meal'}
+            >
+              <Ionicons
+                name={isLiked ? 'heart' : 'heart-outline'}
+                size={18}
+                color="#FFFFFF"
+              />
+            </TouchableOpacity>
           </View>
         </View>
       </TouchableOpacity>
@@ -609,7 +577,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
       <StatusBar style="dark" />
       <KitchenAtmosphere period={getCurrentTimeOfDay()} />
 
-      {/* 1. TOP BAR */}
+      {/* 1. CLEAN TOP BAR */}
       <View style={styles.topBar}>
         <View style={styles.brandGroup}>
           <RegionalMamaAvatar
@@ -650,13 +618,14 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
             style={styles.headerChip}
             onPress={() => setPassModalVisible(true)}
             activeOpacity={0.75}
+            accessibilityLabel="Preferences"
           >
             <Ionicons name="options-outline" size={14} color={colors.primary} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* 2. HEALTHY & CRAVING FILTER BAR */}
+      {/* 2. MINIMAL FILTER ROW */}
       <View style={styles.filterBarWrap}>
         <ScrollView
           horizontal
@@ -675,11 +644,6 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
                 }}
                 activeOpacity={0.82}
               >
-                <Ionicons
-                  name={filter.icon}
-                  size={14}
-                  color={active ? '#FFFFFF' : colors.primary}
-                />
                 <Text style={[styles.filterPillText, active && styles.filterPillTextActive]}>
                   {filter.label}
                 </Text>
@@ -820,11 +784,11 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   feedCard: {
-    height: 395,
+    height: 410,
     borderRadius: 28,
     overflow: 'hidden',
     backgroundColor: '#1E211B',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     shadowColor: '#181512',
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.18,
@@ -889,14 +853,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   heartCircleBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: 'rgba(18, 20, 16, 0.65)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderColor: 'rgba(255, 255, 255, 0.22)',
   },
   heartCircleBtnActive: {
     backgroundColor: colors.primary,

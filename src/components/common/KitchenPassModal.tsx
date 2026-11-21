@@ -593,7 +593,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
                   navigation.navigate('MamaKitchenSplash', { previewOnboarding: true });
                 }}
               >
-                <Ionicons name="sparkles-outline" size={15} color={colors.primary} />
+                <Ionicons name="refresh-outline" size={15} color={colors.primary} />
                 <Text style={styles.accountLinkText}>Preview Welcome Setup</Text>
               </TouchableOpacity>
 
