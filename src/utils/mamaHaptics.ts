@@ -44,3 +44,4 @@ export function playRevealThudHaptics(): void {
 export function playCardSnapHaptics(): void {
   safeImpact(Haptics.ImpactFeedbackStyle.Light);
 }
+
