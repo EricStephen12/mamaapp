@@ -16,7 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { preferencesStore, BodyGoal } from '../../services/preferencesStore';
+import { preferencesStore, BodyGoal, FREE_DAILY_ROLL_LIMIT } from '../../services/preferencesStore';
 import { subscriptionService } from '../../services/subscriptionService';
 import { authService } from '../../services/api/authService';
 import { useUserDataBank } from '../../context/UserDataBankContext';
@@ -277,7 +277,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
                   <Text style={styles.xpPerkHintText} numberOfLines={1}>
                     {isPlusActive
                       ? 'Mama Plus • Unlimited Rolls, Free Healthy & 2x XP'
-                      : `Free Plan • ${preferencesStore.getRemainingDailyRolls()}/5 Rolls left today`}
+                      : `Free Plan • ${preferencesStore.getRemainingDailyRolls()}/${FREE_DAILY_ROLL_LIMIT} Rolls left today`}
                   </Text>
                 </View>
 

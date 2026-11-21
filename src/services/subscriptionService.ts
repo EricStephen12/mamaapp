@@ -8,7 +8,7 @@
  *
  * RevenueCat dashboard setup expected:
  *   Entitlement identifier: "mama_plus"
- *   Current offering with a monthly package (e.g. ₦2,500 / $3.99)
+ *   Current offering with a monthly package ($1/mo)
  */
 
 import { Platform } from 'react-native';

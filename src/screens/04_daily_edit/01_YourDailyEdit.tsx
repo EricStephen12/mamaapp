@@ -25,7 +25,9 @@ import {
   preferencesStore,
   UserKitchenPass,
   convertMealCost,
+  FREE_DAILY_ROLL_LIMIT,
 } from '../../services/preferencesStore';
+import { subscriptionService } from '../../services/subscriptionService';
 import { CountryCurrencyModal } from '../../components/common/CountryCurrencyModal';
 import { KitchenPassModal } from '../../components/common/KitchenPassModal';
 import { MamaDialogueService, MealPeriod } from '../../services/mamaDialogueService';
@@ -593,33 +595,34 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
     if (isRolling) return;
 
     if (!preferencesStore.consumeDailyRoll()) {
-      const price = preferencesStore.getLocalizedPlusPrice();
-      Alert.alert(
-        '5 Daily Rolls Used Today',
-        `You've used your 5 free daily rolls today! Spend 50 XP for a bonus roll or unlock Mama Plus (${price}) for Unlimited Rolls, Free Healthy Remixes, and 2x XP.`,
-        [
-          { text: 'Not Now', style: 'cancel' },
-          {
-            text: 'Bonus Roll (-50 XP)',
-            onPress: () => {
-              if (preferencesStore.spendXp(50)) {
-                setToastMessage('Bonus Roll unlocked (-50 XP)!');
-                setPendingRolledMeal(null);
-                setRollRevealVisible(true);
-                executeRoll();
-              } else {
-                setToastMessage('Need 50 XP! Cook a meal at home (+50 XP) or unlock Mama Plus.');
-              }
+      subscriptionService.getPlusPriceString().then((price) => {
+        Alert.alert(
+          `${FREE_DAILY_ROLL_LIMIT} Daily Rolls Used Today`,
+          `You've used your ${FREE_DAILY_ROLL_LIMIT} free daily rolls today! Spend 50 XP for a bonus roll or unlock Mama Plus (${price}) for Unlimited Rolls, Free Healthy Remixes, and 2x XP.`,
+          [
+            { text: 'Not Now', style: 'cancel' },
+            {
+              text: 'Bonus Roll (-50 XP)',
+              onPress: () => {
+                if (preferencesStore.spendXp(50)) {
+                  setToastMessage('Bonus Roll unlocked (-50 XP)!');
+                  setPendingRolledMeal(null);
+                  setRollRevealVisible(true);
+                  executeRoll();
+                } else {
+                  setToastMessage('Need 50 XP! Cook a meal at home (+50 XP) or unlock Mama Plus.');
+                }
+              },
             },
-          },
-          {
-            text: 'Unlock Mama Plus',
-            onPress: () => {
-              setPassModalVisible(true);
+            {
+              text: `Unlock Mama Plus (${price})`,
+              onPress: () => {
+                setPassModalVisible(true);
+              },
             },
-          },
-        ]
-      );
+          ]
+        );
+      });
       return;
     }
 

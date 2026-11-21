@@ -379,6 +379,8 @@ export function convertMealCost(
   return formatCurrency(localizedAmount, currencySymbol, currencyCode);
 }
 
+export const FREE_DAILY_ROLL_LIMIT = 2;
+
 export const preferencesStore = {
   getKitchenPass(): UserKitchenPass {
     return currentKitchenPass;
@@ -543,7 +545,7 @@ export const preferencesStore = {
       currentKitchenPass.dailyRollsDateKey === today
         ? currentKitchenPass.dailyRollsCount || 0
         : 0;
-    return Math.max(0, 5 - usedToday);
+    return Math.max(0, FREE_DAILY_ROLL_LIMIT - usedToday);
   },
 
   consumeDailyRoll(): boolean {
@@ -553,7 +555,7 @@ export const preferencesStore = {
       currentKitchenPass.dailyRollsDateKey === today
         ? currentKitchenPass.dailyRollsCount || 0
         : 0;
-    if (usedToday >= 5) return false;
+    if (usedToday >= FREE_DAILY_ROLL_LIMIT) return false;
     this.updateKitchenPass({
       dailyRollsCount: usedToday + 1,
       dailyRollsDateKey: today,
@@ -562,16 +564,16 @@ export const preferencesStore = {
   },
 
   getLocalizedPlusPrice(): string {
-    const code = currentKitchenPass.currencyCode || 'NGN';
-    if (code === 'NGN') return '₦2,500/mo';
-    if (code === 'GBP') return '£3.49/mo';
-    if (code === 'EUR') return '€3.99/mo';
-    if (code === 'GHS') return 'GH₵45/mo';
-    if (code === 'KES') return 'KSh450/mo';
-    if (code === 'ZAR') return 'R65/mo';
-    if (code === 'CAD') return 'CA$4.99/mo';
-    if (code === 'AUD') return 'A$5.99/mo';
-    return '$3.99/mo';
+    const code = currentKitchenPass.currencyCode || 'USD';
+    if (code === 'NGN') return '₦1,500/mo';
+    if (code === 'GBP') return '£0.99/mo';
+    if (code === 'EUR') return '€0.99/mo';
+    if (code === 'GHS') return 'GH₵15/mo';
+    if (code === 'KES') return 'KSh130/mo';
+    if (code === 'ZAR') return 'R19/mo';
+    if (code === 'CAD') return 'CA$1.49/mo';
+    if (code === 'AUD') return 'A$1.49/mo';
+    return '$1/mo';
   },
 
   addNeverShowDish(dishTitleOrId: string): UserKitchenPass {
