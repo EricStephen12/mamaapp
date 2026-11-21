@@ -586,6 +586,17 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
 
             {/* Compact Account Footer */}
             <View style={styles.accountFooter}>
+              <TouchableOpacity
+                style={styles.accountLinkBtn}
+                onPress={() => {
+                  onClose();
+                  navigation.navigate('MamaKitchenSplash', { previewOnboarding: true });
+                }}
+              >
+                <Ionicons name="sparkles-outline" size={15} color={colors.primary} />
+                <Text style={styles.accountLinkText}>Preview Welcome Setup</Text>
+              </TouchableOpacity>
+
               {!isLoggedIn && !user ? (
                 <TouchableOpacity
                   style={styles.accountLinkBtn}

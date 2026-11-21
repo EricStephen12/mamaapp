@@ -34,6 +34,10 @@ import { pantryService } from '../../services/api/pantryService';
 import { isMealDietCompliant, getCurrentTimeOfDay } from '../../services/api/rollService';
 import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
 import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
+import { SteamWisps } from '../../components/signature/SteamWisps';
+import { MamaSealStamp } from '../../components/signature/MamaSealStamp';
+import { VideoService, MealVideoData } from '../../services/videoService';
+import { MealVideoPlayer } from '../../components/MealVideoPlayer';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DiscoverYourNextMeal'>;
 
@@ -236,7 +240,8 @@ const CURATED_HEALTHY_DECK: RawDiscoveryItem[] = [
 ];
 
 export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
-  const { isInsideTabs, setActiveTab } = useTabNavigation();
+  const { isInsideTabs, activeTab, setActiveTab } = useTabNavigation();
+  const isDiscoverVisible = !isInsideTabs || activeTab === 'discover';
   const [kitchenPass, setKitchenPass] = useState<UserKitchenPass>(
     preferencesStore.getKitchenPass()
   );
@@ -258,7 +263,18 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
   const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [passModalVisible, setPassModalVisible] = useState(false);
   const [apiRawDeck, setApiRawDeck] = useState<RawDiscoveryItem[]>([]);
-  const [aiPhotosMap, setAiPhotosMap] = useState<Record<string, string>>({});
+  const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
+  const [postVideos, setPostVideos] = useState<Record<string, MealVideoData>>({});
+  const inFlightVideoRef = useRef<Set<string>>(new Set());
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: { isViewable?: boolean | null; item?: FeedPostItem }[] }) => {
+      const firstVisible = viewableItems.find((v) => v.isViewable && v.item?.id);
+      if (firstVisible?.item?.id) {
+        setVisiblePostId(firstVisible.item.id);
+      }
+    }
+  ).current;
 
   const contentFade = useRef(new Animated.Value(0)).current;
   const remainingBudget = kitchenPass.weeklyBudget - kitchenPass.spentThisWeek;
@@ -369,28 +385,6 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
     return matching.length > 0 ? matching : combined;
   }, [activeFilter, apiRawDeck, kitchenPass]);
 
-  // Auto-hydrate top Discover feed cards with real dish-accurate AI photography
-  useEffect(() => {
-    let cancelled = false;
-    filteredRawDeck.slice(0, 4).forEach((item) => {
-      if (aiPhotosMap[item.title]) return;
-      MealImageService.generateMealImage(
-        item.title,
-        item.ingredients,
-        kitchenPass.cuisineAnchor
-      )
-        .then((url) => {
-          if (!cancelled && url && !MealImageService.isCatalogImage(url)) {
-            setAiPhotosMap((prev) => ({ ...prev, [item.title]: url }));
-          }
-        })
-        .catch(() => {});
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [filteredRawDeck, kitchenPass.cuisineAnchor, aiPhotosMap]);
-
   const feedPosts = useMemo<FeedPostItem[]>(() => {
     const deckPhotos = MealImageService.getCarouselDeckImages(
       filteredRawDeck.map((m) => ({ title: m.title, ingredients: m.ingredients })),
@@ -404,7 +398,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
 
       return {
         ...item,
-        resolvedImage: aiPhotosMap[item.title] || item.imageUrl || deckPhotos[idx],
+        resolvedImage: item.imageUrl || deckPhotos[idx],
         formattedCost: convertMealCost(
           item.baseCostUsd,
           kitchenPass.currencyCode,
@@ -413,7 +407,46 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
         matchingPantryCount,
       };
     });
-  }, [aiPhotosMap, filteredRawDeck, kitchenPass.currencyCode, kitchenPass.currencySymbol, kitchenPass.cuisineAnchor, pantryItems]);
+  }, [filteredRawDeck, kitchenPass.currencyCode, kitchenPass.currencySymbol, kitchenPass.cuisineAnchor, pantryItems]);
+
+  const activePostId =
+    visiblePostId && feedPosts.some((p) => p.id === visiblePostId)
+      ? visiblePostId
+      : feedPosts[0]?.id || null;
+
+  // Debounced viewport-aware video lookup: only fetches for the single centered post when Discover is active
+  useEffect(() => {
+    if (!isDiscoverVisible || !activePostId) return;
+    const activePost = feedPosts.find((p) => p.id === activePostId);
+    const title = activePost?.title;
+    if (!title) return;
+
+    if (VideoService.getCachedVideo(title)) return;
+
+    let isCancelled = false;
+    const timer = setTimeout(() => {
+      if (isCancelled || inFlightVideoRef.current.has(title)) return;
+      inFlightVideoRef.current.add(title);
+
+      VideoService.resolveCookingVideo(
+        title,
+        activePost.ingredients?.map((i) => i.name)
+      )
+        .then((videoData) => {
+          if (!isCancelled && videoData) {
+            setPostVideos((prev) => ({ ...prev, [title]: videoData }));
+          }
+        })
+        .finally(() => {
+          inFlightVideoRef.current.delete(title);
+        });
+    }, 450);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isDiscoverVisible, activePostId, feedPosts]);
 
   const handleToggleLikePost = (post: FeedPostItem) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -475,17 +508,40 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
   const renderFeedPost = ({ item }: { item: FeedPostItem }) => {
     const isLiked =
       savedItemIds.includes(item.id) || savedItemIds.includes(item.title.toLowerCase());
+    const isCardActive = isDiscoverVisible && item.id === activePostId;
+    const videoData = postVideos[item.title] || VideoService.getCachedVideo(item.title);
+
     return (
       <TouchableOpacity
         style={styles.feedCard}
         activeOpacity={0.94}
         onPress={() => handleOpenPostDetails(item)}
       >
-        <Image
-          source={{ uri: item.resolvedImage }}
-          style={styles.feedImage}
-          resizeMode="cover"
-        />
+        {videoData?.videoUrl ? (
+          <MealVideoPlayer
+            videoId={videoData.id}
+            videoUrl={videoData.videoUrl}
+            posterUrl={videoData.coverUrl || item.resolvedImage}
+            isActive={isCardActive}
+            creator={videoData.author}
+            soundPillTop={66}
+            creatorPillBottom={124}
+          />
+        ) : (
+          <Image
+            source={{ uri: item.resolvedImage }}
+            style={styles.feedImage}
+            resizeMode="cover"
+          />
+        )}
+
+        {/* Signature rising steam + embossed Mama's Pick seal on the centered post */}
+        {isCardActive ? (
+          <>
+            <SteamWisps triggerKey={`discover-${item.id}`} style={styles.feedSteamOverlay} />
+            <MamaSealStamp size={44} variant="frosted" style={styles.feedSealBadge} />
+          </>
+        ) : null}
 
         {/* Top Row: Health Badge + Pantry Match (Left) + Dopamine Heart Button (Right) */}
         <View style={styles.feedTopRow}>
@@ -633,15 +689,18 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
         </ScrollView>
       </View>
 
-      {/* 3. VERTICAL SCROLLING DOPAMINE FOOD INSTAGRAM FEED */}
+      {/* 3. VERTICAL SCROLLING LIVE VIDEO FOOD FEED */}
       <Animated.View style={{ flex: 1, opacity: contentFade }}>
         <FlatList
           data={feedPosts}
+          extraData={{ activePostId, postVideos, isDiscoverVisible, savedItemIds }}
           keyExtractor={(item) => item.id}
           renderItem={renderFeedPost}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.feedListContent}
-          initialNumToRender={4}
+          initialNumToRender={3}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
         />
       </Animated.View>
 
@@ -842,6 +901,18 @@ const styles = StyleSheet.create({
   heartCircleBtnActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+  },
+  feedSteamOverlay: {
+    position: 'absolute',
+    top: 12,
+    alignSelf: 'center',
+    zIndex: 15,
+  },
+  feedSealBadge: {
+    position: 'absolute',
+    top: 56,
+    left: 16,
+    zIndex: 15,
   },
   feedBottomScrim: {
     paddingHorizontal: 18,

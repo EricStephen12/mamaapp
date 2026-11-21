@@ -1,6 +1,6 @@
 export type RootStackParamList = {
   // 01 - Onboarding Group
-  MamaKitchenSplash: undefined;
+  MamaKitchenSplash: { previewOnboarding?: boolean } | undefined;
 
   // 02 - Auth Group
   MamaKitchenSignIn: undefined;

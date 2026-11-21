@@ -25,6 +25,11 @@ import {
   BodyGoal,
 } from '../../services/preferencesStore';
 import { pantryService } from '../../services/api/pantryService';
+import { getCurrentTimeOfDay } from '../../services/api/rollService';
+import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
+import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
+import { MamaSealStamp } from '../../components/signature/MamaSealStamp';
+import { playRevealThudHaptics } from '../../utils/mamaHaptics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MakeItYours'>;
 
@@ -228,6 +233,7 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
       .catch(() => {});
 
     preferencesStore.completeOnboarding();
+    playRevealThudHaptics();
     navigation.replace('YourDailyEdit');
   };
 
@@ -253,6 +259,7 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'left', 'right']}>
       <StatusBar style="dark" />
+      <KitchenAtmosphere period={getCurrentTimeOfDay()} />
 
       {/* Top Header Bar: Back + 3 Step Dots + Instant Skip */}
       <View style={styles.headerBar}>
@@ -309,7 +316,20 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
         {step === 1 && (
           <View style={styles.stepContainer}>
             <View style={styles.titleSection}>
+              <View style={styles.onboardingMamaStage}>
+                <RegionalMamaAvatar countryCode={selectedCountryId} size={76} />
+                <MamaSealStamp
+                  size={40}
+                  variant="linen"
+                  label="MAMA"
+                  sublabel={selectedCountry.regionCode}
+                  style={styles.onboardingSeal}
+                />
+              </View>
               <Text style={styles.serifTitle}>Where are you?</Text>
+              <Text style={styles.countryGreeting} numberOfLines={2}>
+                {selectedCountry.mamaGreeting}
+              </Text>
             </View>
 
             <View style={styles.centerStage}>
@@ -937,6 +957,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.snow100,
     letterSpacing: 0.2,
+  },
+  onboardingMamaStage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    position: 'relative',
+  },
+  onboardingSeal: {
+    position: 'absolute',
+    right: -22,
+    bottom: -4,
+  },
+  countryGreeting: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    paddingHorizontal: 14,
   },
 });
 
