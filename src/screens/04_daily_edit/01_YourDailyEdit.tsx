@@ -65,6 +65,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
   const [passModalVisible, setPassModalVisible] = useState(false);
   const [paywallModalVisible, setPaywallModalVisible] = useState(false);
   const [rollLimitPrice, setRollLimitPrice] = useState<string | null>(null);
+  const [budgetFinishedModalVisible, setBudgetFinishedModalVisible] = useState(false);
   const [pendingCheckIn, setPendingCheckIn] = useState<PendingCookCheckIn | null>(() =>
     preferencesStore.getPendingCookCheckIn()
   );
@@ -286,11 +287,27 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
   const prevPrefsKeyRef = useRef<string>(
     `${kitchenPass.country}|${kitchenPass.cuisineAnchor}|${kitchenPass.bodyGoal}|${kitchenPass.timeLimitMinutes}|${(kitchenPass.dietaryRestrictions || []).join(',')}`
   );
+  const prevRemainingBudgetRef = useRef<number>(
+    kitchenPass.weeklyBudget - kitchenPass.spentThisWeek
+  );
 
   useEffect(() => {
     const unsub = preferencesStore.subscribe((updated) => {
       setKitchenPass(updated);
       setPendingCheckIn(preferencesStore.getPendingCookCheckIn());
+
+      // Emotional budget check: trigger warm Mama intervention the moment weekly budget finishes!
+      const nextRemaining = updated.weeklyBudget - updated.spentThisWeek;
+      if (
+        updated.weeklyBudget > 0 &&
+        prevRemainingBudgetRef.current > 0 &&
+        nextRemaining <= 0
+      ) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+        setBudgetFinishedModalVisible(true);
+      }
+      prevRemainingBudgetRef.current = nextRemaining;
+
       const nextPrefsKey = `${updated.country}|${updated.cuisineAnchor}|${updated.bodyGoal}|${updated.timeLimitMinutes}|${(updated.dietaryRestrictions || []).join(',')}`;
       if (nextPrefsKey !== prevPrefsKeyRef.current) {
         prevPrefsKeyRef.current = nextPrefsKey;
@@ -1037,6 +1054,45 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
             label: 'Not Now',
             variant: 'ghost',
             onPress: () => setRollLimitPrice(null),
+          },
+        ]}
+      />
+
+      {/* Emotional "Budget Finished!" Mama Intervention Modal */}
+      <MamaMomentModal
+        visible={budgetFinishedModalVisible}
+        eyebrow="BUDGET FINISHED"
+        title="Hold on—your weekly budget just hit zero!"
+        message="Don't panic, my child! Mama has stretched a pot before. Let's cook zero-spend meals from what's already in your kitchen, or top up your week."
+        mood="auntie"
+        onClose={() => setBudgetFinishedModalVisible(false)}
+        actions={[
+          {
+            label: 'Cook from My Kitchen',
+            variant: 'primary',
+            icon: 'basket-outline',
+            onPress: () => {
+              setBudgetFinishedModalVisible(false);
+              if (isInsideTabs) {
+                setActiveTab('kitchen');
+              } else {
+                navigation.navigate('WhatsInYourKitchen');
+              }
+            },
+          },
+          {
+            label: 'Top Up Weekly Budget',
+            variant: 'secondary',
+            icon: 'wallet-outline',
+            onPress: () => {
+              setBudgetFinishedModalVisible(false);
+              setCountryModalVisible(true);
+            },
+          },
+          {
+            label: "I'm okay, Mama",
+            variant: 'ghost',
+            onPress: () => setBudgetFinishedModalVisible(false),
           },
         ]}
       />
