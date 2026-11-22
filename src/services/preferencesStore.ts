@@ -258,6 +258,13 @@ export const BODY_GOAL_CONFIG: Record<
   },
 };
 
+export interface PendingCookCheckIn {
+  mealId: string;
+  title: string;
+  estCost: number;
+  startedAt: number;
+}
+
 export interface UserKitchenPass {
   country: string;
   countryName: string;
@@ -289,6 +296,7 @@ export interface UserKitchenPass {
   planTier?: 'free' | 'plus';
   dailyRollsCount?: number;
   dailyRollsDateKey?: string;
+  pendingCookCheckIn?: PendingCookCheckIn | null;
 }
 
 function getTodayDateKey(): string {
@@ -690,6 +698,33 @@ export const preferencesStore = {
       bodyGoal: goal,
       bodyGoalLabel: config ? config.label : 'Balanced Energy',
     });
+  },
+
+  /** Remember a dish the user actually spent time cooking (not just briefly browsing) */
+  setPendingCookCheckIn(item: Omit<PendingCookCheckIn, 'startedAt'> & { startedAt?: number }): UserKitchenPass {
+    return this.updateKitchenPass({
+      pendingCookCheckIn: {
+        mealId: item.mealId || `meal-${Date.now()}`,
+        title: item.title,
+        estCost: item.estCost,
+        startedAt: item.startedAt ?? Date.now(),
+      },
+    });
+  },
+
+  /** Return active pending cook check-in if logged within the last 18 hours */
+  getPendingCookCheckIn(): PendingCookCheckIn | null {
+    const pending = currentKitchenPass.pendingCookCheckIn;
+    if (!pending || !pending.title) return null;
+    const ageMs = Date.now() - (pending.startedAt || 0);
+    if (ageMs > 18 * 60 * 60 * 1000) {
+      return null;
+    }
+    return pending;
+  },
+
+  clearPendingCookCheckIn(): UserKitchenPass {
+    return this.updateKitchenPass({ pendingCookCheckIn: null });
   },
 
   subscribe(listener: (pass: UserKitchenPass) => void): () => void {

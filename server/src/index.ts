@@ -75,7 +75,7 @@ app.post('/api/ai/chat', async (req: Request, res: Response) => {
       messages,
       jsonMode: Boolean(jsonMode),
       temperature: typeof temperature === 'number' ? temperature : 0.65,
-      maxTokens: typeof maxTokens === 'number' ? Math.min(maxTokens, 1200) : 450,
+      maxTokens: typeof maxTokens === 'number' ? Math.min(maxTokens, 3000) : 450,
     });
     res.json(result);
   } catch (error) {

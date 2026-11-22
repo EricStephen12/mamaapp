@@ -36,10 +36,8 @@ import { MealVideoPlayer } from '../../components/MealVideoPlayer';
 import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
 import { SteamWisps } from '../../components/signature/SteamWisps';
 import { MamaSealStamp, KitchenTicketDivider } from '../../components/signature/MamaSealStamp';
-import {
-  InteractiveCookModal,
-  DishRewardModal,
-} from './components/InteractiveCookModal';
+import { InteractiveCookModal } from './components/InteractiveCookModal';
+import { MamaFamilyCelebrationModal } from '../../components/common/MamaFamilyCelebrationModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AtHomeMealDetails'>;
 
@@ -159,6 +157,34 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
     return `"${voice.quote}"`;
   });
   const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null);
+  const hasCookedRef = useRef<boolean>(false);
+
+  const markCookingIntent = () => {
+    if (hasCookedRef.current || !params?.title) return;
+    const baseCost = typeof params.costNumeric === 'number' ? params.costNumeric : 2.0;
+    preferencesStore.setPendingCookCheckIn({
+      mealId: params.id || params.title,
+      title: params.title,
+      estCost: baseCost * portions,
+    });
+  };
+
+  // Distinguish actual cooking from quick 5-second browsing:
+  // if the user lingers on this recipe for 35s+, remember it so Mama can warmly check in later!
+  useEffect(() => {
+    if (!params?.title) return;
+    const engageTimer = setTimeout(() => {
+      if (!hasCookedRef.current && params?.title) {
+        const baseCost = typeof params.costNumeric === 'number' ? params.costNumeric : 2.0;
+        preferencesStore.setPendingCookCheckIn({
+          mealId: params.id || params.title,
+          title: params.title,
+          estCost: baseCost * portions,
+        });
+      }
+    }, 35000);
+    return () => clearTimeout(engageTimer);
+  }, [params?.id, params?.title, params?.costNumeric, portions]);
 
   // Countdown timer loop
   useEffect(() => {
@@ -396,6 +422,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
       updated = completedSteps.filter((id) => id !== stepId);
     } else {
       updated = [...completedSteps, stepId];
+      markCookingIntent();
     }
     setCompletedSteps(updated);
 
@@ -409,9 +436,17 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
     } else if (updated.length === 1) {
       setMamaPose('writing');
       setMamaNote(`"Smells incredible already! Don't rush it, let the flavor build."`);
-    } else if (updated.length === resolvedSteps.length) {
+    } else if (updated.length === resolvedSteps.length && resolvedSteps.length > 0) {
       setMamaPose('delighted');
       setMamaNote(`"Magnificent! ${dishTitle || 'Dinner'} is served. Sit down, relax, and eat warm."`);
+      // Effortless payoff: checking off the final step automatically triggers the Family Celebration!
+      if (!cookModalVisible && !hasCookedRef.current) {
+        setTimeout(() => {
+          if (!hasCookedRef.current) {
+            handleMarkAsCooked();
+          }
+        }, 420);
+      }
     } else {
       setMamaPose('cooking');
       setMamaNote(`"Almost there! Just assembling your hot comfort bowl."`);
@@ -441,6 +476,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
 
   const handleTapIngredient = (ingredientName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    markCookingIntent();
     setTossedIngredients((prev) =>
       prev.includes(ingredientName)
         ? prev.filter((item) => item !== ingredientName)
@@ -466,6 +502,8 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleMarkAsCooked = () => {
+    hasCookedRef.current = true;
+    preferencesStore.clearPendingCookCheckIn();
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     if (activeTimer) {
       setActiveTimer(null);
@@ -1015,6 +1053,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
               onPress={() => {
                 if (resolvedSteps.length > 0) {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                  markCookingIntent();
                   setActiveCookStepIdx(0);
                   setCookModalVisible(true);
                 } else {
@@ -1024,14 +1063,14 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
               activeOpacity={0.88}
             >
               <Ionicons
-                name={resolvedSteps.length > 0 ? 'play' : 'checkmark-done'}
+                name={resolvedSteps.length > 0 ? 'play' : 'restaurant'}
                 size={18}
                 color={colors.snow100}
               />
               <Text style={styles.cookedButtonText}>
                 {resolvedSteps.length > 0
                   ? `Start Cooking Guide (${resolvedSteps.length} Steps)`
-                  : 'I Cooked This Tonight!'}
+                  : `Serve & Feed Mama (+${currentPass.planTier === 'plus' ? 100 : 50} XP)`}
               </Text>
             </TouchableOpacity>
 
@@ -1051,7 +1090,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
                 onPress={handleMarkAsCooked}
                 activeOpacity={0.82}
               >
-                <Ionicons name="checkmark-done" size={18} color={colors.primary} />
+                <Ionicons name="restaurant" size={17} color={colors.primary} />
                 <Text
                   style={{
                     fontSize: 14,
@@ -1059,7 +1098,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
                     color: colors.primary,
                   }}
                 >
-                  I Cooked This Tonight! (+{currentPass.planTier === 'plus' ? 100 : 50} XP)
+                  Serve &amp; Feed Mama (+{currentPass.planTier === 'plus' ? 100 : 50} XP)
                 </Text>
               </TouchableOpacity>
             )}
@@ -1085,8 +1124,8 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
         onClose={() => setCookModalVisible(false)}
       />
 
-      {/* Celebratory Dish Mastered + Takeout Savings Trophy Pop-Up */}
-      <DishRewardModal
+      {/* 3-Character Mama Family Overfed Celebration Modal */}
+      <MamaFamilyCelebrationModal
         visible={rewardModalVisible}
         dishTitle={title}
         homeCostFormatted={homeCostFormatted}

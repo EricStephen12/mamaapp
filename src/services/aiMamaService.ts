@@ -966,59 +966,74 @@ Rules:
   ]
 }`;
 
-      const data = await callGroqChat(
-        [
-          { role: 'system', content: systemPrompt },
-          {
-            role: 'user',
-            content: `Generate 6 authentic everyday home meals from ${pass.countryName} now (seed ${Date.now() % 10000}). Output JSON.`,
-          },
-        ],
-        { jsonMode: true, temperature: 0.85, maxTokens: 1500, timeoutMs: 18000 }
-      );
+      const fetchBatch = async (angle: string, batchIdx: number) => {
+        const data = await callGroqChat(
+          [
+            { role: 'system', content: systemPrompt },
+            {
+              role: 'user',
+              content: `Generate 4 authentic everyday home meals from ${pass.countryName} focusing on ${angle} (seed ${(Date.now() + batchIdx * 97) % 10000}). Keep steps concise. Output pure JSON.`,
+            },
+          ],
+          { jsonMode: true, temperature: 0.85, maxTokens: 1150, timeoutMs: 18000 }
+        );
+        const content = data?.choices?.[0]?.message?.content;
+        if (!content) return [];
+        const parsed = JSON.parse(content);
+        return Array.isArray(parsed?.meals) ? parsed.meals : [];
+      };
 
-      const content = data?.choices?.[0]?.message?.content;
-      if (!content) {
-        throw new Error('AI returned empty discover response');
-      }
-      const parsed = JSON.parse(content);
-      if (!Array.isArray(parsed?.meals) || parsed.meals.length === 0) {
+      const [batchA, batchB] = await Promise.all([
+        fetchBatch('classic everyday comfort & quick staples', 1).catch(() => []),
+        fetchBatch('high-protein, fresh greens & lighter home favorites', 2).catch(() => []),
+      ]);
+      const combinedRaw = [...batchA, ...batchB];
+      if (combinedRaw.length === 0) {
         throw new Error('AI returned empty discover meals array');
       }
+
       const allowedHealth = new Set(['clean_healthy', 'high_protein', 'light_night']);
-      return parsed.meals.map((m: any, idx: number) => {
-        const healthCategory = allowedHealth.has(m.healthCategory)
-          ? (m.healthCategory as 'clean_healthy' | 'high_protein' | 'light_night')
-          : (['clean_healthy', 'high_protein', 'light_night'][idx % 3] as
-              | 'clean_healthy'
-              | 'high_protein'
-              | 'light_night');
-        return {
-          id: m.id || `ai-disc-${Date.now()}-${idx}`,
-          categoryType: 'home' as const,
-          cookTimeOrDistance: String(m.cookTimeOrDistance || '15 MIN').toUpperCase(),
-          title: sanitizeDishTitle(m.title || 'Home Meal'),
-          nutrition: m.nutrition || 'Balanced Home Meal',
-          reason: m.reason || `Cooks easily with ${pass.cookingGearLabel}.`,
-          imageUrl: '',
-          baseCostUsd:
-            typeof m.baseCostUsd === 'number' && Number.isFinite(m.baseCostUsd)
-              ? m.baseCostUsd > 50
-                ? Math.max(1.0, Math.min(4.0, Number((m.baseCostUsd / 1400).toFixed(2))))
-                : m.baseCostUsd
-              : 2.2,
-          cuisineTags: [pass.cuisineAnchor || 'african_caribbean', healthCategory],
-          healthCategory,
-          steps:
-            Array.isArray(m.steps) && m.steps.length > 0
-              ? m.steps
-              : ['Prep ingredients.', 'Cook on medium heat.', 'Serve warm.'],
-          ingredients:
-            Array.isArray(m.ingredients) && m.ingredients.length > 0
-              ? m.ingredients
-              : [{ name: 'Kitchen Staples', amount: '1 portion' }],
-        };
-      });
+      const seenTitles = new Set<string>();
+      return combinedRaw
+        .map((m: any, idx: number) => {
+          const healthCategory = allowedHealth.has(m.healthCategory)
+            ? (m.healthCategory as 'clean_healthy' | 'high_protein' | 'light_night')
+            : (['clean_healthy', 'high_protein', 'light_night'][idx % 3] as
+                | 'clean_healthy'
+                | 'high_protein'
+                | 'light_night');
+          return {
+            id: m.id || `ai-disc-${Date.now()}-${idx}`,
+            categoryType: 'home' as const,
+            cookTimeOrDistance: String(m.cookTimeOrDistance || '15 MIN').toUpperCase(),
+            title: sanitizeDishTitle(m.title || 'Home Meal'),
+            nutrition: m.nutrition || 'Balanced Home Meal',
+            reason: m.reason || `Cooks easily with ${pass.cookingGearLabel}.`,
+            imageUrl: '',
+            baseCostUsd:
+              typeof m.baseCostUsd === 'number' && Number.isFinite(m.baseCostUsd)
+                ? m.baseCostUsd > 50
+                  ? Math.max(1.0, Math.min(4.0, Number((m.baseCostUsd / 1400).toFixed(2))))
+                  : m.baseCostUsd
+                : 2.2,
+            cuisineTags: [pass.cuisineAnchor || 'african_caribbean', healthCategory],
+            healthCategory,
+            steps:
+              Array.isArray(m.steps) && m.steps.length > 0
+                ? m.steps
+                : ['Prep ingredients.', 'Cook on medium heat.', 'Serve warm.'],
+            ingredients:
+              Array.isArray(m.ingredients) && m.ingredients.length > 0
+                ? m.ingredients
+                : [{ name: 'Kitchen Staples', amount: '1 portion' }],
+          };
+        })
+        .filter((m) => {
+          const key = m.title.toLowerCase();
+          if (seenTitles.has(key)) return false;
+          seenTitles.add(key);
+          return true;
+        });
     } catch {
       try {
         const srvDisc = await apiClient<{ meals?: any[] }>('/api/discover', {
@@ -1139,24 +1154,33 @@ Strictly output JSON:
   ]
 }`;
 
-    try {
+    const fetchDeckBatch = async (angle: string, batchIdx: number) => {
       const data = await callGroqChat(
         [
           { role: 'system', content: systemPrompt },
           {
             role: 'user',
-            content: `Generate 5 distinct authentic ${pass.countryName} ${timeOfDay} home meals now (seed ${Date.now() % 10000}). Output pure JSON.`,
+            content: `Generate 4 distinct authentic ${pass.countryName} ${timeOfDay} home meals focusing on ${angle} (seed ${(Date.now() + batchIdx * 131) % 10000}). Keep steps crisp and concise. Output pure JSON.`,
           },
         ],
-        { jsonMode: true, temperature: 0.85, maxTokens: 1550, timeoutMs: 18000 }
+        { jsonMode: true, temperature: 0.85, maxTokens: 1150, timeoutMs: 18000 }
       );
-
       const content = data?.choices?.[0]?.message?.content;
       if (!content) return [];
       const parsed = JSON.parse(content);
-      if (!Array.isArray(parsed?.meals) || parsed.meals.length === 0) return [];
+      return Array.isArray(parsed?.meals) ? parsed.meals : [];
+    };
 
-      return parsed.meals
+    try {
+      const [batchA, batchB] = await Promise.all([
+        fetchDeckBatch('classic everyday comfort & quick local staples', 1).catch(() => []),
+        fetchDeckBatch('high-protein, fresh & hearty local favorites', 2).catch(() => []),
+      ]);
+      const rawMeals = [...batchA, ...batchB];
+      if (rawMeals.length === 0) return [];
+
+      const seenTitles = new Set<string>();
+      return rawMeals
         .filter((m: any) => m && typeof m.title === 'string' && Array.isArray(m.steps) && m.steps.length > 0)
         .map((m: any, idx: number) => ({
           id: m.id || `ai-deck-${Date.now()}-${idx}`,
@@ -1188,7 +1212,13 @@ Strictly output JSON:
                 }))
               : [{ name: 'Local Kitchen Staples', amount: '1 portion' }],
           steps: m.steps.filter((s: unknown) => typeof s === 'string' && s.trim().length > 0),
-        }));
+        }))
+        .filter((m) => {
+          const key = m.title.toLowerCase();
+          if (seenTitles.has(key)) return false;
+          seenTitles.add(key);
+          return true;
+        });
     } catch {
       return [];
     }

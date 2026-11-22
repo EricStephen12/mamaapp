@@ -24,6 +24,7 @@ import { MamaCharacter, MamaPose } from '../../components/common/MamaCharacter';
 import {
   preferencesStore,
   UserKitchenPass,
+  PendingCookCheckIn,
   convertMealCost,
   FREE_DAILY_ROLL_LIMIT,
 } from '../../services/preferencesStore';
@@ -31,6 +32,8 @@ import { subscriptionService } from '../../services/subscriptionService';
 import { CountryCurrencyModal } from '../../components/common/CountryCurrencyModal';
 import { KitchenPassModal } from '../../components/common/KitchenPassModal';
 import { MamaPaywallModal } from '../../components/common/MamaPaywallModal';
+import { MamaMomentModal } from '../../components/common/MamaMomentModal';
+import { MamaFamilyCelebrationModal } from '../../components/common/MamaFamilyCelebrationModal';
 import { MamaDialogueService, MealPeriod } from '../../services/mamaDialogueService';
 import { AiMamaService } from '../../services/aiMamaService';
 import { decisionsService } from '../../services/api/decisionsService';
@@ -61,6 +64,11 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
   const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [passModalVisible, setPassModalVisible] = useState(false);
   const [paywallModalVisible, setPaywallModalVisible] = useState(false);
+  const [rollLimitPrice, setRollLimitPrice] = useState<string | null>(null);
+  const [pendingCheckIn, setPendingCheckIn] = useState<PendingCookCheckIn | null>(() =>
+    preferencesStore.getPendingCookCheckIn()
+  );
+  const [celebratedCheckIn, setCelebratedCheckIn] = useState<PendingCookCheckIn | null>(null);
   const [rollRevealVisible, setRollRevealVisible] = useState(false);
   const [pendingRolledMeal, setPendingRolledMeal] = useState<RolledMeal | null>(null);
   const [mamaModalVisible, setMamaModalVisible] = useState(false);
@@ -282,6 +290,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
   useEffect(() => {
     const unsub = preferencesStore.subscribe((updated) => {
       setKitchenPass(updated);
+      setPendingCheckIn(preferencesStore.getPendingCookCheckIn());
       const nextPrefsKey = `${updated.country}|${updated.cuisineAnchor}|${updated.bodyGoal}|${updated.timeLimitMinutes}|${(updated.dietaryRestrictions || []).join(',')}`;
       if (nextPrefsKey !== prevPrefsKeyRef.current) {
         prevPrefsKeyRef.current = nextPrefsKey;
@@ -562,41 +571,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
 
     if (!preferencesStore.consumeDailyRoll()) {
       subscriptionService.getPlusPriceString().then((price) => {
-        Alert.alert(
-          `${FREE_DAILY_ROLL_LIMIT} Daily Rolls Used Today`,
-          `You've used your ${FREE_DAILY_ROLL_LIMIT} free daily rolls today! Spend 50 XP for a bonus roll or unlock Mama Plus (${price}) for Unlimited Rolls, Free Healthy Remixes, and 2x XP.`,
-          [
-            { text: 'Not Now', style: 'cancel' },
-            {
-              text: 'Bonus Roll (-50 XP)',
-              onPress: () => {
-                if (preferencesStore.spendXp(50)) {
-                  setToastMessage('Bonus Roll unlocked (-50 XP)!');
-                  setPendingRolledMeal(null);
-                  setRollRevealVisible(true);
-                  executeRoll();
-                } else {
-                  setToastMessage('Need 50 XP! Cook a meal at home (+50 XP) or unlock Mama Plus.');
-                }
-              },
-            },
-            {
-              text: `Unlock Mama Pro (${price})`,
-              onPress: async () => {
-                const outcome = await subscriptionService.presentPaywallIfNeeded();
-                if (outcome === 'purchased' || outcome === 'restored') {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                  setToastMessage('Welcome to Mama Kitchen Pro! Unlimited rolls unlocked.');
-                  setPendingRolledMeal(null);
-                  setRollRevealVisible(true);
-                  executeRoll();
-                } else if (outcome === 'unavailable') {
-                  setPaywallModalVisible(true);
-                }
-              },
-            },
-          ]
-        );
+        setRollLimitPrice(price);
       });
       return;
     }
@@ -821,6 +796,55 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
             },
           ]}
         >
+          {/* Cheeky Mama Check-In: pops up ONLY if user actually spent time on a recipe without logging it */}
+          {pendingCheckIn ? (
+            <View style={styles.checkInCard}>
+              <View style={styles.checkInTopRow}>
+                <RegionalMamaAvatar
+                  countryCode={kitchenPass.country}
+                  cuisineAnchor={kitchenPass.cuisineAnchor}
+                  size={44}
+                />
+                <View style={styles.checkInTextWrap}>
+                  <Text style={styles.checkInEyebrow}>MAMA CHECKING IN</Text>
+                  <Text style={styles.checkInPrompt}>
+                    Did you actually cook <Text style={styles.checkInDish}>{pendingCheckIn.title}</Text>, or were you just peeking?
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.checkInActions}>
+                <TouchableOpacity
+                  style={styles.checkInBtnPrimary}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                    const dish = pendingCheckIn;
+                    preferencesStore.clearPendingCookCheckIn();
+                    preferencesStore.recordMealDecision(dish.title, 'cooked', dish.estCost);
+                    decisionsService.log(dish.mealId, dish.title, 'cooked', dish.estCost);
+                    setPendingCheckIn(null);
+                    setCelebratedCheckIn(dish);
+                  }}
+                >
+                  <Ionicons name="restaurant" size={14} color="#FFFFFF" />
+                  <Text style={styles.checkInBtnPrimaryText}>Yes, I ate!</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.checkInBtnSecondary}
+                  activeOpacity={0.82}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    preferencesStore.clearPendingCookCheckIn();
+                    setPendingCheckIn(null);
+                    setToastMessage('Haha fair enough! Let’s find tonight’s real plate.');
+                  }}
+                >
+                  <Text style={styles.checkInBtnSecondaryText}>Just peeking</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
           {/* 1. HERO CAROUSEL & ROLL ACTION (Tactile Curated 3-Poster Deck) */}
           <MealCardDeck
             meals={mealsDeck}
@@ -963,6 +987,78 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
           setPendingRolledMeal(null);
           setRollRevealVisible(true);
           executeRoll();
+        }}
+      />
+
+      {/* Custom Warm Mama Sheet for 2-Roll Daily Limit (replaces cold system Alert) */}
+      <MamaMomentModal
+        visible={!!rollLimitPrice}
+        eyebrow="PICKY TONIGHT?"
+        title={`${FREE_DAILY_ROLL_LIMIT} rolls already, my child!`}
+        message={`You used your ${FREE_DAILY_ROLL_LIMIT} free daily rolls today. Spend 50 XP for one more peek, or join Mama Pro (${rollLimitPrice || '$1/mo'}) for Unlimited Rolls, Free Healthy Remixes & 2x XP.`}
+        mood="mama"
+        onClose={() => setRollLimitPrice(null)}
+        actions={[
+          {
+            label: `Unlock Mama Pro (${rollLimitPrice || '$1/mo'})`,
+            variant: 'primary',
+            icon: 'sparkles',
+            onPress: async () => {
+              setRollLimitPrice(null);
+              const outcome = await subscriptionService.presentPaywallIfNeeded();
+              if (outcome === 'purchased' || outcome === 'restored') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                setToastMessage('Welcome to Mama Kitchen Pro! Unlimited rolls unlocked.');
+                setPendingRolledMeal(null);
+                setRollRevealVisible(true);
+                executeRoll();
+              } else if (outcome === 'unavailable') {
+                setPaywallModalVisible(true);
+              }
+            },
+          },
+          {
+            label: 'Bonus Roll (-50 XP)',
+            variant: 'secondary',
+            icon: 'flame',
+            onPress: () => {
+              setRollLimitPrice(null);
+              if (preferencesStore.spendXp(50)) {
+                setToastMessage('Bonus Roll unlocked (-50 XP)!');
+                setPendingRolledMeal(null);
+                setRollRevealVisible(true);
+                executeRoll();
+              } else {
+                setToastMessage('Need 50 XP! Cook a meal at home (+50 XP) or unlock Mama Pro.');
+              }
+            },
+          },
+          {
+            label: 'Not Now',
+            variant: 'ghost',
+            onPress: () => setRollLimitPrice(null),
+          },
+        ]}
+      />
+
+      {/* 3-Character Mama Family Overfed Celebration triggered from Home Check-In */}
+      <MamaFamilyCelebrationModal
+        visible={!!celebratedCheckIn}
+        dishTitle={celebratedCheckIn?.title || ''}
+        homeCostFormatted={convertMealCost(
+          celebratedCheckIn?.estCost || 2.0,
+          kitchenPass.currencyCode,
+          kitchenPass.currencySymbol
+        )}
+        savedVsTakeoutFormatted={convertMealCost(
+          Math.max(1.8, Number(((celebratedCheckIn?.estCost || 2.0) * 1.6).toFixed(2))),
+          kitchenPass.currencyCode,
+          kitchenPass.currencySymbol
+        )}
+        mealsCookedCount={kitchenPass.likedDishes.length}
+        onClaimReward={() => {
+          setCelebratedCheckIn(null);
+          setToastMessage('Family fed & XP added! Mama is so proud.');
         }}
       />
 
@@ -1485,6 +1581,78 @@ const styles = StyleSheet.create({
   },
   undoDismissButton: {
     padding: 3,
+  },
+  checkInCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: 'rgba(255, 252, 247, 0.96)',
+    borderRadius: 20,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(102, 112, 74, 0.28)',
+    shadowColor: '#242820',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    gap: 12,
+  },
+  checkInTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  checkInTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  checkInEyebrow: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+    color: colors.primary,
+  },
+  checkInPrompt: {
+    fontSize: 13.5,
+    lineHeight: 18.5,
+    color: colors.text.primary,
+    fontWeight: '500',
+  },
+  checkInDish: {
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  checkInActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  checkInBtnPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  checkInBtnPrimaryText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  checkInBtnSecondary: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(36, 40, 32, 0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkInBtnSecondaryText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.text.secondary,
   },
 });
 
