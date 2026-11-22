@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -26,10 +26,37 @@ import {
 } from '../../services/preferencesStore';
 import { pantryService } from '../../services/api/pantryService';
 import { getCurrentTimeOfDay, rollService } from '../../services/api/rollService';
+import { useUserDataBank } from '../../context/UserDataBankContext';
 import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
 import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
 import { MamaSealStamp } from '../../components/signature/MamaSealStamp';
+import { SteamWisps } from '../../components/signature/SteamWisps';
 import { playRevealThudHaptics } from '../../utils/mamaHaptics';
+
+function getWelcomeHomeLine(countryId: string, budgetLabel: string): string {
+  switch (countryId) {
+    case 'NG':
+      return `The kitchen is warm and your ${budgetLabel} week is set. Take off your shoes—let's see what's on the stove.`;
+    case 'GH':
+      return `Akwaaba home! Your ${budgetLabel} week is ready and the pot is warming up for you.`;
+    case 'KE':
+      return `Karibu home! Your ${budgetLabel} week is set—come sit while Mama warms the pan.`;
+    case 'ZA':
+      return `Welcome home! Your ${budgetLabel} week is ready for real comfort with zero waste.`;
+    case 'GB':
+      return `Put the kettle on, my dear. Your ${budgetLabel} week is set and the pan is warm—come in.`;
+    case 'US':
+      return `DoorDash can wait tonight. Your ${budgetLabel} week is ready—let's cook something real in minutes.`;
+    case 'CA':
+      return `Come in from the cold. Your ${budgetLabel} week is set and something cozy is waiting.`;
+    case 'EU':
+      return `Breathe easy, my dear. Your ${budgetLabel} week is ready—simple ingredients, warm table.`;
+    case 'AU':
+      return `Welcome home! Your ${budgetLabel} week is set for fresh, effortless meals all week long.`;
+    default:
+      return `Your kitchen is warm and your ${budgetLabel} week is set. Come see what we're cooking.`;
+  }
+}
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MakeItYours'>;
 
@@ -59,7 +86,13 @@ const COMMON_PANTRY_STAPLES = [
 const TOTAL_STEPS = 3;
 
 export const MakeItYours: React.FC<Props> = ({ navigation }) => {
+  const { user } = useUserDataBank();
   const [step, setStep] = useState<number>(1);
+  const [showWelcomeHandoff, setShowWelcomeHandoff] = useState<boolean>(false);
+  const [welcomeBudgetLabel, setWelcomeBudgetLabel] = useState<string>('');
+  const hasNavigatedRef = useRef<boolean>(false);
+  const welcomeOpacity = useRef(new Animated.Value(0)).current;
+  const welcomeScale = useRef(new Animated.Value(0.86)).current;
 
   const existingPass = preferencesStore.getKitchenPass();
   const [selectedCountryId, setSelectedCountryId] = useState<string>(existingPass.country || 'NG');
@@ -185,7 +218,36 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
     Keyboard.dismiss();
   };
 
+  const enterKitchen = useCallback(() => {
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
+    navigation.replace('YourDailyEdit');
+  }, [navigation]);
+
+  useEffect(() => {
+    if (!showWelcomeHandoff) return;
+    Animated.parallel([
+      Animated.timing(welcomeOpacity, {
+        toValue: 1,
+        duration: 320,
+        useNativeDriver: true,
+      }),
+      Animated.spring(welcomeScale, {
+        toValue: 1,
+        friction: 6,
+        tension: 85,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    const autoTimer = setTimeout(() => {
+      enterKitchen();
+    }, 3400);
+    return () => clearTimeout(autoTimer);
+  }, [showWelcomeHandoff, welcomeOpacity, welcomeScale, enterKitchen]);
+
   const handleComplete = () => {
+    Keyboard.dismiss();
     try {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {}
@@ -222,7 +284,7 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
     preferencesStore.updateCountryAndCurrency(selectedCountryId, undefined, customBudget, true);
 
     // Gear, time and flavor keep their smart defaults (editable later in settings)
-    preferencesStore.updateKitchenPass({
+    const updatedPass = preferencesStore.updateKitchenPass({
       dietaryRestrictions: finalDiets,
       bodyGoal: selectedGoalId,
       bodyGoalLabel: chosenGoal ? chosenGoal.title : 'Balanced',
@@ -231,7 +293,17 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
 
     preferencesStore.completeOnboarding();
     playRevealThudHaptics();
-    navigation.replace('YourDailyEdit');
+
+    // Pre-warm live AI dishes for this exact country while Mama welcomes the user home!
+    rollService
+      .generateLiveDailyDeck(getCurrentTimeOfDay(), updatedPass, finalKitchenItems)
+      .catch(() => {});
+
+    const budgetNum = updatedPass.weeklyBudget || selectedCountry.defaultWeeklyBudget;
+    setWelcomeBudgetLabel(
+      `${updatedPass.currencySymbol}${Math.round(budgetNum).toLocaleString()}`
+    );
+    setShowWelcomeHandoff(true);
   };
 
   const handleNext = () => {
@@ -632,6 +704,47 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
         )}
       </Animated.View>
     </KeyboardAvoidingView>
+
+    {/* Warm "Welcome Home" Mama Hand-off Moment */}
+    {showWelcomeHandoff ? (
+      <Animated.View style={[styles.welcomeOverlay, { opacity: welcomeOpacity }]}>
+        <KitchenAtmosphere period={getCurrentTimeOfDay()} />
+        <Animated.View
+          style={[styles.welcomeContent, { transform: [{ scale: welcomeScale }] }]}
+        >
+          <View style={styles.welcomeAvatarStage}>
+            <SteamWisps triggerKey={selectedCountry.id} style={styles.welcomeSteam} />
+            <RegionalMamaAvatar countryCode={selectedCountry.id} size={114} />
+            <MamaSealStamp size={46} variant="linen" style={styles.welcomeSeal} />
+          </View>
+
+          <Text style={styles.welcomeTitle}>
+            {user?.name?.trim()
+              ? `Welcome home, ${user.name.trim().split(' ')[0]}.`
+              : 'Welcome home, my child.'}
+          </Text>
+
+          <Text style={styles.welcomeMessage}>
+            {getWelcomeHomeLine(
+              selectedCountry.id,
+              welcomeBudgetLabel || `${selectedCountry.currencySymbol}${selectedCountry.defaultWeeklyBudget}`
+            )}
+          </Text>
+
+          <TouchableOpacity
+            style={styles.welcomeCta}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              enterKitchen();
+            }}
+            activeOpacity={0.88}
+          >
+            <Text style={styles.welcomeCtaText}>Step into the kitchen</Text>
+            <Ionicons name="arrow-forward" size={17} color="#FFFFFF" />
+          </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
+    ) : null}
   </SafeAreaView>
   );
 };
@@ -979,6 +1092,73 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     textAlign: 'center',
     paddingHorizontal: 14,
+  },
+  welcomeOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 30,
+    zIndex: 50,
+  },
+  welcomeContent: {
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+  },
+  welcomeAvatarStage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    position: 'relative',
+  },
+  welcomeSteam: {
+    marginBottom: -4,
+  },
+  welcomeSeal: {
+    position: 'absolute',
+    right: -18,
+    bottom: -4,
+  },
+  welcomeTitle: {
+    fontSize: 27,
+    fontWeight: '900',
+    color: colors.text.primary,
+    letterSpacing: -0.5,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  welcomeMessage: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  welcomeCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 28,
+    paddingVertical: 15,
+    borderRadius: 999,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  welcomeCtaText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
 });
 

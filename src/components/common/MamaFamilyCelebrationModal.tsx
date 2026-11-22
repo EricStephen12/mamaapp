@@ -165,7 +165,6 @@ const LittleCousinPushing: React.FC<{ size?: number }> = ({ size = 84 }) => (
 export const MamaFamilyCelebrationModal: React.FC<MamaFamilyCelebrationProps> = ({
   visible,
   dishTitle,
-  homeCostFormatted,
   savedVsTakeoutFormatted,
   mealsCookedCount,
   onClaimReward,
@@ -496,31 +495,26 @@ export const MamaFamilyCelebrationModal: React.FC<MamaFamilyCelebrationProps> = 
             </Animated.View>
           </View>
 
-          {/* Headline & Dish */}
-          <Text style={styles.eyebrow}>{achievement.badge}</Text>
+          {/* Calm, Airy Headline & Dish */}
           <Text style={styles.title}>{achievement.headline}</Text>
           <Text style={styles.dishName} numberOfLines={2}>
             {dishTitle}
           </Text>
 
-          {/* Savings & XP Reward Tiles */}
-          <View style={styles.statsRow}>
-            <View style={styles.statCardGreen}>
-              <Text style={styles.statLabelGreen}>SAVED VS DELIVERY</Text>
-              <Text style={styles.statValGreen}>+{savedVsTakeoutFormatted}</Text>
+          {/* Single Clean Reward Summary Strip */}
+          <View style={styles.summaryStrip}>
+            <View style={styles.summaryCol}>
+              <Text style={styles.summaryValGreen}>+{savedVsTakeoutFormatted}</Text>
+              <Text style={styles.summaryLabel}>Saved vs delivery</Text>
             </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statLabel}>MAMA XP EARNED</Text>
-              <Text style={styles.statVal}>+{xpAmount} XP</Text>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryCol}>
+              <Text style={styles.summaryVal}>+{xpAmount} XP</Text>
+              <Text style={styles.summaryLabel}>
+                {Math.max(1, mealsCookedCount)}{' '}
+                {Math.max(1, mealsCookedCount) === 1 ? 'plate' : 'plates'} cooked
+              </Text>
             </View>
-          </View>
-
-          <View style={styles.milestoneStrip}>
-            <Ionicons name="flame" size={15} color={colors.primary} />
-            <Text style={styles.milestoneStripText}>
-              Home Cost: {homeCostFormatted} · {Math.max(1, mealsCookedCount)}{' '}
-              {Math.max(1, mealsCookedCount) === 1 ? 'Plate' : 'Plates'} Cooked at Home
-            </Text>
           </View>
 
           {/* Primary Claim CTA */}
@@ -532,7 +526,7 @@ export const MamaFamilyCelebrationModal: React.FC<MamaFamilyCelebrationProps> = 
             }}
             activeOpacity={0.88}
           >
-            <Text style={styles.claimBtnText}>Claim Reward &amp; Continue</Text>
+            <Text style={styles.claimBtnText}>Continue</Text>
             <Ionicons name="arrow-forward" size={17} color="#FFFFFF" />
           </TouchableOpacity>
         </Animated.View>
@@ -667,92 +661,58 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
   },
-  eyebrow: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    letterSpacing: 1.3,
-    color: colors.primary,
-    marginBottom: 3,
-  },
   title: {
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: '900',
     color: colors.text.primary,
-    letterSpacing: -0.4,
+    letterSpacing: -0.35,
     textAlign: 'center',
+    marginTop: 2,
   },
   dishName: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '600',
     color: colors.text.secondary,
     textAlign: 'center',
-    marginTop: 2,
-    marginBottom: 14,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    width: '100%',
-    marginBottom: 12,
-  },
-  statCardGreen: {
-    flex: 1,
-    backgroundColor: 'rgba(102, 112, 74, 0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(102, 112, 74, 0.28)',
-    borderRadius: 16,
-    paddingVertical: 11,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-  },
-  statLabelGreen: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    letterSpacing: 0.7,
-    color: colors.primary,
-    marginBottom: 3,
-  },
-  statValGreen: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.primary,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 252, 247, 0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
-    borderRadius: 16,
-    paddingVertical: 11,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-  },
-  statLabel: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    letterSpacing: 0.7,
-    color: colors.text.secondary,
-    marginBottom: 3,
-  },
-  statVal: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.text.primary,
-  },
-  milestoneStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.linen200,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
+    marginTop: 3,
     marginBottom: 16,
   },
-  milestoneStripText: {
-    fontSize: 12,
-    fontWeight: '700',
+  summaryStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    backgroundColor: 'rgba(255, 252, 247, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(102, 112, 74, 0.16)',
+    borderRadius: 18,
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    marginBottom: 18,
+  },
+  summaryCol: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(102, 112, 74, 0.18)',
+  },
+  summaryValGreen: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.primary,
+  },
+  summaryVal: {
+    fontSize: 18,
+    fontWeight: '900',
     color: colors.text.primary,
+  },
+  summaryLabel: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: colors.text.secondary,
   },
   claimBtn: {
     width: '100%',
