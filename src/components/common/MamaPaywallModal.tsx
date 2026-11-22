@@ -181,7 +181,7 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
 
           <View style={styles.perkRow}>
             <View style={styles.perkIconWrap}>
-              <Ionicons name="sparkles" size={20} color={colors.primary} />
+              <Ionicons name="leaf" size={20} color={colors.primary} />
             </View>
             <View style={styles.perkTextWrap}>
               <Text style={styles.perkTitle}>{'Free "Make It Healthy" Remixes'}</Text>

@@ -1019,7 +1019,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
           {
             label: `Unlock Mama Pro (${rollLimitPrice || '$1/mo'})`,
             variant: 'primary',
-            icon: 'sparkles',
+            icon: 'ribbon',
             onPress: async () => {
               setRollLimitPrice(null);
               const outcome = await subscriptionService.presentPaywallIfNeeded();

@@ -109,7 +109,7 @@ export const MakeNowMealCard: React.FC<MakeNowMealCardProps> = ({
       <View style={styles.container}>
         <Text style={styles.eyebrow}>Mama AI is matching your kitchen...</Text>
         <View style={[styles.mealCard, { padding: 24, alignItems: 'center', gap: 10 }]}>
-          <Ionicons name="sparkles-outline" size={26} color={colors.primary} />
+          <Ionicons name="restaurant-outline" size={26} color={colors.primary} />
           <Text style={[styles.mealHeading, { textAlign: 'center' }]}>
             Crafting a fresh recipe...
           </Text>

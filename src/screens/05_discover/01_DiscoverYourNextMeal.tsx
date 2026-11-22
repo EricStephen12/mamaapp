@@ -592,7 +592,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
                   <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
                   <>
-                    <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+                    <Ionicons name="restaurant-outline" size={16} color={colors.primary} />
                     <Text style={styles.loadMoreBtnText}>
                       More {kitchenPass.countryName} Dishes
                     </Text>

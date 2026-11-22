@@ -103,7 +103,7 @@ export const WeeklyBalanceCard: React.FC<WeeklyBalanceCardProps> = ({
 
       <View style={styles.mamaNoteRow}>
         <Ionicons
-          name={isBudgetFinished ? 'heart' : isBudgetLow ? 'alert-circle' : 'sparkles'}
+          name={isBudgetFinished ? 'heart' : isBudgetLow ? 'alert-circle' : 'shield-checkmark'}
           size={13}
           color={barColor}
         />
