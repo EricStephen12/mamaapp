@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import {
   StapleAvailabilityRow,
   StapleItemData,
 } from './StapleAvailabilityRow';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
+import { mamaAlert } from '../../../services/mamaAlert';
 
 const DEFAULT_STAPLES: StapleItemData[] = [
   { id: 'st-1', name: 'Olive oil', quantity: 'At least 2 tbsp', isAvailable: true },
@@ -23,37 +24,11 @@ export const PantryBasicsSection: React.FC = () => {
   };
 
   const handleAddStaple = () => {
-    if (Alert.prompt) {
-      Alert.prompt(
-        'Add Pantry Basic',
-        'Enter staple name and minimum amount:',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Add',
-            onPress: (text?: string) => {
-              if (text && text.trim()) {
-                setStaples((prev) => [
-                  ...prev,
-                  {
-                    id: `st-${Date.now()}`,
-                    name: text.trim(),
-                    quantity: 'In pantry',
-                    isAvailable: true,
-                  },
-                ]);
-              }
-            },
-          },
-        ]
-      );
-    } else {
-      Alert.alert(
-        'Edit Basics',
-        'You can add or toggle everyday essentials like black pepper, vinegar, soy sauce, and cooking oils.',
-        [{ text: 'OK' }]
-      );
-    }
+    mamaAlert.alert(
+      'Kitchen Essentials',
+      'Tap any staple row to toggle whether you have everyday basics like oil, salt, and spices on hand.',
+      [{ text: 'Got it' }]
+    );
   };
 
   return (

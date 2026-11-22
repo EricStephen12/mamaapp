@@ -6,7 +6,6 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
-  Alert,
   TextInput,
   KeyboardAvoidingView,
   Platform,
@@ -19,8 +18,10 @@ import { typography } from '../../theme/typography';
 import { preferencesStore, BodyGoal, FREE_DAILY_ROLL_LIMIT } from '../../services/preferencesStore';
 import { subscriptionService } from '../../services/subscriptionService';
 import { authService } from '../../services/api/authService';
+import { mamaAlert } from '../../services/mamaAlert';
 import { useUserDataBank } from '../../context/UserDataBankContext';
 import { MamaPaywallContent } from './MamaPaywallModal';
+import { MamaAlertHost } from './MamaAlertHost';
 
 interface KitchenPassModalProps {
   visible: boolean;
@@ -141,7 +142,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
   };
 
   const handleLogout = () => {
-    Alert.alert('Log Out', 'Are you sure you want to log out of Mama Kitchen?', [
+    mamaAlert.alert('Log Out', 'Are you sure you want to log out of Mama Kitchen?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Log Out',
@@ -159,7 +160,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
+    mamaAlert.alert(
       'Delete Account',
       'Are you sure you want to permanently delete your account and all associated data? This action cannot be undone.',
       [
@@ -226,7 +227,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
       }
 
       const isLive = subscriptionService.isLive();
-      Alert.alert(
+      mamaAlert.alert(
         'Mama Kitchen Pro Active',
         isLive
           ? "You have Unlimited Daily Rolls, Free Healthy Remixes, and 2x XP. Manage or cancel anytime in your phone's App Store / Play Store subscriptions."
@@ -328,7 +329,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
                     activeOpacity={0.8}
                     onPress={() => {
                       Haptics.selectionAsync().catch(() => {});
-                      Alert.alert(
+                      mamaAlert.alert(
                         'Your Mama XP',
                         'Earn +50 XP every time you eat at home.\n\n• Spend 50 XP on any dish to unlock a "Make It Healthy" remix.\n• Keep stacking your XP for upcoming Partner Grocery & Food Discounts (Coming Soon)!'
                       );
@@ -657,6 +658,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
         </View>
       </KeyboardAvoidingView>
       )}
+      {visible ? <MamaAlertHost inline /> : null}
     </Modal>
   );
 };

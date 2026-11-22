@@ -8,7 +8,6 @@ import {
   Animated,
   TouchableOpacity,
   Share,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -20,6 +19,7 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { MamaCharacter, MamaPose } from '../../components/common/MamaCharacter';
 import { TactileToast } from '../../components/common/TactileToast';
+import { mamaAlert } from '../../services/mamaAlert';
 import {
   preferencesStore,
   convertMealCost,
@@ -552,7 +552,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
         .filter((p) => usedIdsToClear.includes(p.id))
         .map((p) => p.name)
         .join(', ');
-      Alert.alert(
+      mamaAlert.alert(
         'Update Kitchen Pantry?',
         `Did you finish your ${usedNames}, or do you still have some left?`,
         [
@@ -658,7 +658,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch {}
 
-    Alert.alert(
+    mamaAlert.alert(
       `Never suggest ${title}?`,
       `Mama won't suggest this dish again. You can unhide it anytime in your Kitchen Pass under Diet.`,
       [

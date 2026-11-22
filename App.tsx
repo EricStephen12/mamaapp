@@ -10,6 +10,7 @@ import { pantryService } from './src/services/api/pantryService';
 import { savedMealsService } from './src/services/api/savedMealsService';
 import { subscriptionService } from './src/services/subscriptionService';
 import { UserDataBankProvider } from './src/context/UserDataBankContext';
+import { MamaAlertHost } from './src/components/common/MamaAlertHost';
 import { colors } from './src/theme/colors';
 
 export default function App() {
@@ -51,6 +52,7 @@ export default function App() {
           <NavigationContainer>
             <RootNavigator />
           </NavigationContainer>
+          <MamaAlertHost />
         </UserDataBankProvider>
       </ErrorBoundary>
     </SafeAreaProvider>

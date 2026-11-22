@@ -8,7 +8,6 @@ import {
   ScrollView,
   Platform,
   Animated,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -20,6 +19,7 @@ import { MamaKitchenLogo } from '../../components/common/MamaKitchenLogo';
 import { InputField } from '../../components/common/InputField';
 import { PrimaryButton } from '../../components/common/PrimaryButton';
 import { preferencesStore } from '../../services/preferencesStore';
+import { mamaAlert } from '../../services/mamaAlert';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MamaKitchenSignIn'>;
 
@@ -105,7 +105,7 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
   const handleForgotPassword = async () => {
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      Alert.alert(
+      mamaAlert.alert(
         'Reset Password',
         'Enter your email address above first, then tap Forgot password so we know which account to help you recover.'
       );
@@ -117,7 +117,7 @@ export const MamaKitchenSignIn: React.FC<Props> = ({ navigation }) => {
     } catch {
       // Non-blocking: show standard recovery notice even if offline
     }
-    Alert.alert(
+    mamaAlert.alert(
       'Password Recovery',
       `If an account exists for ${trimmedEmail}, we have sent a password recovery code to that email address.`
     );

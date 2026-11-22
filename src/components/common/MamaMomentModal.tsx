@@ -32,6 +32,8 @@ export interface MamaMomentModalProps {
   mood?: 'mama' | 'overfed' | 'auntie';
   actions: MamaMomentAction[];
   onClose: () => void;
+  /** Render inline as an absolute overlay inside an already-open Modal (prevents iOS nested modal conflicts) */
+  inline?: boolean;
 }
 
 /**
@@ -45,6 +47,7 @@ export const MamaMomentModal: React.FC<MamaMomentModalProps> = ({
   mood = 'mama',
   actions,
   onClose,
+  inline = false,
 }) => {
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.88)).current;
@@ -73,82 +76,96 @@ export const MamaMomentModal: React.FC<MamaMomentModalProps> = ({
 
   if (!visible) return null;
 
+  const overlayBody = (
+    <Animated.View
+      style={[
+        styles.backdrop,
+        inline && styles.inlineBackdrop,
+        { opacity },
+      ]}
+    >
+      <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+      <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
+        {/* Illustrated Character Badge */}
+        <View style={styles.avatarStage}>
+          {mood === 'overfed' ? (
+            <Image source={MAMA_OVERFED} style={styles.customCharImg} resizeMode="cover" />
+          ) : mood === 'auntie' ? (
+            <Image source={AUNTIE_PULLING} style={styles.customCharImg} resizeMode="cover" />
+          ) : (
+            <RegionalMamaAvatar
+              countryCode={pass.country}
+              cuisineAnchor={pass.cuisineAnchor}
+              size={76}
+            />
+          )}
+        </View>
+
+        <View style={styles.eyebrowPill}>
+          <Text style={styles.eyebrowText}>{eyebrow}</Text>
+        </View>
+
+        <Text style={styles.title}>{title}</Text>
+        {message ? <Text style={styles.message}>{message}</Text> : null}
+
+        <View style={styles.actionsWrap}>
+          {actions.map((action, idx) => {
+            const variant = action.variant || (idx === 0 ? 'primary' : 'secondary');
+            return (
+              <TouchableOpacity
+                key={`${action.label}-${idx}`}
+                style={[
+                  styles.actionBtn,
+                  variant === 'primary' && styles.actionBtnPrimary,
+                  variant === 'secondary' && styles.actionBtnSecondary,
+                  variant === 'destructive' && styles.actionBtnDestructive,
+                  variant === 'ghost' && styles.actionBtnGhost,
+                ]}
+                activeOpacity={0.85}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  action.onPress();
+                }}
+              >
+                {action.icon ? (
+                  <Ionicons
+                    name={action.icon}
+                    size={16}
+                    color={
+                      variant === 'primary'
+                        ? '#FFFFFF'
+                        : variant === 'destructive'
+                          ? '#B9382C'
+                          : colors.primary
+                    }
+                  />
+                ) : null}
+                <Text
+                  style={[
+                    styles.actionText,
+                    variant === 'primary' && styles.actionTextPrimary,
+                    variant === 'secondary' && styles.actionTextSecondary,
+                    variant === 'destructive' && styles.actionTextDestructive,
+                    variant === 'ghost' && styles.actionTextGhost,
+                  ]}
+                >
+                  {action.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </Animated.View>
+    </Animated.View>
+  );
+
+  if (inline) {
+    return overlayBody;
+  }
+
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <Animated.View style={[styles.backdrop, { opacity }]}>
-        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
-        <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
-          {/* Illustrated Character Badge */}
-          <View style={styles.avatarStage}>
-            {mood === 'overfed' ? (
-              <Image source={MAMA_OVERFED} style={styles.customCharImg} resizeMode="cover" />
-            ) : mood === 'auntie' ? (
-              <Image source={AUNTIE_PULLING} style={styles.customCharImg} resizeMode="cover" />
-            ) : (
-              <RegionalMamaAvatar
-                countryCode={pass.country}
-                cuisineAnchor={pass.cuisineAnchor}
-                size={76}
-              />
-            )}
-          </View>
-
-          <View style={styles.eyebrowPill}>
-            <Text style={styles.eyebrowText}>{eyebrow}</Text>
-          </View>
-
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
-
-          <View style={styles.actionsWrap}>
-            {actions.map((action, idx) => {
-              const variant = action.variant || (idx === 0 ? 'primary' : 'secondary');
-              return (
-                <TouchableOpacity
-                  key={`${action.label}-${idx}`}
-                  style={[
-                    styles.actionBtn,
-                    variant === 'primary' && styles.actionBtnPrimary,
-                    variant === 'secondary' && styles.actionBtnSecondary,
-                    variant === 'destructive' && styles.actionBtnDestructive,
-                    variant === 'ghost' && styles.actionBtnGhost,
-                  ]}
-                  activeOpacity={0.85}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    action.onPress();
-                  }}
-                >
-                  {action.icon ? (
-                    <Ionicons
-                      name={action.icon}
-                      size={16}
-                      color={
-                        variant === 'primary'
-                          ? '#FFFFFF'
-                          : variant === 'destructive'
-                            ? '#B9382C'
-                            : colors.primary
-                      }
-                    />
-                  ) : null}
-                  <Text
-                    style={[
-                      styles.actionText,
-                      variant === 'primary' && styles.actionTextPrimary,
-                      variant === 'secondary' && styles.actionTextSecondary,
-                      variant === 'destructive' && styles.actionTextDestructive,
-                      variant === 'ghost' && styles.actionTextGhost,
-                    ]}
-                  >
-                    {action.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </Animated.View>
-      </Animated.View>
+      {overlayBody}
     </Modal>
   );
 };
@@ -160,6 +177,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 22,
+  },
+  inlineBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 999,
+    elevation: 20,
   },
   card: {
     width: '100%',
@@ -267,3 +293,4 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
 });
+

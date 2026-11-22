@@ -9,4 +9,5 @@ export * from './KitchenPassModal';
 export * from './MamaPaywallModal';
 export * from './MamaFamilyCelebrationModal';
 export * from './MamaMomentModal';
+export * from './MamaAlertHost';
 

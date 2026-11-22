@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,8 +14,10 @@ import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
 import { preferencesStore } from '../../services/preferencesStore';
 import { subscriptionService } from '../../services/subscriptionService';
+import { mamaAlert } from '../../services/mamaAlert';
 import { RegionalMamaAvatar } from '../signature/RegionalMamaAvatar';
 import { KitchenAtmosphere } from '../signature/KitchenAtmosphere';
+import { MamaAlertHost } from './MamaAlertHost';
 
 export interface MamaPaywallProps {
   onClose: () => void;
@@ -78,7 +79,7 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         onSubscribed?.();
       } else if (outcome === 'error') {
-        Alert.alert(
+        mamaAlert.alert(
           'Purchase Not Completed',
           'Something went wrong processing your order. You have not been charged.'
         );
@@ -99,10 +100,10 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
       const restored = await subscriptionService.restore();
       if (restored) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        Alert.alert('Restored!', 'Your Mama Kitchen Pro access has been restored.');
+        mamaAlert.alert('Restored!', 'Your Mama Kitchen Pro access has been restored.');
         onSubscribed?.();
       } else {
-        Alert.alert(
+        mamaAlert.alert(
           'Nothing to Restore',
           'No active Mama Kitchen Pro subscription was found on this account.'
         );
@@ -317,6 +318,7 @@ export const MamaPaywallModal: React.FC<MamaPaywallProps & { visible: boolean }>
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <MamaPaywallContent onClose={onClose} onSubscribed={onSubscribed} />
+      <MamaAlertHost inline />
     </Modal>
   );
 };

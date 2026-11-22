@@ -8,7 +8,6 @@ import {
   ScrollView,
   Platform,
   Animated,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -20,6 +19,7 @@ import { MamaKitchenLogo } from '../../components/common/MamaKitchenLogo';
 import { InputField } from '../../components/common/InputField';
 import { PrimaryButton } from '../../components/common/PrimaryButton';
 import { preferencesStore } from '../../services/preferencesStore';
+import { mamaAlert } from '../../services/mamaAlert';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MamaKitchenSignUp'>;
 
@@ -124,14 +124,14 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleTerms = () => {
-    Alert.alert(
+    mamaAlert.alert(
       'Terms of Service',
       'Mama Kitchen provides personalized home cooking suggestions and budget planning tools for informational use. You are responsible for verifying food allergies, ingredient safety, and proper cooking temperatures in your kitchen.'
     );
   };
 
   const handlePrivacy = () => {
-    Alert.alert(
+    mamaAlert.alert(
       'Privacy Policy',
       'We store only your name, email, kitchen preferences, saved recipes, and pantry items to personalize your meals. We never sell your personal data. You can permanently delete your account and all data at any time from Kitchen Pass > Account.'
     );

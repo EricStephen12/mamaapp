@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -17,6 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
+import { mamaAlert } from '../../services/mamaAlert';
 import { BottomNavigation, NavTab } from '../../components/navigation/BottomNavigation';
 import { useTabNavigation } from '../../context/TabNavigationContext';
 import { TactileToast } from '../../components/common/TactileToast';
@@ -638,7 +638,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch {}
 
-    Alert.alert(
+    mamaAlert.alert(
       `Never suggest ${dishTitle}?`,
       `Mama will stop suggesting this meal. You can unhide it anytime in your Kitchen Pass under Diet.`,
       [
