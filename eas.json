@@ -12,8 +12,7 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://mama-backend-0k9s.onrender.com",
-        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "test_aAlDismrprbhxsWxPRKkvnJFqYC",
-        "EXPO_PUBLIC_REVENUECAT_IOS_KEY": "test_aAlDismrprbhxsWxPRKkvnJFqYC"
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_MXCMChqDyixmCPDNZipzzZSWZuh"
       }
     },
     "preview": {
@@ -27,8 +26,7 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://mama-backend-0k9s.onrender.com",
-        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "test_aAlDismrprbhxsWxPRKkvnJFqYC",
-        "EXPO_PUBLIC_REVENUECAT_IOS_KEY": "test_aAlDismrprbhxsWxPRKkvnJFqYC"
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_MXCMChqDyixmCPDNZipzzZSWZuh"
       }
     },
     "production": {
@@ -38,7 +36,8 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://mama-backend-0k9s.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://mama-backend-0k9s.onrender.com",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_MXCMChqDyixmCPDNZipzzZSWZuh"
       }
     }
   },

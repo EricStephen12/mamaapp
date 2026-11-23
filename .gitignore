@@ -43,3 +43,5 @@ yarn-error.*
 /android
 .neon
 .github/
+promo-videos/
+

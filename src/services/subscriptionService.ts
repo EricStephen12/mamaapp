@@ -125,6 +125,10 @@ export const subscriptionService = {
   async init(appUserId?: string | null): Promise<void> {
     const apiKey = getApiKey();
     if (!apiKey || configured || Platform.OS === 'web' || IS_EXPO_GO) return;
+    if (apiKey.startsWith('test_')) {
+      console.warn('[subscriptionService] Ignoring RevenueCat Test Store key — configure a live goog_ / appl_ key.');
+      return;
+    }
 
     try {
       Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.WARN);
