@@ -71,7 +71,7 @@ export const SavedMealCard: React.FC<SavedMealCardProps> = ({
             resizeMode="cover"
           />
         ) : (
-          <MamaPlatePlaceholder variant="dark" iconSize={68} />
+          <MamaPlatePlaceholder variant="dark" iconSize={144} />
         )}
 
         {/* Top Row: Time/Cost Pill + Bookmark Button */}

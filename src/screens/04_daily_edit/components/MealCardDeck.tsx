@@ -309,7 +309,7 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
             }
 
             if (MealImageService.isPlaceholderImage(catalogImageUrl)) {
-              return <MamaPlatePlaceholder variant="linen" iconSize={104} />;
+              return <MamaPlatePlaceholder variant="linen" iconSize={264} />;
             }
 
             return (

@@ -415,7 +415,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
             creatorPillBottom={108}
           />
         ) : MealImageService.isPlaceholderImage(item.resolvedImage) ? (
-          <MamaPlatePlaceholder variant="dark" iconSize={104} />
+          <MamaPlatePlaceholder variant="dark" iconSize={244} />
         ) : (
           <Image
             source={{ uri: item.resolvedImage }}

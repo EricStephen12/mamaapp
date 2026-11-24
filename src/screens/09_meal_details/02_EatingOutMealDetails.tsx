@@ -162,7 +162,7 @@ export const EatingOutMealDetails: React.FC<Props> = ({ navigation, route }) => 
             {image && !MealImageService.isPlaceholderImage(image) ? (
               <Image source={{ uri: image }} style={styles.heroImage} resizeMode="cover" />
             ) : (
-              <MamaPlatePlaceholder variant="linen" iconSize={88} />
+              <MamaPlatePlaceholder variant="linen" iconSize={192} />
             )}
             <View style={styles.distanceTag}>
               <Ionicons name="location-outline" size={12} color={colors.primary} />

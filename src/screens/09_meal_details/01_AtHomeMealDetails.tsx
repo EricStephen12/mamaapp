@@ -717,7 +717,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
                 creatorPillBottom={52}
               />
             ) : MealImageService.isPlaceholderImage(image) ? (
-              <MamaPlatePlaceholder variant="linen" iconSize={88} />
+              <MamaPlatePlaceholder variant="linen" iconSize={192} />
             ) : (
               <Image
                 source={{ uri: image }}

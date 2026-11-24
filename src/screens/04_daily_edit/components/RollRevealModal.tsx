@@ -370,7 +370,7 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
                     soundPillTop={56}
                   />
                 ) : MealImageService.isPlaceholderImage(imageUri) ? (
-                  <MamaPlatePlaceholder variant="linen" iconSize={96} />
+                  <MamaPlatePlaceholder variant="linen" iconSize={232} />
                 ) : (
                   <Image
                     source={{ uri: imageUri }}

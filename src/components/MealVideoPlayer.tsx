@@ -115,8 +115,8 @@ export const MealVideoPlayer: React.FC<MealVideoPlayerProps> = ({
 
   return (
     <View style={[styles.container, style]}>
-      {/* Minimal SVG Plate Background (guarantees zero black-flash before stream buffers or on error) */}
-      <MamaPlatePlaceholder variant="dark" iconSize={96} />
+      {/* Branded Fine Mama Plate Background (guarantees zero black-flash before stream buffers or on error) */}
+      <MamaPlatePlaceholder variant="dark" iconSize={220} />
       {posterUrl && !MealImageService.isPlaceholderImage(posterUrl) ? (
         <Image
           source={{ uri: posterUrl }}
