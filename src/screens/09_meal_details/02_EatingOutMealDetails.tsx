@@ -20,6 +20,8 @@ import { TactileToast } from '../../components/common/TactileToast';
 import { preferencesStore } from '../../services/preferencesStore';
 import { savedMealsService } from '../../services/api/savedMealsService';
 import { decisionsService } from '../../services/api/decisionsService';
+import { MealImageService } from '../../services/mealImageService';
+import { MamaPlatePlaceholder } from '../../components/common/MamaPlatePlaceholder';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EatingOutMealDetails'>;
 
@@ -157,12 +159,10 @@ export const EatingOutMealDetails: React.FC<Props> = ({ navigation, route }) => 
         <Animated.View style={[styles.container, { opacity: contentFade, transform: [{ translateY: contentY }] }]}>
           {/* Hero Image */}
           <View style={styles.heroWrap}>
-            {image ? (
+            {image && !MealImageService.isPlaceholderImage(image) ? (
               <Image source={{ uri: image }} style={styles.heroImage} resizeMode="cover" />
             ) : (
-              <View style={styles.placeholderHero}>
-                <Ionicons name="restaurant-outline" size={48} color={colors.primary} />
-              </View>
+              <MamaPlatePlaceholder variant="linen" iconSize={88} />
             )}
             <View style={styles.distanceTag}>
               <Ionicons name="location-outline" size={12} color={colors.primary} />

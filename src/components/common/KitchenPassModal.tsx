@@ -15,11 +15,22 @@ import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { preferencesStore, BodyGoal, FREE_DAILY_ROLL_LIMIT } from '../../services/preferencesStore';
+import {
+  preferencesStore,
+  BodyGoal,
+  FREE_DAILY_ROLL_LIMIT,
+  SUPPORTED_COUNTRIES,
+  SUPPORTED_CURRENCIES,
+  SupportedCountry,
+  formatCurrency,
+} from '../../services/preferencesStore';
 import { subscriptionService } from '../../services/subscriptionService';
 import { authService } from '../../services/api/authService';
+import { pantryService } from '../../services/api/pantryService';
+import { rollService } from '../../services/api/rollService';
 import { mamaAlert } from '../../services/mamaAlert';
 import { useUserDataBank } from '../../context/UserDataBankContext';
+import { useModalBottomInset } from '../../hooks/useBottomNavInset';
 import { MamaPaywallContent } from './MamaPaywallModal';
 import { MamaAlertHost } from './MamaAlertHost';
 
@@ -73,6 +84,17 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
 }) => {
   const { user, isLoggedIn, kitchenPass: currentPass } = useUserDataBank();
   const navigation = useNavigation<any>();
+  const modalBottomInset = useModalBottomInset(24);
+
+  const matchedCountry = SUPPORTED_COUNTRIES.find((c) => c.id === currentPass.country);
+  const fallbackBudget = matchedCountry?.defaultWeeklyBudget ?? currentPass.weeklyBudget ?? 50;
+
+  const [selectedCountryId, setSelectedCountryId] = useState<string>(currentPass.country || 'NG');
+  const [selectedCurrencyCode, setSelectedCurrencyCode] = useState<string>(currentPass.currencyCode || 'NGN');
+  const [weeklyBudgetString, setWeeklyBudgetString] = useState<string>(
+    String(currentPass.weeklyBudget || fallbackBudget)
+  );
+  const [spentThisWeek, setSpentThisWeek] = useState<number>(currentPass.spentThisWeek || 0);
 
   const [selectedGearId, setSelectedGearId] = useState<string>(currentPass.cookingGear || 'one_pan');
   const [selectedTimeMinutes, setSelectedTimeMinutes] = useState<number>(currentPass.timeLimitMinutes || 15);
@@ -101,7 +123,13 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
   useEffect(() => {
     if (visible) {
       const pass = preferencesStore.getKitchenPass();
+      const countryMatch = SUPPORTED_COUNTRIES.find((c) => c.id === pass.country);
+      const defaultBudget = countryMatch?.defaultWeeklyBudget ?? pass.weeklyBudget ?? 50;
       // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedCountryId(pass.country || 'NG');
+      setSelectedCurrencyCode(pass.currencyCode || 'NGN');
+      setWeeklyBudgetString(String(pass.weeklyBudget || defaultBudget));
+      setSpentThisWeek(pass.spentThisWeek || 0);
       setSelectedGearId(pass.cookingGear || 'one_pan');
       setSelectedTimeMinutes(pass.timeLimitMinutes || 15);
       setSelectedFlavorId(pass.cuisineAnchor || 'african_caribbean');
@@ -117,6 +145,13 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
       setShowPaywall(false);
     }
   }, [visible]);
+
+  const handleSelectCountry = (country: SupportedCountry) => {
+    Haptics.selectionAsync().catch(() => {});
+    setSelectedCountryId(country.id);
+    setSelectedCurrencyCode(country.currencyCode);
+    setWeeklyBudgetString(String(country.defaultWeeklyBudget));
+  };
 
   const handleUnhideDish = (dishTitle: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -197,6 +232,24 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
         : baseDiets;
     setCustomDietInput('');
 
+    const budgetNum = parseFloat(weeklyBudgetString.replace(/[^0-9.]/g, '')) || fallbackBudget;
+    const countryChanged = selectedCountryId !== currentPass.country;
+    if (countryChanged) {
+      rollService.resetForRegionChange();
+      const matched = SUPPORTED_COUNTRIES.find((c) => c.id === selectedCountryId);
+      if (matched && matched.popularStaples?.length > 0) {
+        pantryService
+          .syncItems(matched.popularStaples.map((name) => ({ name, category: 'pantryStaples' })))
+          .catch(() => {});
+      }
+    }
+
+    preferencesStore.updateCountryAndCurrency(
+      selectedCountryId,
+      selectedCurrencyCode,
+      budgetNum
+    );
+
     preferencesStore.updateKitchenPass({
       cookingGear: selectedGearId,
       cookingGearLabel: chosenGear ? chosenGear.fullTitle : '1 Pan & Burner',
@@ -264,6 +317,14 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
     setShowPaywall(true);
   };
 
+  const activeCurrency =
+    SUPPORTED_CURRENCIES.find((c) => c.code === selectedCurrencyCode) || {
+      code: selectedCurrencyCode,
+      symbol: currentPass.currencySymbol || '₦',
+    };
+  const parsedWeeklyBudget = parseFloat(weeklyBudgetString.replace(/[^0-9.]/g, '')) || fallbackBudget;
+  const remainingWeeklyBudget = Math.max(0, parsedWeeklyBudget - spentThisWeek);
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       {showPaywall ? (
@@ -281,7 +342,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
         >
           <TouchableOpacity style={styles.backdropArea} activeOpacity={1} onPress={onClose} />
 
-          <View style={styles.sheetContainer}>
+          <View style={[styles.sheetContainer, { paddingBottom: modalBottomInset }]}>
             {/* Drag Handle */}
             <View style={styles.dragHandleWrap}>
               <View style={styles.dragHandle} />
@@ -289,7 +350,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
 
             {/* Sheet Header */}
             <View style={styles.header}>
-              <Text style={styles.sheetTitle}>Kitchen Pass</Text>
+              <Text style={styles.sheetTitle}>Profile &amp; Settings</Text>
               <TouchableOpacity
                 style={styles.closeBtn}
                 onPress={onClose}
@@ -377,6 +438,96 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
                   {isPlusActive ? 'Manage' : 'Upgrade'}
                 </Text>
               </TouchableOpacity>
+            </View>
+
+            {/* Weekly Food Budget & Country/Currency inside Profile */}
+            <View style={styles.sectionBlock}>
+              <View style={styles.budgetSectionHeader}>
+                <Text style={styles.sectionLabel}>WEEKLY BUDGET</Text>
+                {spentThisWeek > 0 ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      preferencesStore.updateKitchenPass({ spentThisWeek: 0 });
+                      setSpentThisWeek(0);
+                    }}
+                    style={styles.resetWeekBtn}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="refresh-outline" size={14} color={colors.primary} />
+                    <Text style={styles.resetWeekText}>Reset Week</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              <View style={styles.budgetCard}>
+                <Text style={styles.budgetStatusText}>
+                  {formatCurrency(remainingWeeklyBudget, activeCurrency.symbol, activeCurrency.code)} left of{' '}
+                  {formatCurrency(parsedWeeklyBudget, activeCurrency.symbol, activeCurrency.code)}
+                </Text>
+                <View style={styles.budgetInputRow}>
+                  <Text style={styles.budgetCurrencyPrefix}>{activeCurrency.symbol}</Text>
+                  <TextInput
+                    style={styles.budgetInputField}
+                    value={weeklyBudgetString}
+                    onChangeText={setWeeklyBudgetString}
+                    keyboardType="numeric"
+                    placeholder={String(fallbackBudget)}
+                    placeholderTextColor={colors.text.muted}
+                  />
+                  <Text style={styles.budgetPerWeekText}>/ week</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.sectionBlock}>
+              <Text style={styles.sectionLabel}>COUNTRY &amp; CURRENCY</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalScrollRow}
+              >
+                {SUPPORTED_COUNTRIES.map((country) => {
+                  const active = selectedCountryId === country.id;
+                  return (
+                    <TouchableOpacity
+                      key={country.id}
+                      style={[styles.pillCompact, active && styles.pillButtonActive]}
+                      onPress={() => handleSelectCountry(country)}
+                      activeOpacity={0.82}
+                    >
+                      <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                        {country.name} · {country.currencySymbol}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalScrollRow}
+              >
+                {SUPPORTED_CURRENCIES.map((curr) => {
+                  const active = selectedCurrencyCode === curr.code;
+                  return (
+                    <TouchableOpacity
+                      key={curr.code}
+                      style={[styles.pillCompact, active && styles.pillButtonActive]}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        setSelectedCurrencyCode(curr.code);
+                      }}
+                      activeOpacity={0.82}
+                    >
+                      <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                        {curr.symbol} {curr.code}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
 
             {/* Body Goal */}
@@ -676,8 +827,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF7F2',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    maxHeight: '84%',
-    paddingBottom: Platform.OS === 'ios' ? 28 : 18,
+    maxHeight: '86%',
+    paddingBottom: 24,
   },
   dragHandleWrap: {
     alignItems: 'center',
@@ -698,7 +849,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   sheetTitle: {
-    fontSize: 22,
+    fontSize: 23,
     fontFamily: typography.fontFamily.serif,
     fontWeight: '700',
     color: colors.text.primary,
@@ -716,7 +867,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 4,
-    paddingBottom: 20,
+    paddingBottom: 24,
     gap: 18,
   },
   profileCard: {
@@ -749,7 +900,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   xpPerkHintText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.text.secondary,
     flexShrink: 1,
@@ -764,7 +915,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   plusTogglePillText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800',
     color: colors.primary,
   },
@@ -780,7 +931,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(102, 112, 74, 0.28)',
     borderRadius: 16,
     padding: 14,
-    marginBottom: 14,
+    marginBottom: 4,
   },
   planCardActive: {
     backgroundColor: colors.primary,
@@ -788,10 +939,10 @@ const styles = StyleSheet.create({
   },
   planCardTextWrap: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   planCardTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
     color: colors.text.primary,
   },
@@ -799,13 +950,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   planCardSub: {
-    fontSize: 11.5,
-    lineHeight: 15,
+    fontSize: 13.5,
+    lineHeight: 18,
     fontWeight: '500',
     color: colors.text.secondary,
   },
   planCardSubActive: {
-    color: 'rgba(255, 255, 255, 0.85)',
+    color: 'rgba(255, 255, 255, 0.88)',
   },
   planCardBtn: {
     backgroundColor: colors.primary,
@@ -817,12 +968,79 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   planCardBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
     color: '#FFFFFF',
   },
   planCardBtnTextActive: {
     color: colors.primary,
+  },
+  budgetSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  resetWeekBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(102, 112, 74, 0.1)',
+  },
+  resetWeekText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  budgetCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(36, 40, 32, 0.08)',
+  },
+  budgetStatusText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  budgetInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAF7F2',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(36, 40, 32, 0.08)',
+  },
+  budgetCurrencyPrefix: {
+    fontSize: 21,
+    fontFamily: typography.fontFamily.serif,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginRight: 6,
+  },
+  budgetInputField: {
+    flex: 1,
+    fontSize: 20,
+    fontFamily: typography.fontFamily.serif,
+    fontWeight: '700',
+    color: colors.text.primary,
+    padding: 0,
+  },
+  budgetPerWeekText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  horizontalScrollRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
   },
   profileLeft: {
     flexDirection: 'row',
@@ -832,9 +1050,9 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   avatarCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: 'rgba(217, 85, 36, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -844,13 +1062,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   profileName: {
-    fontSize: 16,
+    fontSize: 17,
     fontFamily: typography.fontFamily.serif,
     fontWeight: '700',
     color: colors.text.primary,
   },
   profileEmail: {
-    fontSize: 12,
+    fontSize: 13.5,
     color: colors.text.secondary,
   },
   xpPill: {
@@ -863,7 +1081,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   xpPillText: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '800',
     color: colors.primary,
   },
@@ -871,10 +1089,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionLabel: {
-    fontSize: 11,
+    fontSize: 12.5,
     fontWeight: '800',
-    color: colors.text.muted,
-    letterSpacing: 0.9,
+    color: colors.text.secondary,
+    letterSpacing: 0.8,
   },
   pillGrid: {
     flexDirection: 'row',
@@ -925,7 +1143,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   pillText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.text.primary,
   },
@@ -943,8 +1161,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 13,
+    paddingVertical: 11,
+    fontSize: 14.5,
     color: colors.text.primary,
     borderWidth: 1,
     borderColor: 'rgba(36, 40, 32, 0.08)',
@@ -953,11 +1171,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 11,
   },
   customDietAddText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
   hiddenDishesWrap: {
@@ -1002,12 +1220,12 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   accountLinkText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.primary,
   },
   accountSecondaryText: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: '600',
     color: colors.text.secondary,
   },
@@ -1030,7 +1248,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   saveBtnText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.2,

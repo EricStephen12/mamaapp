@@ -18,7 +18,7 @@ async function callGroqChat(
     temperature?: number;
     maxTokens?: number;
     timeoutMs?: number;
-    /** 'quality' = recipes. 'fast' = short dialogue lines. */
+    /** 'quality' = recipes. 'fast' = short dialogue / fast starter batches. */
     tier?: 'quality' | 'fast';
   } = {}
 ): Promise<any> {
@@ -26,7 +26,8 @@ async function callGroqChat(
     jsonMode = false,
     temperature = 0.65,
     maxTokens = 380,
-    timeoutMs = 18000,
+    timeoutMs = 10000,
+    tier,
   } = options;
 
   // All AI completions run through the secure backend server so zero API keys exist in the APK
@@ -39,6 +40,7 @@ async function callGroqChat(
       jsonMode,
       temperature,
       maxTokens,
+      tier,
     }),
   });
 }
@@ -972,10 +974,10 @@ Rules:
             { role: 'system', content: systemPrompt },
             {
               role: 'user',
-              content: `Generate 4 authentic everyday home meals from ${pass.countryName} focusing on ${angle} (seed ${(Date.now() + batchIdx * 97) % 10000}). Keep steps concise. Output pure JSON.`,
+              content: `Generate 3 authentic everyday home meals from ${pass.countryName} focusing on ${angle} (seed ${(Date.now() + batchIdx * 97) % 10000}). Keep steps short and crisp. Output pure JSON.`,
             },
           ],
-          { jsonMode: true, temperature: 0.85, maxTokens: 1150, timeoutMs: 18000 }
+          { jsonMode: true, temperature: 0.8, maxTokens: 680, timeoutMs: 10000, tier: 'fast' }
         );
         const content = data?.choices?.[0]?.message?.content;
         if (!content) return [];
@@ -1081,14 +1083,30 @@ Rules:
   }
 
   /**
-   * Generate a full 5-card live AI Home deck tailored specifically to the user's country,
-   * time of day, and actual kitchen pantry ingredients. Zero hardcoded mock meals.
+   * Generate a full live AI Home deck tailored specifically to the user's country,
+   * time of day, and actual kitchen pantry ingredients.
+   * Fires onFirstBatch immediately as soon as the fast 3-dish starter batch resolves
+   * (~0.5-0.9s) while fetching companion dishes in parallel.
    */
   static async generateDailyDeckWithAI(
     timeOfDay: 'morning' | 'lunch' | 'dinner' | 'late_night',
     pass: UserKitchenPass,
     pantryItems: string[] = [],
-    avoidTitles: string[] = []
+    avoidTitles: string[] = [],
+    onFirstBatch?: (
+      meals: {
+        id: string;
+        title: string;
+        subtitle: string;
+        timeOfDay: 'morning' | 'lunch' | 'dinner' | 'late_night';
+        cookTimeMinutes: number;
+        estCost: number;
+        pantryNote: string;
+        mamaTip?: string;
+        ingredients: { name: string; amount: string }[];
+        steps: string[];
+      }[]
+    ) => void
   ): Promise<
     {
       id: string;
@@ -1116,7 +1134,7 @@ Rules:
         : '';
 
     const systemPrompt = `You are Mama, a warm, wise local home-cooking mother figure living in ${pass.countryName}.
-Generate 5 distinct, authentic everyday ${timeOfDay} home meals actually cooked in ${pass.countryName}.
+Generate 3 distinct, authentic everyday ${timeOfDay} home meals actually cooked in ${pass.countryName}.
 Country: ${pass.countryName} (${pass.currencyCode})
 Cuisine Style: ${pass.cuisineLabel || pass.countryName + ' Home Cooking'}
 Cooking Gear: ${pass.cookingGearLabel || '1 Pan'}
@@ -1133,8 +1151,8 @@ ${neverShow.length > 0 ? `NEVER suggest: ${neverShow.join(', ')}.` : ''}
 Rules:
 1. STRICT COUNTRY IDENTITY: Every single dish MUST be a genuine, recognizable home dish from ${pass.countryName} using normal local groceries from ${pass.countryName}. NEVER include dishes or specialty ingredients from unrelated countries or continents.
 2. Short, real home dish titles (2-4 words). No buzzwords like "skillet", "crispy", "golden", "frittata", "bowl", "hash", "loaded".
-3. Realistic ingredients with amounts (e.g. "2 large", "1 cup", "1 tbsp") and 3 clear practical steps.
-4. "mamaTip": warm 1-sentence cooking/nutrition tip from Mama (<18 words, zero emojis).
+3. Realistic ingredients with amounts (e.g. "2 large", "1 cup", "1 tbsp") and 3 clear concise steps.
+4. "mamaTip": warm 1-sentence cooking/nutrition tip from Mama (<16 words, zero emojis).
 5. "estCost": base USD between 1.0 and 3.5.
 
 Strictly output JSON:
@@ -1154,33 +1172,9 @@ Strictly output JSON:
   ]
 }`;
 
-    const fetchDeckBatch = async (angle: string, batchIdx: number) => {
-      const data = await callGroqChat(
-        [
-          { role: 'system', content: systemPrompt },
-          {
-            role: 'user',
-            content: `Generate 4 distinct authentic ${pass.countryName} ${timeOfDay} home meals focusing on ${angle} (seed ${(Date.now() + batchIdx * 131) % 10000}). Keep steps crisp and concise. Output pure JSON.`,
-          },
-        ],
-        { jsonMode: true, temperature: 0.85, maxTokens: 1150, timeoutMs: 18000 }
-      );
-      const content = data?.choices?.[0]?.message?.content;
-      if (!content) return [];
-      const parsed = JSON.parse(content);
-      return Array.isArray(parsed?.meals) ? parsed.meals : [];
-    };
-
-    try {
-      const [batchA, batchB] = await Promise.all([
-        fetchDeckBatch('classic everyday comfort & quick local staples', 1).catch(() => []),
-        fetchDeckBatch('high-protein, fresh & hearty local favorites', 2).catch(() => []),
-      ]);
-      const rawMeals = [...batchA, ...batchB];
-      if (rawMeals.length === 0) return [];
-
+    const mapRawMeals = (rawList: any[]) => {
       const seenTitles = new Set<string>();
-      return rawMeals
+      return rawList
         .filter((m: any) => m && typeof m.title === 'string' && Array.isArray(m.steps) && m.steps.length > 0)
         .map((m: any, idx: number) => ({
           id: m.id || `ai-deck-${Date.now()}-${idx}`,
@@ -1219,6 +1213,53 @@ Strictly output JSON:
           seenTitles.add(key);
           return true;
         });
+    };
+
+    const fetchDeckBatch = async (angle: string, batchIdx: number) => {
+      const data = await callGroqChat(
+        [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: `Generate 3 distinct authentic ${pass.countryName} ${timeOfDay} home meals focusing on ${angle} (seed ${(Date.now() + batchIdx * 131) % 10000}). Keep steps concise. Output pure JSON.`,
+          },
+        ],
+        { jsonMode: true, temperature: 0.8, maxTokens: 650, timeoutMs: 10000, tier: 'fast' }
+      );
+      const content = data?.choices?.[0]?.message?.content;
+      if (!content) return [];
+      const parsed = JSON.parse(content);
+      return Array.isArray(parsed?.meals) ? parsed.meals : [];
+    };
+
+    try {
+      let emittedFirst = false;
+      const emitFirstIfReady = (raw: any[]) => {
+        if (emittedFirst || !onFirstBatch || raw.length === 0) return;
+        const mapped = mapRawMeals(raw);
+        if (mapped.length > 0) {
+          emittedFirst = true;
+          onFirstBatch(mapped);
+        }
+      };
+
+      const pA = fetchDeckBatch('classic everyday comfort & quick local staples', 1)
+        .then((res) => {
+          emitFirstIfReady(res);
+          return res;
+        })
+        .catch(() => []);
+      const pB = fetchDeckBatch('high-protein, fresh & hearty local favorites', 2)
+        .then((res) => {
+          emitFirstIfReady(res);
+          return res;
+        })
+        .catch(() => []);
+
+      const [batchA, batchB] = await Promise.all([pA, pB]);
+      const rawMeals = [...batchA, ...batchB];
+      if (rawMeals.length === 0) return [];
+      return mapRawMeals(rawMeals);
     } catch {
       return [];
     }
@@ -1342,7 +1383,7 @@ Strictly output JSON:
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        { jsonMode: true, temperature: 0.85, maxTokens: 420, timeoutMs: 16000 }
+        { jsonMode: true, temperature: 0.85, maxTokens: 380, timeoutMs: 9000, tier: 'fast' }
       );
 
       const content = data?.choices?.[0]?.message?.content;

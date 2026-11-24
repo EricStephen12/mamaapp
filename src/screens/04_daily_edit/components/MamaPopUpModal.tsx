@@ -14,6 +14,7 @@ import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
 import { MamaCharacter, MamaPose } from '../../../components/common/MamaCharacter';
 import { RolledMeal } from '../../../services/api/rollService';
+import { useModalBottomInset } from '../../../hooks/useBottomNavInset';
 
 interface MamaPopUpModalProps {
   visible: boolean;
@@ -42,6 +43,7 @@ export const MamaPopUpModal: React.FC<MamaPopUpModalProps> = ({
   const scaleAnim = useRef(new Animated.Value(0.84)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const [selectedMode, setSelectedMode] = useState<'default' | 'shortcut' | 'flavor'>('default');
+  const modalBottomInset = useModalBottomInset(22);
 
   useEffect(() => {
     if (!visible) {
@@ -93,7 +95,7 @@ export const MamaPopUpModal: React.FC<MamaPopUpModalProps> = ({
       animationType="none"
       onRequestClose={onClose}
     >
-      <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]}>
+      <Animated.View style={[styles.backdrop, { paddingBottom: modalBottomInset, opacity: opacityAnim }]}>
         <TouchableOpacity
           style={styles.backdropDismiss}
           activeOpacity={1}

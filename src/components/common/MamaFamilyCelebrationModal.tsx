@@ -16,6 +16,7 @@ import { colors } from '../../theme/colors';
 import { preferencesStore } from '../../services/preferencesStore';
 import { SteamWisps } from '../signature/SteamWisps';
 import { MamaSealStamp } from '../signature/MamaSealStamp';
+import { useModalBottomInset } from '../../hooks/useBottomNavInset';
 
 const MAMA_OVERFED = require('../../../assets/family/mama-overfed.jpg');
 const AUNTIE_PULLING = require('../../../assets/family/auntie-pulling.jpg');
@@ -171,6 +172,7 @@ export const MamaFamilyCelebrationModal: React.FC<MamaFamilyCelebrationProps> = 
 }) => {
   const achievement = getFamilyAchievement(mealsCookedCount);
   const xpAmount = preferencesStore.isMamaPlus() ? 100 : 50;
+  const modalBottomInset = useModalBottomInset(22);
 
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const cardScale = useRef(new Animated.Value(0.84)).current;
@@ -400,7 +402,7 @@ export const MamaFamilyCelebrationModal: React.FC<MamaFamilyCelebrationProps> = 
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClaimReward}>
-      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+      <Animated.View style={[styles.backdrop, { paddingBottom: modalBottomInset, opacity: backdropOpacity }]}>
         <Animated.View style={[styles.card, { transform: [{ scale: cardScale }] }]}>
           {/* Animated 3-Character Family Comedy Stage */}
           <View style={styles.stage}>

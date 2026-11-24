@@ -46,7 +46,6 @@ import {
 } from '../../services/api/rollService';
 import { useShake } from '../../hooks/useShake';
 import { useUserDataBank } from '../../context/UserDataBankContext';
-import { WeeklyBalanceCard } from './components/WeeklyBalanceCard';
 import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
 import { SimmerDot } from '../../components/signature/SteamWisps';
 import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
@@ -139,18 +138,8 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
       }
 
       try {
-        const liveMeals = await rollService.generateLiveDailyDeck(
-          targetPeriod,
-          targetPass,
-          targetPantry
-        );
-        if (deckRequestIdRef.current !== reqId) return;
-
-        if (liveMeals.length > 0) {
-          setMealsDeck(liveMeals);
-          setActiveMealIndex(0);
-
-          const leadMeal = liveMeals[0];
+        let paintedPartial = cachedSameCountry.length > 0 && !clearCurrent;
+        const applyDeckVoice = (leadMeal: RolledMeal) => {
           const voice = MamaDialogueService.getSyncedMamaVoice({
             timeOfDay: targetPeriod,
             pass: targetPass,
@@ -166,42 +155,35 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
           });
           setMamaQuote(voice.quote);
           setMamaPose(voice.pose);
+        };
 
-          // Hydrate real dish photos in parallel for every live AI card
-          liveMeals.forEach((meal) => {
-            MealImageService.generateMealImage(
-              meal.title,
-              meal.ingredients,
-              targetPass.cuisineAnchor
-            )
-              .then((photoUrl) => {
-                if (photoUrl && deckRequestIdRef.current === reqId) {
-                  setMealsDeck((prev) =>
-                    prev.map((m) => (m.title === meal.title ? { ...m, imageUrl: photoUrl } : m))
-                  );
-                }
-              })
-              .catch(() => {});
+        const liveMeals = await rollService.generateLiveDailyDeck(
+          targetPeriod,
+          targetPass,
+          targetPantry,
+          (partialMeals) => {
+            if (deckRequestIdRef.current !== reqId || partialMeals.length === 0) return;
+            paintedPartial = true;
+            setMealsDeck(partialMeals);
+            setActiveMealIndex(0);
+            setIsLoadingDeck(false);
+            applyDeckVoice(partialMeals[0]);
+          }
+        );
+        if (deckRequestIdRef.current !== reqId) return;
+
+        if (liveMeals.length > 0) {
+          setMealsDeck((prev) => {
+            if (!paintedPartial || prev.length === 0) return liveMeals;
+            // Keep active selection at index 0 while merging additional unique batch dishes
+            const seen = new Set(prev.map((m) => m.title.toLowerCase()));
+            const extras = liveMeals.filter((m) => !seen.has(m.title.toLowerCase()));
+            return extras.length > 0 ? [...prev, ...extras] : prev;
           });
-
-          AiMamaService.getLiveMamaDialogue({
-            timeOfDay: targetPeriod,
-            pass: targetPass,
-            pantryItems: targetPantry,
-            activeDish: {
-              title: leadMeal.title,
-              cookTimeMinutes: leadMeal.cookTimeMinutes,
-              estCost: leadMeal.estCost,
-              gear: targetPass.cookingGearLabel,
-            },
-            actionHint: 'init',
-          })
-            .then((aiQuote) => {
-              if (aiQuote && aiQuote.length > 5 && deckRequestIdRef.current === reqId) {
-                setMamaQuote(aiQuote);
-              }
-            })
-            .catch(() => {});
+          if (!paintedPartial) {
+            setActiveMealIndex(0);
+            applyDeckVoice(liveMeals[0]);
+          }
         }
       } finally {
         if (deckRequestIdRef.current === reqId) {
@@ -249,40 +231,6 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
   const contentFade = useRef(new Animated.Value(0)).current;
   const contentY = useRef(new Animated.Value(15)).current;
 
-  // Automatically hydrate the visible carousel cards with dish-accurate AI photography
-  useEffect(() => {
-    let cancelled = false;
-    const indicesToHydrate = [activeMealIndex, activeMealIndex + 1].filter(
-      (idx) => idx >= 0 && idx < mealsDeck.length
-    );
-
-    indicesToHydrate.forEach((idx) => {
-      const targetMeal = mealsDeck[idx];
-      if (!targetMeal || !MealImageService.isCatalogImage(targetMeal.imageUrl)) {
-        return;
-      }
-      MealImageService.generateMealImage(
-        targetMeal.title,
-        targetMeal.ingredients,
-        kitchenPass.cuisineAnchor
-      )
-        .then((aiPhotoUrl) => {
-          if (!cancelled && aiPhotoUrl && !MealImageService.isCatalogImage(aiPhotoUrl)) {
-            setMealsDeck((prev) =>
-              prev.map((m) =>
-                m.title === targetMeal.title ? { ...m, imageUrl: aiPhotoUrl } : m
-              )
-            );
-          }
-        })
-        .catch(() => {});
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeMealIndex, mealsDeck, kitchenPass.cuisineAnchor]);
-
   // Subscribe to kitchen pass preferences and keep meal synced when culinary preferences change
   const prevPrefsKeyRef = useRef<string>(
     `${kitchenPass.country}|${kitchenPass.cuisineAnchor}|${kitchenPass.bodyGoal}|${kitchenPass.timeLimitMinutes}|${(kitchenPass.dietaryRestrictions || []).join(',')}`
@@ -320,29 +268,30 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
     return unsub;
   }, [mealPeriod, loadLiveDeckForPass]);
 
-  // Initial live AI deck & pantry load
+  // Initial live AI deck load (uses cached pantry immediately so network never blocks first paint)
   useEffect(() => {
     let cancelled = false;
     Animated.parallel([
-      Animated.timing(contentFade, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(contentY, { toValue: 0, duration: 400, useNativeDriver: true }),
+      Animated.timing(contentFade, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(contentY, { toValue: 0, duration: 300, useNativeDriver: true }),
     ]).start();
+
+    const currentPass = preferencesStore.getKitchenPass();
+    const cachedNames = pantryService.getCachedPantry().map((i) => i.name);
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        loadLiveDeckForPass(getCurrentTimeOfDay(), currentPass, cachedNames, false);
+      }
+    });
 
     pantryService
       .fetchAll()
       .then((items) => {
-        if (cancelled) return;
-        const itemNames = items.map((i) => i.name);
-        setPantryItems(itemNames);
-        const currentPass = preferencesStore.getKitchenPass();
-        loadLiveDeckForPass(getCurrentTimeOfDay(), currentPass, itemNames, false);
+        if (!cancelled) {
+          setPantryItems(items.map((i) => i.name));
+        }
       })
-      .catch(() => {
-        if (cancelled) return;
-        const currentPass = preferencesStore.getKitchenPass();
-        const cachedNames = pantryService.getCachedPantry().map((i) => i.name);
-        loadLiveDeckForPass(getCurrentTimeOfDay(), currentPass, cachedNames, false);
-      });
+      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -403,35 +352,12 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
         setIsRolling(true);
         rollService
           .rollNextMeal(mealPeriod)
-          .then(async (aiMeal) => {
-            const photoPromise = MealImageService.generateMealImage(
-              aiMeal.title,
-              aiMeal.ingredients,
-              currentPass.cuisineAnchor
-            ).catch(() => null);
-            const fastPhotoUrl = await Promise.race([
-              photoPromise,
-              new Promise<null>((resolve) => setTimeout(() => resolve(null), 3200)),
-            ]);
-            const hydratedMeal: RolledMeal = fastPhotoUrl
-              ? { ...aiMeal, imageUrl: fastPhotoUrl }
-              : aiMeal;
-
+          .then((aiMeal) => {
             setMealsDeck((prev) => [
-              hydratedMeal,
-              ...prev.filter((m) => m.title !== hydratedMeal.title),
+              aiMeal,
+              ...prev.filter((m) => m.title !== aiMeal.title),
             ]);
             setActiveMealIndex(0);
-
-            if (!fastPhotoUrl) {
-              photoPromise.then((lateUrl) => {
-                if (lateUrl) {
-                  setMealsDeck((prev) =>
-                    prev.map((m) => (m.title === aiMeal.title ? { ...m, imageUrl: lateUrl } : m))
-                  );
-                }
-              });
-            }
             if (aiMeal.mamaTip && aiMeal.mamaTip.length > 5) {
               setMamaQuote(aiMeal.mamaTip);
               setMamaPose('delighted');
@@ -513,45 +439,16 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
     setMamaQuote(MamaDialogueService.getPassReaction(previousTitle));
     setMamaPose('writing');
 
-    // 2. Fetch the fresh AI meal (pantry + goal + time-of-day aware) and LAND on it
+    // 2. Fetch the fresh AI meal immediately with zero artificial photo delay
     try {
       const nextMeal = await rollService.rollNextMeal(mealPeriod, previousTitle);
       if (nextMeal) {
-        // Generate real dish-accurate AI food image and wait up to 3.2s so recipe + photo reveal together
-        const photoPromise = MealImageService.generateMealImage(
-          nextMeal.title,
-          nextMeal.ingredients,
-          kitchenPass.cuisineAnchor
-        ).catch(() => null);
-
-        const fastPhotoUrl = await Promise.race([
-          photoPromise,
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3200)),
-        ]);
-
-        const hydratedMeal: RolledMeal = fastPhotoUrl
-          ? { ...nextMeal, imageUrl: fastPhotoUrl }
-          : nextMeal;
-
-        setPendingRolledMeal(hydratedMeal);
+        setPendingRolledMeal(nextMeal);
         setMealsDeck((prev) => [
-          hydratedMeal,
-          ...prev.filter((m) => m.title !== hydratedMeal.title),
+          nextMeal,
+          ...prev.filter((m) => m.title !== nextMeal.title),
         ]);
         setActiveMealIndex(0);
-
-        if (!fastPhotoUrl) {
-          photoPromise.then((latePhotoUrl) => {
-            if (latePhotoUrl) {
-              setPendingRolledMeal((prev) =>
-                prev && prev.title === nextMeal.title ? { ...prev, imageUrl: latePhotoUrl } : prev
-              );
-              setMealsDeck((prev) =>
-                prev.map((m) => (m.title === nextMeal.title ? { ...m, imageUrl: latePhotoUrl } : m))
-              );
-            }
-          });
-        }
 
         if (nextMeal.mamaTip && nextMeal.mamaTip.length > 5) {
           setMamaQuote(nextMeal.mamaTip);
@@ -756,14 +653,17 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
       <StatusBar style="dark" />
       <KitchenAtmosphere period={mealPeriod} />
 
-      {/* 1. COMPACT TOP STATUS BAR (Regional Mama Medallion + Brand + Icons cluster) */}
+      {/* 1. COMPACT TOP STATUS BAR (Regional Mama Medallion + Brand + Profile pill) */}
       <View style={styles.topBar}>
         <View style={styles.brandGroup}>
           <RegionalMamaAvatar
             countryCode={kitchenPass.country}
             cuisineAnchor={kitchenPass.cuisineAnchor}
-            size={36}
-            onPress={() => setCountryModalVisible(true)}
+            size={38}
+            onPress={() => {
+              setPassModalInitialTab('account');
+              setPassModalVisible(true);
+            }}
           />
           <Text style={styles.brandTitle}>Mama</Text>
           <TouchableOpacity
@@ -774,12 +674,12 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
           >
             <SimmerDot period={mealPeriod} />
             <Text style={styles.periodPillText}>{periodTitle}</Text>
-            <Ionicons name="chevron-down" size={11} color={colors.text.muted} />
+            <Ionicons name="chevron-down" size={14} color={colors.text.secondary} />
           </TouchableOpacity>
         </View>
 
         <View style={styles.iconCluster}>
-          {/* Single Profile / Settings button */}
+          {/* Unified Profile & Settings button (Budget, Region, Goal, Gear, Account) */}
           <TouchableOpacity
             style={styles.headerChipMuted}
             onPress={() => {
@@ -787,21 +687,25 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
               setPassModalVisible(true);
             }}
             activeOpacity={0.75}
-            accessibilityLabel="Account"
+            accessibilityLabel="Profile and Settings"
           >
             {(isLoggedIn && user) || user ? (
-              <Text style={[styles.headerChipText, { fontWeight: '700' }]}>
+              <Text style={[styles.headerChipText, { fontWeight: '800' }]}>
                 {(user?.name?.trim() || user?.email || 'M').charAt(0).toUpperCase()}
               </Text>
             ) : (
-              <Ionicons name="person-outline" size={14} color={colors.primary} />
+              <Ionicons name="person-outline" size={16} color={colors.primary} />
             )}
+            <Text style={styles.headerProfileLabel}>Profile</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: isInsideTabs ? 28 : 110 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View
@@ -877,20 +781,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
             headerTitle={periodTitle}
           />
 
-          {/* 3. WEEKLY BUDGET & SAVINGS TRACKER */}
-          <WeeklyBalanceCard
-            remainingAmount={kitchenPass.weeklyBudget - kitchenPass.spentThisWeek}
-            remainingDays={kitchenPass.remainingDaysInWeek || 5}
-            spentAmount={kitchenPass.spentThisWeek}
-            totalBudget={kitchenPass.weeklyBudget}
-            currencySymbol={kitchenPass.currencySymbol}
-            currencyCode={kitchenPass.currencyCode}
-            countryName={kitchenPass.countryName}
-            mealsCookedCount={kitchenPass.likedDishes.length}
-            onPressManage={() => setCountryModalVisible(true)}
-          />
-
-          {/* 4. CROSS-SCREEN INSPIRATION & KITCHEN BRIDGE */}
+          {/* 3. CROSS-SCREEN INSPIRATION & KITCHEN BRIDGE */}
           <View style={styles.hubContainer}>
             <TouchableOpacity
               style={styles.hubCard}
@@ -904,14 +795,14 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
               activeOpacity={0.84}
             >
               <View style={styles.hubIconCircle}>
-                <Ionicons name="basket-outline" size={17} color={colors.primary} />
+                <Ionicons name="basket-outline" size={19} color={colors.primary} />
               </View>
               <View style={styles.hubTextWrap}>
                 <Text style={styles.hubTitle}>In Your Kitchen</Text>
                 <Text style={styles.hubSubtitle} numberOfLines={1}>
                   {pantryItems.length > 0
-                    ? `${pantryItems.length} items on hand · Match food →`
-                    : 'Tap to add staples →'}
+                    ? `${pantryItems.length} items ready →`
+                    : 'Add staples →'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -928,7 +819,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
               activeOpacity={0.84}
             >
               <View style={styles.hubIconCircle}>
-                <Ionicons name="compass-outline" size={17} color={colors.primary} />
+                <Ionicons name="compass-outline" size={19} color={colors.primary} />
               </View>
               <View style={styles.hubTextWrap}>
                 <Text style={styles.hubTitle}>Discover Feed</Text>
@@ -1086,7 +977,8 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
             icon: 'wallet-outline',
             onPress: () => {
               setBudgetFinishedModalVisible(false);
-              setCountryModalVisible(true);
+              setPassModalInitialTab('account');
+              setPassModalVisible(true);
             },
           },
           {
@@ -1170,46 +1062,51 @@ const styles = StyleSheet.create({
   },
   brandTitle: {
     fontFamily: typography.fontFamily.serif,
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
     color: colors.primary,
     letterSpacing: -0.4,
   },
   periodPillText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: colors.text.secondary,
   },
   iconCluster: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   headerChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(46, 61, 43, 0.08)',
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   headerChipText: {
-    fontSize: 11,
+    fontSize: 13.5,
     fontWeight: '700',
     color: colors.primary,
   },
   headerChipMuted: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(36, 40, 32, 0.04)',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 14,
+    gap: 5,
+    backgroundColor: 'rgba(46, 61, 43, 0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 18,
+  },
+  headerProfileLabel: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: colors.text.primary,
   },
   headerChipTextMuted: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.text.secondary,
   },
@@ -1278,8 +1175,8 @@ const styles = StyleSheet.create({
   },
   mamaVoiceText: {
     flex: 1,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 14.5,
+    lineHeight: 20,
     color: colors.text.primary,
     fontStyle: 'italic',
     fontWeight: '500',
@@ -1345,8 +1242,8 @@ const styles = StyleSheet.create({
     color: colors.text.muted,
   },
   mamaQuoteText: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 15,
+    lineHeight: 21,
     color: colors.text.primary,
     fontStyle: 'italic',
     fontWeight: '500',
@@ -1425,8 +1322,8 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     borderWidth: 1,
     borderColor: 'rgba(36, 40, 32, 0.07)',
     shadowColor: '#000',
@@ -1436,24 +1333,24 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   hubIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(217, 85, 36, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   hubTextWrap: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   hubTitle: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.text.primary,
   },
   hubSubtitle: {
-    fontSize: 10,
+    fontSize: 13,
     fontWeight: '500',
     color: colors.text.secondary,
   },
@@ -1663,14 +1560,14 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   checkInEyebrow: {
-    fontSize: 9.5,
+    fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 1.1,
+    letterSpacing: 0.9,
     color: colors.primary,
   },
   checkInPrompt: {
-    fontSize: 13.5,
-    lineHeight: 18.5,
+    fontSize: 15,
+    lineHeight: 21,
     color: colors.text.primary,
     fontWeight: '500',
   },
@@ -1689,24 +1586,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     backgroundColor: colors.primary,
-    paddingVertical: 10,
+    paddingVertical: 11,
     borderRadius: 12,
   },
   checkInBtnPrimaryText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
     color: '#FFFFFF',
   },
   checkInBtnSecondary: {
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 11,
     borderRadius: 12,
     backgroundColor: 'rgba(36, 40, 32, 0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkInBtnSecondaryText: {
-    fontSize: 12.5,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.text.secondary,
   },

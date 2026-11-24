@@ -8,10 +8,10 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
+import { useBottomNavInset } from '../../hooks/useBottomNavInset';
 
 export type NavTab = 'edit' | 'kitchen' | 'discover' | 'collection';
 
@@ -124,8 +124,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   activeTab = 'edit',
   onTabChange,
 }) => {
-  const insets = useSafeAreaInsets();
-  const bottomMargin = Math.max(insets.bottom, 10);
+  const bottomMargin = useBottomNavInset(14);
 
   return (
     <View style={[styles.outerWrapper, { paddingBottom: bottomMargin }]}>
@@ -177,10 +176,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    width: Math.min(SCREEN_WIDTH - 32, 420),
-    height: 64,
+    width: Math.min(SCREEN_WIDTH - 28, 420),
+    height: 68,
     backgroundColor: '#FFFFFF',
-    borderRadius: 32,
+    borderRadius: 34,
     borderWidth: 1.2,
     borderColor: 'rgba(36, 40, 32, 0.08)',
     shadowColor: '#242820',
@@ -228,9 +227,9 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   itemLabel: {
-    fontSize: 10.5,
+    fontSize: 12.5,
     fontFamily: typography.fontFamily.regular,
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   itemLabelActive: {
     color: colors.primary,

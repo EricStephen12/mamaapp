@@ -14,6 +14,7 @@ import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
 import { MamaCharacter } from '../../../components/common/MamaCharacter';
 import { preferencesStore } from '../../../services/preferencesStore';
+import { useModalBottomInset } from '../../../hooks/useBottomNavInset';
 
 export interface CookStepCardItem {
   id: number;
@@ -59,6 +60,7 @@ export const InteractiveCookModal: React.FC<InteractiveCookModalProps> = ({
 }) => {
   const cardScale = useRef(new Animated.Value(0.88)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const modalBottomInset = useModalBottomInset(22);
 
   useEffect(() => {
     if (!visible) {
@@ -114,7 +116,7 @@ export const InteractiveCookModal: React.FC<InteractiveCookModalProps> = ({
       animationType="none"
       onRequestClose={onClose}
     >
-      <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]}>
+      <Animated.View style={[styles.backdrop, { paddingBottom: modalBottomInset, opacity: opacityAnim }]}>
         <TouchableOpacity
           style={styles.backdropDismiss}
           activeOpacity={1}
@@ -250,6 +252,7 @@ export const DishRewardModal: React.FC<DishRewardModalProps> = ({
 }) => {
   const scaleAnim = useRef(new Animated.Value(0.75)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const modalBottomInset = useModalBottomInset(22);
 
   useEffect(() => {
     if (!visible) {
@@ -281,7 +284,7 @@ export const DishRewardModal: React.FC<DishRewardModalProps> = ({
       animationType="none"
       onRequestClose={onClaimReward}
     >
-      <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]}>
+      <Animated.View style={[styles.backdrop, { paddingBottom: modalBottomInset, opacity: opacityAnim }]}>
         <Animated.View
           style={[
             styles.rewardCard,

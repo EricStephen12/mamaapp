@@ -7,15 +7,31 @@ const groqApiKey = process.env.GROQ_API_KEY || '';
 const openRouterApiKey = process.env.OPENROUTER_API_KEY || process.env.EXPO_PUBLIC_OPENROUTER_API_KEY || '';
 
 const groqClient = groqApiKey
-  ? new Groq({ apiKey: groqApiKey, maxRetries: 0, timeout: 7000 })
+  ? new Groq({ apiKey: groqApiKey, maxRetries: 0, timeout: 6500 })
   : null;
 
-const CANDIDATE_MODELS = [
-  'qwen/qwen3.8-27b',
-  'openai/gpt-oss-120b',
-  'openai/gpt-oss-20b',
+const FAST_GROQ_MODELS = [
+  'llama-3.1-8b-instant',
+  'llama-3.3-70b-versatile',
+];
+const QUALITY_GROQ_MODELS = [
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+];
+const OPENROUTER_FALLBACK_MODELS = [
+  'google/gemini-2.0-flash-001',
+  'openai/gpt-4o-mini',
+  'meta-llama/llama-3.3-70b-instruct',
 ];
 let activeServerModel: string | null = null;
+
+function orderedGroqModels(preferFast: boolean): string[] {
+  const base = preferFast ? FAST_GROQ_MODELS : QUALITY_GROQ_MODELS;
+  if (activeServerModel && base.includes(activeServerModel)) {
+    return [activeServerModel, ...base.filter((m) => m !== activeServerModel)];
+  }
+  return base;
+}
 
 export interface PantryAnalysisResult {
   freshProduce: string[];
@@ -115,31 +131,51 @@ export interface RolledMeal {
 
 export class GroqService {
   /**
-   * Secure server-side LLM proxy for mobile client requests (Zero API keys in APK)
+   * Secure server-side LLM proxy for mobile client requests (Zero API keys in APK).
+   * Tries Groq LPU models first for sub-second response latency, with OpenRouter fallback.
    */
   static async proxyChatCompletion(params: {
     messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
     jsonMode?: boolean;
     temperature?: number;
     maxTokens?: number;
+    tier?: 'fast' | 'quality';
   }): Promise<any> {
     const {
       messages,
       jsonMode = false,
       temperature = 0.65,
       maxTokens = 450,
+      tier,
     } = params;
 
+    const preferFast = tier === 'fast' || maxTokens <= 750;
+
+    if (groqClient) {
+      for (const model of orderedGroqModels(preferFast)) {
+        try {
+          const completion = await groqClient.chat.completions.create({
+            model,
+            messages,
+            ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+            temperature,
+            max_completion_tokens: maxTokens,
+          });
+          activeServerModel = model;
+          return completion;
+        } catch {
+          if (activeServerModel === model) {
+            activeServerModel = null;
+          }
+        }
+      }
+    }
+
     if (openRouterApiKey) {
-      const orModels = [
-        'openai/gpt-4o-mini',
-        'google/gemini-2.0-flash-001',
-        'meta-llama/llama-3.3-70b-instruct',
-      ];
-      for (const orModel of orModels) {
+      for (const orModel of OPENROUTER_FALLBACK_MODELS) {
         try {
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 7000);
+          const timer = setTimeout(() => controller.abort(), 4500);
           const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             signal: controller.signal,
             method: 'POST',
@@ -167,36 +203,51 @@ export class GroqService {
       }
     }
 
-    if (groqClient) {
-      for (const model of CANDIDATE_MODELS) {
-        try {
-          const completion = await groqClient.chat.completions.create({
-            model,
-            messages,
-            ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
-            temperature,
-            max_completion_tokens: maxTokens,
-          });
-          return completion;
-        } catch {
-          // try next Groq model
-        }
-      }
-    }
-
     throw new Error('All server AI models unavailable');
   }
 
   /**
-   * Helper to execute a structured JSON prompt with Groq
+   * Helper to execute a structured JSON prompt with Groq first, OpenRouter fallback
    */
   private static async executeStructuredPrompt<T>(systemPrompt: string, userPrompt: string, fallback: T): Promise<T> {
+    if (groqClient) {
+      const tryGroqModel = async (model: string): Promise<T | null> => {
+        const completion = await groqClient!.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.6,
+          max_completion_tokens: 550,
+        });
+
+        const content = completion.choices[0]?.message?.content;
+        if (!content) return null;
+        return JSON.parse(content) as T;
+      };
+
+      for (const model of orderedGroqModels(true)) {
+        try {
+          const res = await tryGroqModel(model);
+          if (res) {
+            activeServerModel = model;
+            return res;
+          }
+        } catch {
+          if (activeServerModel === model) {
+            activeServerModel = null;
+          }
+        }
+      }
+    }
+
     if (openRouterApiKey) {
-      const orModels = ['openai/gpt-4o-mini', 'google/gemini-2.0-flash-001', 'meta-llama/llama-3.3-70b-instruct'];
-      for (const orModel of orModels) {
+      for (const orModel of OPENROUTER_FALLBACK_MODELS) {
         try {
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 7000);
+          const timer = setTimeout(() => controller.abort(), 4500);
           const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             signal: controller.signal,
             method: 'POST',
@@ -224,52 +275,13 @@ export class GroqService {
             if (content) return JSON.parse(content) as T;
           }
         } catch {
-          // try next model
+          // try next OpenRouter model
         }
       }
     }
 
-    if (!groqClient) {
-      console.warn('[GroqService] No GROQ_API_KEY provided in .env — returning sensible fallback data.');
-      return fallback;
-    }
-
-    const tryModel = async (model: string): Promise<T | null> => {
-      const completion = await groqClient!.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.6,
-        max_completion_tokens: 550,
-      });
-
-      const content = completion.choices[0]?.message?.content;
-      if (!content) return null;
-      return JSON.parse(content) as T;
-    };
-
-    if (activeServerModel) {
-      try {
-        const res = await tryModel(activeServerModel);
-        if (res) return res;
-      } catch {
-        activeServerModel = null;
-      }
-    }
-
-    for (const model of CANDIDATE_MODELS) {
-      try {
-        const res = await tryModel(model);
-        if (res) {
-          activeServerModel = model;
-          return res;
-        }
-      } catch {
-        // try next model
-      }
+    if (!groqClient && !openRouterApiKey) {
+      console.warn('[GroqService] No AI API key provided in .env — returning sensible fallback data.');
     }
 
     return fallback;

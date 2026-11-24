@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
 import { RegionalMamaAvatar } from '../signature/RegionalMamaAvatar';
 import { preferencesStore } from '../../services/preferencesStore';
+import { useModalBottomInset } from '../../hooks/useBottomNavInset';
 
 const MAMA_OVERFED = require('../../../assets/family/mama-overfed.jpg');
 const AUNTIE_PULLING = require('../../../assets/family/auntie-pulling.jpg');
@@ -52,6 +53,7 @@ export const MamaMomentModal: React.FC<MamaMomentModalProps> = ({
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.88)).current;
   const pass = preferencesStore.getKitchenPass();
+  const modalBottomInset = useModalBottomInset(22);
 
   useEffect(() => {
     if (!visible) {
@@ -80,6 +82,7 @@ export const MamaMomentModal: React.FC<MamaMomentModalProps> = ({
     <Animated.View
       style={[
         styles.backdrop,
+        { paddingBottom: modalBottomInset },
         inline && styles.inlineBackdrop,
         { opacity },
       ]}

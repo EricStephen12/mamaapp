@@ -56,7 +56,6 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
   const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [passModalVisible, setPassModalVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [aiPhotosMap, setAiPhotosMap] = useState<Record<string, string>>({});
 
   // Real data from Neon DB
   const [apiMeals, setApiMeals] = useState<BaseMealEntry[]>([]);
@@ -66,16 +65,6 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
   // Entrance animations
   const contentFade = useRef(new Animated.Value(0)).current;
   const contentY = useRef(new Animated.Value(15)).current;
-
-  // Format compact budget remaining (e.g. ₦35k or $42)
-  const remainingBudget = kitchenPass.weeklyBudget - kitchenPass.spentThisWeek;
-  const formattedBudget = useMemo(() => {
-    if (remainingBudget >= 1000) {
-      const kVal = Math.round(remainingBudget / 1000);
-      return `${kitchenPass.currencySymbol}${kVal}k`;
-    }
-    return `${kitchenPass.currencySymbol}${Math.max(0, Math.round(remainingBudget))}`;
-  }, [remainingBudget, kitchenPass.currencySymbol]);
 
   useEffect(() => {
     const unsub = preferencesStore.subscribe((updated) => setKitchenPass(updated));
@@ -135,30 +124,6 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
   // Active entries from savedMealsService
   const activeEntries = apiMeals;
 
-  // Auto-hydrate saved meal cards with real dish-accurate AI photography if they lack one
-  useEffect(() => {
-    let cancelled = false;
-    activeEntries.slice(0, 6).forEach((entry) => {
-      if (aiPhotosMap[entry.title] || (entry.imageUrl && !MealImageService.isCatalogImage(entry.imageUrl))) {
-        return;
-      }
-      MealImageService.generateMealImage(
-        entry.title,
-        entry.ingredients,
-        kitchenPass.cuisineAnchor
-      )
-        .then((url) => {
-          if (!cancelled && url && !MealImageService.isCatalogImage(url)) {
-            setAiPhotosMap((prev) => ({ ...prev, [entry.title]: url }));
-          }
-        })
-        .catch(() => {});
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeEntries, kitchenPass.cuisineAnchor, aiPhotosMap]);
-
   const savedMeals: SavedMealItem[] = useMemo(() => {
     const deckPhotos = MealImageService.getCarouselDeckImages(
       activeEntries.map((e) => ({ title: e.title, ingredients: e.ingredients })),
@@ -177,11 +142,11 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
         type: entry.type,
         typeLabel: entry.cookTimeOrDistance,
         cost: costStr,
-        imageUrl: aiPhotosMap[entry.title] || entry.imageUrl || deckPhotos[idx],
+        imageUrl: entry.imageUrl || deckPhotos[idx],
         targetScreen: entry.targetScreen,
       };
     });
-  }, [aiPhotosMap, activeEntries, kitchenPass.currencyCode, kitchenPass.currencySymbol, kitchenPass.cuisineAnchor]);
+  }, [activeEntries, kitchenPass.currencyCode, kitchenPass.currencySymbol, kitchenPass.cuisineAnchor]);
 
   const handleUnsave = (item: SavedMealItem) => {
     setToastMessage(`Removed from collection`);
@@ -292,22 +257,13 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
         <View style={styles.iconCluster}>
           <TouchableOpacity
             style={styles.headerChip}
-            onPress={() => setCountryModalVisible(true)}
-            activeOpacity={0.75}
-          >
-            <Ionicons name="wallet-outline" size={13} color={colors.primary} />
-            <Text style={styles.headerChipText}>{formattedBudget}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.headerChip}
             onPress={() => {
               if (isInsideTabs) setActiveTab('kitchen');
               else navigation.navigate('WhatsInYourKitchen');
             }}
             activeOpacity={0.75}
           >
-            <Ionicons name="basket-outline" size={13} color={colors.primary} />
+            <Ionicons name="basket-outline" size={15} color={colors.primary} />
             <Text style={styles.headerChipText}>Kitchen</Text>
           </TouchableOpacity>
 
@@ -315,15 +271,20 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
             style={styles.headerChip}
             onPress={() => setPassModalVisible(true)}
             activeOpacity={0.75}
+            accessibilityLabel="Profile and Settings"
           >
-            <Ionicons name="options-outline" size={14} color={colors.primary} />
+            <Ionicons name="person-outline" size={15} color={colors.primary} />
+            <Text style={styles.headerChipText}>Profile</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Main Scroll Content */}
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: isInsideTabs ? 28 : 100 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -449,9 +410,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   periodPillText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: colors.text.muted,
+    fontSize: 14.5,
+    fontWeight: '600',
+    color: colors.text.secondary,
   },
   iconCluster: {
     flexDirection: 'row',
@@ -463,13 +424,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     backgroundColor: 'rgba(36, 40, 32, 0.06)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 20,
   },
   headerChipText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13.5,
+    fontWeight: '700',
     color: colors.primary,
   },
   scrollContent: {

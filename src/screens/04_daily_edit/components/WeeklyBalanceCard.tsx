@@ -57,7 +57,7 @@ export const WeeklyBalanceCard: React.FC<WeeklyBalanceCardProps> = ({
         ? 'Look at you protecting your pocket—Mama is so proud!'
         : spentAmount > 0
           ? 'Steady pace—home cooking is keeping your wallet heavy.'
-          : "Fresh week ahead—let's keep delivery apps out of this pocket.";
+          : "Fresh week ahead—zero stress deciding what to eat.";
 
   return (
     <TouchableOpacity

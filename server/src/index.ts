@@ -66,7 +66,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 
 app.post('/api/ai/chat', async (req: Request, res: Response) => {
   try {
-    const { messages, jsonMode, temperature, maxTokens } = req.body || {};
+    const { messages, jsonMode, temperature, maxTokens, tier } = req.body || {};
     if (!Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'messages array is required' });
       return;
@@ -76,6 +76,7 @@ app.post('/api/ai/chat', async (req: Request, res: Response) => {
       jsonMode: Boolean(jsonMode),
       temperature: typeof temperature === 'number' ? temperature : 0.65,
       maxTokens: typeof maxTokens === 'number' ? Math.min(maxTokens, 3000) : 450,
+      tier: tier === 'fast' || tier === 'quality' ? tier : undefined,
     });
     res.json(result);
   } catch (error) {

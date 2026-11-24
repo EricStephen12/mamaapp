@@ -22,7 +22,9 @@ import { VideoService, MealVideoData } from '../../../services/videoService';
 import { MealVideoPlayer } from '../../../components/MealVideoPlayer';
 import { SteamWisps } from '../../../components/signature/SteamWisps';
 import { MamaSealStamp } from '../../../components/signature/MamaSealStamp';
+import { MamaPlatePlaceholder } from '../../../components/common/MamaPlatePlaceholder';
 import { playRevealThudHaptics } from '../../../utils/mamaHaptics';
+import { useModalBottomInset } from '../../../hooks/useBottomNavInset';
 
 interface RollRevealModalProps {
   visible: boolean;
@@ -60,6 +62,7 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
   const [isRevealed, setIsRevealed] = useState(false);
   const [rollCycleKey, setRollCycleKey] = useState(0);
   const [videoEntry, setVideoEntry] = useState<{ title: string; data: MealVideoData } | null>(null);
+  const modalBottomInset = useModalBottomInset(22);
   const diceAnimFinishedRef = useRef(false);
   const hasTriggeredRevealRef = useRef(false);
   const isRollingRef = useRef(isRolling);
@@ -290,7 +293,7 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
       animationType="none"
       onRequestClose={handleClose}
     >
-      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+      <Animated.View style={[styles.backdrop, { paddingBottom: modalBottomInset, opacity: backdropOpacity }]}>
         <TouchableOpacity
           style={styles.backdropDismissArea}
           activeOpacity={1}
@@ -357,11 +360,17 @@ export const RollRevealModal: React.FC<RollRevealModalProps> = ({
                   <MealVideoPlayer
                     videoId={resolvedVideo.id}
                     videoUrl={resolvedVideo.videoUrl}
-                    posterUrl={resolvedVideo.coverUrl || imageUri}
+                    posterUrl={
+                      !MealImageService.isPlaceholderImage(resolvedVideo.coverUrl)
+                        ? resolvedVideo.coverUrl
+                        : undefined
+                    }
                     isActive={isRevealed}
                     creator={resolvedVideo.author}
                     soundPillTop={56}
                   />
+                ) : MealImageService.isPlaceholderImage(imageUri) ? (
+                  <MamaPlatePlaceholder variant="linen" iconSize={96} />
                 ) : (
                   <Image
                     source={{ uri: imageUri }}
@@ -528,15 +537,15 @@ const styles = StyleSheet.create({
   },
   dishTitle: {
     fontFamily: typography.fontFamily.serif,
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
     color: colors.text.primary,
     textAlign: 'center',
-    lineHeight: 28,
+    lineHeight: 30,
     letterSpacing: -0.3,
   },
   metaLine: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text.secondary,
     letterSpacing: 0.2,
@@ -546,13 +555,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     backgroundColor: 'rgba(46, 61, 43, 0.08)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: 12,
     marginTop: 4,
   },
   pantryBadgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.primary,
   },
@@ -582,7 +591,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   viewRecipeBtnText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: -0.1,

@@ -12,6 +12,8 @@ import {
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { MealImageService } from '../services/mealImageService';
+import { MamaPlatePlaceholder } from './common/MamaPlatePlaceholder';
 
 interface MealVideoPlayerProps {
   videoId?: string;
@@ -113,8 +115,9 @@ export const MealVideoPlayer: React.FC<MealVideoPlayerProps> = ({
 
   return (
     <View style={[styles.container, style]}>
-      {/* Background Poster (guarantees zero black-flash before stream buffers or on error) */}
-      {posterUrl ? (
+      {/* Minimal SVG Plate Background (guarantees zero black-flash before stream buffers or on error) */}
+      <MamaPlatePlaceholder variant="dark" iconSize={96} />
+      {posterUrl && !MealImageService.isPlaceholderImage(posterUrl) ? (
         <Image
           source={{ uri: posterUrl }}
           style={styles.fill}

@@ -43,11 +43,11 @@ export const MAMA_COUNTRY_LINES: Record<string, string[]> = {
   GB: [
     "London weather got you cold? A hot sizzled skillet will warm your hands right up.",
     "Put the kettle on, my dear. We'll make something ten times better than a cold meal deal.",
-    "No need to spend on food delivery tonight. We'll make this fresh in minutes.",
+    "Don't stress deciding tonight, my dear. We'll make this fresh in minutes.",
     "Work was stressful today? A warm home-cooked meal will help you switch off properly.",
   ],
   US: [
-    "Skip the delivery wait and delivery fees tonight. In 10 minutes you'll be eating warm in your sweatpants.",
+    "Zero overthinking tonight. In 10 minutes you'll be eating warm and happy.",
     "Simple food, big flavor. We're here to relax tonight, not wash a mountain of dishes.",
     "You saved money and cooked clean tonight. Mama is proud of you, my child!",
   ],

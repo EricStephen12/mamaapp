@@ -23,6 +23,7 @@ import { VideoService, MealVideoData } from '../../../services/videoService';
 import { MealVideoPlayer } from '../../../components/MealVideoPlayer';
 import { SteamWisps } from '../../../components/signature/SteamWisps';
 import { MamaSealStamp } from '../../../components/signature/MamaSealStamp';
+import { MamaPlatePlaceholder } from '../../../components/common/MamaPlatePlaceholder';
 import { playCardSnapHaptics } from '../../../utils/mamaHaptics';
 
 interface MealCardDeckProps {
@@ -39,12 +40,15 @@ interface MealCardDeckProps {
   headerTitle?: string;
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CONTAINER_WIDTH = Math.min(SCREEN_WIDTH - 20, 440);
 
-// Extra-large, full-bleed center poster card dimensions
+// Responsive center poster card sized so Title + Pills + Roll Dice + Bottom Nav never overlap
 const CARD_WIDTH = Math.min(Math.round(CONTAINER_WIDTH * 0.84), 344);
-const CARD_HEIGHT = Math.round(CARD_WIDTH * 1.44); // ~460-495px tall
+const CARD_HEIGHT = Math.max(
+  296,
+  Math.min(Math.round(CARD_WIDTH * 1.24), Math.round(SCREEN_HEIGHT * 0.41), 388)
+);
 const CARD_GAP = 10;
 const SNAP_INTERVAL = CARD_WIDTH + CARD_GAP;
 const SIDE_PADDING = Math.round((CONTAINER_WIDTH - CARD_WIDTH) / 2);
@@ -293,11 +297,19 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
                 <MealVideoPlayer
                   videoId={videoData.id}
                   videoUrl={videoData.videoUrl}
-                  posterUrl={videoData.coverUrl || catalogImageUrl}
+                  posterUrl={
+                    !MealImageService.isPlaceholderImage(videoData.coverUrl)
+                      ? videoData.coverUrl
+                      : undefined
+                  }
                   isActive={index === activeIndex && !isRolling}
                   creator={videoData.author}
                 />
               );
+            }
+
+            if (MealImageService.isPlaceholderImage(catalogImageUrl)) {
+              return <MamaPlatePlaceholder variant="linen" iconSize={104} />;
             }
 
             return (
@@ -583,15 +595,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(18, 22, 16, 0.72)',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
     borderRadius: 12,
   },
   posterTimeText: {
-    fontSize: 10,
+    fontSize: 12.5,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   posterTapPill: {
     position: 'absolute',
@@ -599,15 +611,15 @@ const styles = StyleSheet.create({
     right: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
     backgroundColor: 'rgba(18, 22, 16, 0.76)',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
   },
   posterTapText: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   rollingCardOverlay: {
@@ -664,11 +676,11 @@ const styles = StyleSheet.create({
   },
   dishTitleText: {
     fontFamily: typography.fontFamily.serif,
-    fontSize: 19,
+    fontSize: 23,
     fontWeight: '700',
     color: colors.text.primary,
     textAlign: 'center',
-    lineHeight: 25,
+    lineHeight: 29,
     letterSpacing: -0.3,
   },
   metaRow: {
@@ -681,29 +693,29 @@ const styles = StyleSheet.create({
   metaPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     backgroundColor: 'rgba(102, 112, 74, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
   },
   metaPillText: {
-    fontSize: 11,
+    fontSize: 13.5,
     fontWeight: '700',
     color: colors.primary,
   },
   pantryNoteBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     backgroundColor: 'rgba(46, 61, 43, 0.06)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: 12,
     marginTop: 2,
   },
   pantryNoteText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.primary,
   },
@@ -717,7 +729,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
+    paddingVertical: 15,
     borderRadius: 24,
     gap: 8,
     shadowColor: colors.primary,
@@ -736,7 +748,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bigRollPillText: {
-    fontSize: 15,
+    fontSize: 16.5,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: -0.2,
@@ -781,15 +793,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   emptyPosterTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: colors.text.primary,
     textAlign: 'center',
     marginTop: 4,
   },
   emptyPosterSub: {
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 15,
+    lineHeight: 21,
     color: colors.text.secondary,
     textAlign: 'center',
   },
@@ -799,12 +811,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 11,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
     borderRadius: 999,
   },
   emptyRetryBtnText: {
-    fontSize: 13.5,
+    fontSize: 15,
     fontWeight: '800',
     color: '#FFFFFF',
   },

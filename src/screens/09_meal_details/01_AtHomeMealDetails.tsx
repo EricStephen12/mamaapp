@@ -36,6 +36,7 @@ import { MealVideoPlayer } from '../../components/MealVideoPlayer';
 import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
 import { SteamWisps } from '../../components/signature/SteamWisps';
 import { MamaSealStamp, KitchenTicketDivider } from '../../components/signature/MamaSealStamp';
+import { MamaPlatePlaceholder } from '../../components/common/MamaPlatePlaceholder';
 import { InteractiveCookModal } from './components/InteractiveCookModal';
 import { MamaFamilyCelebrationModal } from '../../components/common/MamaFamilyCelebrationModal';
 
@@ -264,32 +265,6 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
       .catch(() => {});
   }, [dishTitle, cookTime, params?.gear, initialTip]);
 
-  // On-demand AI Food Image Generation: triggers ONLY when user clicks "Check this food" to open details
-  const [aiGeneratedImageEntry, setAiGeneratedImageEntry] = useState<{
-    title: string;
-    url: string;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!dishTitle) return;
-    let isMounted = true;
-    const pass = preferencesStore.getKitchenPass();
-    MealImageService.generateMealImage(
-      dishTitle,
-      params?.ingredients,
-      pass.cuisineAnchor
-    )
-      .then((resolvedUrl) => {
-        if (isMounted && resolvedUrl) {
-          setAiGeneratedImageEntry({ title: dishTitle, url: resolvedUrl });
-        }
-      })
-      .catch(() => {});
-    return () => {
-      isMounted = false;
-    };
-  }, [dishTitle, params?.ingredients]);
-
   // Resolve live cooking video (reuses cached video from card deck instantly if already loaded)
   const [mealVideo, setMealVideo] = useState<MealVideoData | null>(() =>
     dishTitle ? VideoService.getCachedVideo(dishTitle) : null
@@ -347,19 +322,13 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
   const title = params.title;
   const gear = params.gear || '1 Pan';
   const costNumeric = typeof params.costNumeric === 'number' ? params.costNumeric : 2.5;
-  // Curated catalog photo shown immediately, upgraded to AI-generated dish photo once ready
-  const catalogFallbackImage =
+  const image =
     params.image ||
     MealImageService.getFallbackMealImage(
       title,
       params.ingredients,
       currentPass.cuisineAnchor
     );
-  const aiGeneratedImage =
-    aiGeneratedImageEntry && aiGeneratedImageEntry.title === title
-      ? aiGeneratedImageEntry.url
-      : null;
-  const image = aiGeneratedImage || catalogFallbackImage;
 
   const mealId = params.id || `meal-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
@@ -732,46 +701,41 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Animated.View style={[styles.container, { opacity: contentFade, transform: [{ translateY: contentY }] }]}>
-          {/* Hero Banner: live TikTok cooking video with instant photo fallback */}
-          {image || mealVideo?.videoUrl ? (
-            <View style={styles.heroWrap}>
-              {mealVideo?.videoUrl ? (
-                <MealVideoPlayer
-                  videoId={mealVideo.id}
-                  videoUrl={mealVideo.videoUrl}
-                  posterUrl={mealVideo.coverUrl || catalogFallbackImage}
-                  isActive={true}
-                  creator={mealVideo.author}
-                  creatorPillBottom={52}
-                />
-              ) : (
-                <>
-                  <Image
-                    source={{ uri: catalogFallbackImage }}
-                    style={styles.heroImage}
-                    resizeMode="cover"
-                  />
-                  {aiGeneratedImage && aiGeneratedImage !== catalogFallbackImage ? (
-                    <Image
-                      source={{ uri: aiGeneratedImage }}
-                      style={styles.heroAiOverlayImage}
-                      resizeMode="cover"
-                    />
-                  ) : null}
-                </>
-              )}
-              <SteamWisps triggerKey={title} style={styles.heroSteam} />
-              <MamaSealStamp size={48} variant="frosted" style={styles.heroSeal} />
-              <View style={styles.timeTag}>
-                <Ionicons name="time-outline" size={13} color={colors.primary} />
-                <Text style={styles.timeTagText}>{cookTime}</Text>
-              </View>
-              <View style={styles.gearTag}>
-                <Ionicons name="disc-outline" size={13} color={colors.snow100} />
-                <Text style={styles.gearTagText}>{gear}</Text>
-              </View>
+          {/* Hero Banner: live cooking video with minimal SVG plate placeholder */}
+          <View style={styles.heroWrap}>
+            {mealVideo?.videoUrl ? (
+              <MealVideoPlayer
+                videoId={mealVideo.id}
+                videoUrl={mealVideo.videoUrl}
+                posterUrl={
+                  !MealImageService.isPlaceholderImage(mealVideo.coverUrl)
+                    ? mealVideo.coverUrl
+                    : undefined
+                }
+                isActive={true}
+                creator={mealVideo.author}
+                creatorPillBottom={52}
+              />
+            ) : MealImageService.isPlaceholderImage(image) ? (
+              <MamaPlatePlaceholder variant="linen" iconSize={88} />
+            ) : (
+              <Image
+                source={{ uri: image }}
+                style={styles.heroImage}
+                resizeMode="cover"
+              />
+            )}
+            <SteamWisps triggerKey={title} style={styles.heroSteam} />
+            <MamaSealStamp size={48} variant="frosted" style={styles.heroSeal} />
+            <View style={styles.timeTag}>
+              <Ionicons name="time-outline" size={14} color={colors.primary} />
+              <Text style={styles.timeTagText}>{cookTime}</Text>
             </View>
-          ) : null}
+            <View style={styles.gearTag}>
+              <Ionicons name="disc-outline" size={14} color={colors.snow100} />
+              <Text style={styles.gearTagText}>{gear}</Text>
+            </View>
+          </View>
 
           {/* Dish Title & Price Row */}
           <View style={styles.titleRow}>
@@ -1180,7 +1144,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 32,
+    paddingBottom: 42,
   },
   container: {
     gap: 16,
@@ -1248,7 +1212,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   timeTagText: {
-    fontSize: typography.fontSize.xs,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.primary,
   },
@@ -1265,7 +1229,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   gearTagText: {
-    fontSize: typography.fontSize.xs,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.snow100,
   },
@@ -1279,14 +1243,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mealTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontFamily: typography.fontFamily.serif,
     fontWeight: '600',
     color: colors.text.primary,
-    lineHeight: 28,
+    lineHeight: 30,
   },
   mealSubtitle: {
-    fontSize: typography.fontSize.xs,
+    fontSize: 14,
     color: colors.text.muted,
     marginTop: 3,
   },
@@ -1298,12 +1262,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   priceValue: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.primary,
   },
   priceLabel: {
-    fontSize: 10,
+    fontSize: 11.5,
     color: colors.text.muted,
   },
   mamaCoachCard: {
@@ -1318,18 +1282,18 @@ const styles = StyleSheet.create({
   },
   mamaCoachTextWrap: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   mamaCoachName: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.primary,
     letterSpacing: 0.6,
   },
   mamaCoachBody: {
-    fontSize: typography.fontSize.xs,
+    fontSize: 14,
     color: colors.text.primary,
-    lineHeight: 18,
+    lineHeight: 20,
     fontStyle: 'italic',
   },
   savingsCard: {

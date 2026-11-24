@@ -22,6 +22,7 @@ import {
 } from '../../services/preferencesStore';
 import { pantryService } from '../../services/api/pantryService';
 import { rollService } from '../../services/api/rollService';
+import { useModalBottomInset } from '../../hooks/useBottomNavInset';
 
 interface CountryCurrencyModalProps {
   visible: boolean;
@@ -32,6 +33,7 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
   visible,
   onClose,
 }) => {
+  const modalBottomInset = useModalBottomInset(22);
   const currentPass = preferencesStore.getKitchenPass();
   const matchedCountry = SUPPORTED_COUNTRIES.find((c) => c.id === currentPass.country);
   const fallbackBudget = matchedCountry?.defaultWeeklyBudget ?? currentPass.weeklyBudget ?? 50;
@@ -190,7 +192,7 @@ export const CountryCurrencyModal: React.FC<CountryCurrencyModalProps> = ({
               </ScrollView>
 
               {/* Action Button */}
-              <View style={styles.footer}>
+              <View style={[styles.footer, { paddingBottom: modalBottomInset }]}>
                 <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.85}>
                   <Text style={styles.saveBtnText}>Save Preferences</Text>
                   <Ionicons name="checkmark" size={18} color={colors.snow100} />

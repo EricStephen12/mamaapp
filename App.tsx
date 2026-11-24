@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
+import { wakeBackendServer } from './src/services/api/client';
 import { tokenStore } from './src/services/api/tokenStore';
 import { preferencesStore } from './src/services/preferencesStore';
 import { pantryService } from './src/services/api/pantryService';
@@ -17,22 +18,23 @@ export default function App() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    // Restore JWT and active user's isolated data bank from local secure storage
+    // Wake Render backend immediately so AI calls don't stall on cold start
+    wakeBackendServer();
+
+    // Restore JWT and local preferences before first screen renders;
+    // sync remote pantry/saved meals/billing asynchronously so startup stays instant.
     const initApp = async () => {
       try {
-        await tokenStore.init();
-        await Promise.all([
-          preferencesStore.init(),
-          pantryService.fetchAll(),
-          savedMealsService.fetchAll(),
-        ]);
-        // Mama Plus billing (no-op until RevenueCat keys are added)
-        subscriptionService.init(tokenStore.getUser()?.id).catch(() => {});
+        await Promise.all([tokenStore.init(), preferencesStore.init()]);
       } catch (err) {
         console.warn('[App] Initialization warning:', err);
       } finally {
         setIsReady(true);
       }
+
+      pantryService.fetchAll().catch(() => {});
+      savedMealsService.fetchAll().catch(() => {});
+      subscriptionService.init(tokenStore.getUser()?.id).catch(() => {});
     };
     initApp();
   }, []);
@@ -46,7 +48,7 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <ErrorBoundary>
         <UserDataBankProvider>
           <NavigationContainer>

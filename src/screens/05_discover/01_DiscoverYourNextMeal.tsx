@@ -36,6 +36,7 @@ import { isMealDietCompliant, getCurrentTimeOfDay } from '../../services/api/rol
 import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
 import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
 import { SteamWisps } from '../../components/signature/SteamWisps';
+import { MamaPlatePlaceholder } from '../../components/common/MamaPlatePlaceholder';
 import { VideoService, MealVideoData } from '../../services/videoService';
 import { MealVideoPlayer } from '../../components/MealVideoPlayer';
 
@@ -119,14 +120,12 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
   ).current;
 
   const contentFade = useRef(new Animated.Value(0)).current;
-  const remainingBudget = kitchenPass.weeklyBudget - kitchenPass.spentThisWeek;
-  const formattedBudget = useMemo(() => {
-    if (remainingBudget >= 1000) {
-      const kVal = Math.round(remainingBudget / 1000);
-      return `${kitchenPass.currencySymbol}${kVal}k`;
+  const hasActivatedRef = useRef<boolean>(isDiscoverVisible);
+  useEffect(() => {
+    if (isDiscoverVisible) {
+      hasActivatedRef.current = true;
     }
-    return `${kitchenPass.currencySymbol}${Math.max(0, Math.round(remainingBudget))}`;
-  }, [remainingBudget, kitchenPass.currencySymbol]);
+  }, [isDiscoverVisible]);
 
   useEffect(() => {
     const unsubscribe = preferencesStore.subscribe((pass) => {
@@ -169,6 +168,10 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
   const regionKey = `${kitchenPass.country}|${kitchenPass.cuisineAnchor}|${retryNonce}`;
 
   useEffect(() => {
+    // Do not hammer LLM from hidden tab during initial Home boot; wait until Discover is opened.
+    if (!isDiscoverVisible && !hasActivatedRef.current) {
+      return;
+    }
     let isMounted = true;
     const requestRegionKey = `${kitchenPass.country}|${kitchenPass.cuisineAnchor}|${retryNonce}`;
     AiMamaService.generateDiscoverDeck(kitchenPass, pantryItems)
@@ -190,6 +193,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    isDiscoverVisible,
     kitchenPass.timeLimitMinutes,
     kitchenPass.cookingGear,
     kitchenPass.cuisineAnchor,
@@ -400,12 +404,18 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
           <MealVideoPlayer
             videoId={videoData.id}
             videoUrl={videoData.videoUrl}
-            posterUrl={videoData.coverUrl || item.resolvedImage}
+            posterUrl={
+              !MealImageService.isPlaceholderImage(videoData.coverUrl)
+                ? videoData.coverUrl
+                : undefined
+            }
             isActive={isCardActive}
             creator={videoData.author}
             soundPillTop={14}
             creatorPillBottom={108}
           />
+        ) : MealImageService.isPlaceholderImage(item.resolvedImage) ? (
+          <MamaPlatePlaceholder variant="dark" iconSize={104} />
         ) : (
           <Image
             source={{ uri: item.resolvedImage }}
@@ -463,8 +473,8 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
           <RegionalMamaAvatar
             countryCode={kitchenPass.country}
             cuisineAnchor={kitchenPass.cuisineAnchor}
-            size={34}
-            onPress={() => setCountryModalVisible(true)}
+            size={36}
+            onPress={() => setPassModalVisible(true)}
           />
           <Text style={styles.brandTitle}>Mama</Text>
           <Text style={styles.periodPillText}>Discover</Text>
@@ -473,22 +483,13 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
         <View style={styles.iconCluster}>
           <TouchableOpacity
             style={styles.headerChip}
-            onPress={() => setCountryModalVisible(true)}
-            activeOpacity={0.75}
-          >
-            <Ionicons name="wallet-outline" size={13} color={colors.primary} />
-            <Text style={styles.headerChipText}>{formattedBudget}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.headerChip}
             onPress={() => {
               if (isInsideTabs) setActiveTab('kitchen');
               else navigation.navigate('WhatsInYourKitchen');
             }}
             activeOpacity={0.75}
           >
-            <Ionicons name="basket-outline" size={13} color={colors.primary} />
+            <Ionicons name="basket-outline" size={15} color={colors.primary} />
             <Text style={styles.headerChipText}>
               {pantryItems.length > 0
                 ? `${pantryItems.length} ${pantryItems.length === 1 ? 'item' : 'items'}`
@@ -500,9 +501,10 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
             style={styles.headerChip}
             onPress={() => setPassModalVisible(true)}
             activeOpacity={0.75}
-            accessibilityLabel="Preferences"
+            accessibilityLabel="Profile and Settings"
           >
-            <Ionicons name="options-outline" size={14} color={colors.primary} />
+            <Ionicons name="person-outline" size={15} color={colors.primary} />
+            <Text style={styles.headerChipText}>Profile</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -543,7 +545,10 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
           keyExtractor={(item) => item.id}
           renderItem={renderFeedPost}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.feedListContent}
+          contentContainerStyle={[
+            styles.feedListContent,
+            { paddingBottom: isInsideTabs ? 28 : 110 },
+          ]}
           initialNumToRender={3}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
@@ -660,8 +665,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
   },
   periodPillText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14.5,
+    fontWeight: '700',
     color: colors.text.secondary,
   },
   iconCluster: {
@@ -674,12 +679,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     backgroundColor: 'rgba(36, 40, 32, 0.06)',
-    paddingHorizontal: 11,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 20,
   },
   headerChipText: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: '700',
     color: colors.primary,
   },
@@ -706,7 +711,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   filterPillText: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: '700',
     color: colors.text.primary,
   },
@@ -839,9 +844,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   feedTimeCostText: {
-    fontSize: 13,
+    fontSize: 14.5,
     fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: 'rgba(255, 255, 255, 0.92)',
   },
   checkFoodPill: {
     flexDirection: 'row',
@@ -871,15 +876,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyFeedTitle: {
-    fontSize: 17,
+    fontSize: 19,
     fontWeight: '800',
     color: colors.text.primary,
     textAlign: 'center',
     marginTop: 4,
   },
   emptyFeedSub: {
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 14.5,
+    lineHeight: 20,
     color: colors.text.secondary,
     textAlign: 'center',
   },

@@ -146,7 +146,7 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
   }, [activeCategory, kitchenItems]);
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={isInsideTabs ? ['top'] : ['top', 'bottom']}>
       <StatusBar style="dark" />
       <KitchenAtmosphere period={getCurrentTimeOfDay()} />
 
@@ -156,7 +156,8 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
           <RegionalMamaAvatar
             countryCode={pass.country}
             cuisineAnchor={pass.cuisineAnchor}
-            size={34}
+            size={36}
+            onPress={() => setPassModalVisible(true)}
           />
           <Text style={styles.brandTitle}>Mama</Text>
           <Text style={styles.periodPillText}>Kitchen</Text>
@@ -164,7 +165,7 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
 
         <View style={styles.headerRight}>
           <View style={styles.countPill}>
-            <Ionicons name="basket-outline" size={13} color={colors.primary} />
+            <Ionicons name="basket-outline" size={14} color={colors.primary} />
             <Text style={styles.countPillText}>
               {kitchenItems.length > 0
                 ? `${kitchenItems.length} ${kitchenItems.length === 1 ? 'item' : 'items'}`
@@ -186,8 +187,10 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
             style={styles.profileBadge}
             onPress={() => setPassModalVisible(true)}
             activeOpacity={0.8}
+            accessibilityLabel="Profile and Settings"
           >
-            <Ionicons name="options-outline" size={15} color={colors.primary} />
+            <Ionicons name="person-outline" size={15} color={colors.primary} />
+            <Text style={styles.profileBadgeText}>Profile</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -197,7 +200,10 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: isInsideTabs ? 28 : 110 },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -356,8 +362,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   periodPillText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14.5,
+    fontWeight: '700',
     color: colors.text.secondary,
   },
   headerRight: {
@@ -371,21 +377,28 @@ const styles = StyleSheet.create({
     gap: 5,
     backgroundColor: '#F3EFE6',
     paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
   },
   countPillText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     color: colors.text.primary,
   },
   profileBadge: {
-    width: 34,
-    height: 34,
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
     borderRadius: 17,
     backgroundColor: '#F3EFE6',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  profileBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
   },
   scrollContent: {
     paddingHorizontal: 18,
@@ -419,7 +432,7 @@ const styles = StyleSheet.create({
   },
   customTextInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14.5,
     color: colors.text.primary,
   },
   addBtn: {
@@ -443,7 +456,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E211B',
   },
   categoryTabText: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: '700',
     color: colors.text.secondary,
   },
@@ -460,15 +473,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     backgroundColor: '#F6F3EC',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
     borderRadius: 12,
   },
   stapleChipActive: {
     backgroundColor: colors.primary,
   },
   stapleChipText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text.primary,
   },

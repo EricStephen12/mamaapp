@@ -10,6 +10,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
+import { MealImageService } from '../../../services/mealImageService';
+import { MamaPlatePlaceholder } from '../../../components/common/MamaPlatePlaceholder';
 
 export interface SavedMealItem {
   id: string;
@@ -62,16 +64,14 @@ export const SavedMealCard: React.FC<SavedMealCardProps> = ({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
-        {item.imageUrl ? (
+        {item.imageUrl && !MealImageService.isPlaceholderImage(item.imageUrl) ? (
           <Image
             source={{ uri: item.imageUrl }}
             style={styles.image}
             resizeMode="cover"
           />
         ) : (
-          <View style={styles.editorialTile}>
-            <Ionicons name="restaurant-outline" size={26} color={colors.primary} />
-          </View>
+          <MamaPlatePlaceholder variant="dark" iconSize={68} />
         )}
 
         {/* Top Row: Time/Cost Pill + Bookmark Button */}
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.14)',
   },
   metaPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
   },
@@ -187,8 +187,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(18, 20, 16, 0.72)',
   },
   title: {
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 17,
+    lineHeight: 22,
     fontFamily: typography.fontFamily.serif,
     fontWeight: '700',
     color: '#FFFFFF',
@@ -199,15 +199,15 @@ const styles = StyleSheet.create({
     gap: 4,
     alignSelf: 'flex-start',
     marginTop: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.16)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.22)',
   },
   rollTodayText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
   },

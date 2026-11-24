@@ -123,8 +123,8 @@ export function isMealDietCompliant(meal: RolledMeal, pass: UserKitchenPass): bo
 // Total time a roll will wait for the live AI before falling back. Groq usually answers in
 // 1-3s; the old 7s cap was shorter than the AI call's own timeout + backend fallback,
 // so slow rolls were silently replaced by catalog meals.
-const AI_DIRECT_TIMEOUT_MS = 16000;
-const AI_PREFETCH_TIMEOUT_MS = 16000;
+const AI_DIRECT_TIMEOUT_MS = 10000;
+const AI_PREFETCH_TIMEOUT_MS = 10000;
 
 let prefetchedMeal: { key: string; meal: RolledMeal } | null = null;
 let prefetchInFlight: { key: string; promise: Promise<RolledMeal | null> } | null = null;
@@ -1518,45 +1518,54 @@ export const rollService = {
   },
 
   /**
-   * Generate a fresh 5-card live AI Home deck tailored specifically to the active country,
-   * time of day, and user's kitchen pantry. Zero hardcoded mock dishes.
+   * Generate a live AI Home deck tailored specifically to the active country,
+   * time of day, and user's kitchen pantry. Emits partial deck as soon as the first
+   * fast batch arrives so UI renders in under 1 second.
    */
   async generateLiveDailyDeck(
     overrideTimeOfDay?: 'morning' | 'lunch' | 'dinner' | 'late_night',
     pass?: UserKitchenPass,
-    overridePantry?: string[]
+    overridePantry?: string[],
+    onPartialDeck?: (meals: RolledMeal[]) => void
   ): Promise<RolledMeal[]> {
     const timeOfDay = overrideTimeOfDay || getCurrentTimeOfDay();
     const currentPass = pass || preferencesStore.getKitchenPass();
-    let pantryNames = overridePantry;
-    if (!pantryNames) {
-      try {
-        const items = await pantryService.fetchAll();
-        pantryNames = items.map((i) => i.name);
-      } catch {
-        pantryNames = pantryService.getCachedPantry().map((i) => i.name);
+    const pantryNames =
+      overridePantry !== undefined
+        ? overridePantry
+        : pantryService.getCachedPantry().map((i) => i.name);
+
+    const normalizeList = (rawList: any[]): RolledMeal[] => {
+      const seen = new Set<string>();
+      const neverShowLower = toLowerList(currentPass.neverShowDishes || []);
+      const out: RolledMeal[] = [];
+      for (const raw of rawList) {
+        const meal = normaliseAiMeal(raw, timeOfDay, currentPass);
+        if (!meal) continue;
+        const key = meal.title.toLowerCase();
+        if (seen.has(key) || neverShowLower.includes(key)) continue;
+        seen.add(key);
+        out.push(meal);
       }
-    }
+      return out;
+    };
 
     const rawMeals = await AiMamaService.generateDailyDeckWithAI(
       timeOfDay,
       currentPass,
       pantryNames,
-      sessionPassedTitles
+      sessionPassedTitles,
+      onPartialDeck
+        ? (firstBatch) => {
+            const normalizedPartial = normalizeList(firstBatch);
+            if (normalizedPartial.length > 0) {
+              onPartialDeck(normalizedPartial);
+            }
+          }
+        : undefined
     );
 
-    const seen = new Set<string>();
-    const neverShowLower = toLowerList(currentPass.neverShowDishes || []);
-    const normalized: RolledMeal[] = [];
-
-    for (const raw of rawMeals) {
-      const meal = normaliseAiMeal(raw, timeOfDay, currentPass);
-      if (!meal) continue;
-      const key = meal.title.toLowerCase();
-      if (seen.has(key) || neverShowLower.includes(key)) continue;
-      seen.add(key);
-      normalized.push(meal);
-    }
+    const normalized = normalizeList(rawMeals);
 
     if (normalized.length > 0) {
       // Persist to on-device AI cache stamped with this country & cuisine
@@ -1577,13 +1586,11 @@ export const rollService = {
     const timeOfDay = overrideTimeOfDay || getCurrentTimeOfDay();
     const kitchenPass: UserKitchenPass = preferencesStore.getKitchenPass();
 
-    // 1. Fetch pantry items
-    let pantryNames: string[] = [];
-    try {
-      const items = await pantryService.fetchAll();
-      pantryNames = items.map((i) => i.name);
-    } catch {
-      pantryNames = [];
+    // 1. Read pantry items synchronously from cache (trigger background sync only if empty)
+    const cachedPantry = pantryService.getCachedPantry();
+    const pantryNames: string[] = cachedPantry.map((i) => i.name);
+    if (cachedPantry.length === 0) {
+      pantryService.fetchAll().catch(() => {});
     }
 
     // 2. Track session passed titles (without blocking on network round-trip)
