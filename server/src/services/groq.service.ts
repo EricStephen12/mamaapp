@@ -10,28 +10,14 @@ const groqClient = groqApiKey
   ? new Groq({ apiKey: groqApiKey, maxRetries: 0, timeout: 6500 })
   : null;
 
-const FAST_GROQ_MODELS = [
-  'llama-3.1-8b-instant',
-  'llama-3.3-70b-versatile',
+// OpenRouter → Groq provider: fastest available models (~1.5-2.7s)
+// Groq SDK direct calls are disabled — the configured key hits 404 on these models.
+// OpenRouter routes to the same Groq LPU hardware and works reliably.
+const OPENROUTER_PRIMARY_MODELS = [
+  'meta-llama/llama-3.1-8b-instruct',   // ~1.5s via Groq provider on OR
+  'meta-llama/llama-3.3-70b-instruct',  // ~2.7s via Groq provider on OR (better quality)
+  'openai/gpt-4o-mini',                  // ~8-10s — last resort fallback only
 ];
-const QUALITY_GROQ_MODELS = [
-  'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
-];
-const OPENROUTER_FALLBACK_MODELS = [
-  'google/gemini-2.0-flash-001',
-  'openai/gpt-4o-mini',
-  'meta-llama/llama-3.3-70b-instruct',
-];
-let activeServerModel: string | null = null;
-
-function orderedGroqModels(preferFast: boolean): string[] {
-  const base = preferFast ? FAST_GROQ_MODELS : QUALITY_GROQ_MODELS;
-  if (activeServerModel && base.includes(activeServerModel)) {
-    return [activeServerModel, ...base.filter((m) => m !== activeServerModel)];
-  }
-  return base;
-}
 
 export interface PantryAnalysisResult {
   freshProduce: string[];
@@ -149,33 +135,14 @@ export class GroqService {
       tier,
     } = params;
 
-    const preferFast = tier === 'fast' || maxTokens <= 750;
-
-    if (groqClient) {
-      for (const model of orderedGroqModels(preferFast)) {
-        try {
-          const completion = await groqClient.chat.completions.create({
-            model,
-            messages,
-            ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
-            temperature,
-            max_completion_tokens: maxTokens,
-          });
-          activeServerModel = model;
-          return completion;
-        } catch {
-          if (activeServerModel === model) {
-            activeServerModel = null;
-          }
-        }
-      }
-    }
+    // Timeout: fast tier gets 8s, quality gets 12s (gpt-4o-mini last resort needs ~10s)
+    const timeoutMs = tier === 'fast' ? 8000 : 12000;
 
     if (openRouterApiKey) {
-      for (const orModel of OPENROUTER_FALLBACK_MODELS) {
+      for (const orModel of OPENROUTER_PRIMARY_MODELS) {
         try {
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 4500);
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
           const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             signal: controller.signal,
             method: 'POST',
@@ -191,6 +158,7 @@ export class GroqService {
               ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
               temperature,
               max_tokens: maxTokens,
+              provider: { sort: 'throughput' },
             }),
           });
           clearTimeout(timer);
@@ -198,7 +166,7 @@ export class GroqService {
             return await res.json();
           }
         } catch {
-          // try next OpenRouter model
+          // try next model
         }
       }
     }
@@ -210,44 +178,11 @@ export class GroqService {
    * Helper to execute a structured JSON prompt with Groq first, OpenRouter fallback
    */
   private static async executeStructuredPrompt<T>(systemPrompt: string, userPrompt: string, fallback: T): Promise<T> {
-    if (groqClient) {
-      const tryGroqModel = async (model: string): Promise<T | null> => {
-        const completion = await groqClient!.chat.completions.create({
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.6,
-          max_completion_tokens: 550,
-        });
-
-        const content = completion.choices[0]?.message?.content;
-        if (!content) return null;
-        return JSON.parse(content) as T;
-      };
-
-      for (const model of orderedGroqModels(true)) {
-        try {
-          const res = await tryGroqModel(model);
-          if (res) {
-            activeServerModel = model;
-            return res;
-          }
-        } catch {
-          if (activeServerModel === model) {
-            activeServerModel = null;
-          }
-        }
-      }
-    }
-
     if (openRouterApiKey) {
-      for (const orModel of OPENROUTER_FALLBACK_MODELS) {
+      for (const orModel of OPENROUTER_PRIMARY_MODELS) {
         try {
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 4500);
+          const timer = setTimeout(() => controller.abort(), 10000);
           const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             signal: controller.signal,
             method: 'POST',
@@ -265,7 +200,8 @@ export class GroqService {
               ],
               response_format: { type: 'json_object' },
               temperature: 0.6,
-              max_tokens: 550,
+              max_tokens: 600,
+              provider: { sort: 'throughput' },
             }),
           });
           clearTimeout(timer);
@@ -275,13 +211,13 @@ export class GroqService {
             if (content) return JSON.parse(content) as T;
           }
         } catch {
-          // try next OpenRouter model
+          // try next model
         }
       }
     }
 
-    if (!groqClient && !openRouterApiKey) {
-      console.warn('[GroqService] No AI API key provided in .env — returning sensible fallback data.');
+    if (!openRouterApiKey) {
+      console.warn('[GroqService] No OPENROUTER_API_KEY in .env — returning sensible fallback data.');
     }
 
     return fallback;

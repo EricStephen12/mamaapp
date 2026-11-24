@@ -26,7 +26,7 @@ async function callGroqChat(
     jsonMode = false,
     temperature = 0.65,
     maxTokens = 380,
-    timeoutMs = 10000,
+    timeoutMs = 12000,
     tier,
   } = options;
 
@@ -969,15 +969,19 @@ Rules:
 }`;
 
       const fetchBatch = async (angle: string, batchIdx: number) => {
+        const avoidSection =
+          neverShow.length > 0
+            ? ` Strictly do NOT repeat or suggest any of these meals: ${neverShow.slice(-20).join(', ')}.`
+            : '';
         const data = await callGroqChat(
           [
             { role: 'system', content: systemPrompt },
             {
               role: 'user',
-              content: `Generate 3 authentic everyday home meals from ${pass.countryName} focusing on ${angle} (seed ${(Date.now() + batchIdx * 97) % 10000}). Keep steps short and crisp. Output pure JSON.`,
+              content: `Generate 3 authentic everyday home meals from ${pass.countryName} focusing on ${angle}.${avoidSection} (seed ${Math.floor(Math.random() * 100000) + batchIdx}). Keep steps short and crisp. Output pure JSON.`,
             },
           ],
-          { jsonMode: true, temperature: 0.8, maxTokens: 680, timeoutMs: 10000, tier: 'fast' }
+          { jsonMode: true, temperature: 0.85, maxTokens: 680, timeoutMs: 12000, tier: 'fast' }
         );
         const content = data?.choices?.[0]?.message?.content;
         if (!content) return [];
@@ -985,9 +989,16 @@ Rules:
         return Array.isArray(parsed?.meals) ? parsed.meals : [];
       };
 
+      const angleA = avoidTitles.length > 0
+        ? 'regional stews, saucy carb plates & lesser-known local specialties'
+        : 'classic everyday comfort & quick staples';
+      const angleB = avoidTitles.length > 0
+        ? 'creative street food style variations & lighter home favorites'
+        : 'high-protein, fresh greens & lighter home favorites';
+
       const [batchA, batchB] = await Promise.all([
-        fetchBatch('classic everyday comfort & quick staples', 1).catch(() => []),
-        fetchBatch('high-protein, fresh greens & lighter home favorites', 2).catch(() => []),
+        fetchBatch(angleA, 1).catch(() => []),
+        fetchBatch(angleB, 2).catch(() => []),
       ]);
       const combinedRaw = [...batchA, ...batchB];
       if (combinedRaw.length === 0) {
@@ -1005,7 +1016,7 @@ Rules:
                 | 'high_protein'
                 | 'light_night');
           return {
-            id: m.id || `ai-disc-${Date.now()}-${idx}`,
+            id: m.id ? `${m.id}-${Math.random().toString(36).slice(2, 7)}` : `ai-disc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${idx}`,
             categoryType: 'home' as const,
             cookTimeOrDistance: String(m.cookTimeOrDistance || '15 MIN').toUpperCase(),
             title: sanitizeDishTitle(m.title || 'Home Meal'),
@@ -1051,7 +1062,7 @@ Rules:
               | 'high_protein'
               | 'light_night');
             return {
-              id: m.id || `ai-disc-${Date.now()}-${idx}`,
+              id: m.id ? `${m.id}-${Math.random().toString(36).slice(2, 7)}` : `ai-disc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${idx}`,
               categoryType: 'home' as const,
               cookTimeOrDistance: `${m.cookTimeMinutes || 15} MIN`,
               title: sanitizeDishTitle(m.title || 'Home Meal'),
@@ -1177,7 +1188,7 @@ Strictly output JSON:
       return rawList
         .filter((m: any) => m && typeof m.title === 'string' && Array.isArray(m.steps) && m.steps.length > 0)
         .map((m: any, idx: number) => ({
-          id: m.id || `ai-deck-${Date.now()}-${idx}`,
+          id: m.id ? `${m.id}-${Math.random().toString(36).slice(2, 7)}` : `ai-deck-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${idx}`,
           title: sanitizeDishTitle(m.title),
           subtitle: typeof m.subtitle === 'string' ? m.subtitle : `Fresh ${pass.countryName} home favorite.`,
           timeOfDay,
@@ -1403,7 +1414,7 @@ Strictly output JSON:
         rawCost = Math.max(1.0, Math.min(4.0, Number((rawCost / 1400).toFixed(2))));
       }
       const aiMeal = {
-        id: parsed.id || `ai-roll-${Date.now()}`,
+        id: parsed.id ? `${parsed.id}-${Math.random().toString(36).slice(2, 7)}` : `ai-roll-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         title: cleanTitle,
         subtitle: parsed.subtitle || `Cooks in ${parsed.cookTimeMinutes || 12} mins with ${pass.cookingGearLabel}`,
         timeOfDay,

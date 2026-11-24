@@ -221,7 +221,8 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
         setApiDeckState((prev) => {
           if (prev.regionKey !== regionKey) return prev;
           const seen = new Set(prev.meals.map((m) => m.title.toLowerCase()));
-          const fresh = moreMeals.filter((m) => !seen.has(m.title.toLowerCase()));
+          const fresh = moreMeals.filter((m) => m && m.title && !seen.has(m.title.toLowerCase()));
+          if (fresh.length === 0) return prev;
           return {
             ...prev,
             meals: [...prev.meals, ...fresh],
@@ -229,6 +230,8 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
           };
         });
       }
+    } catch (err) {
+      if (__DEV__) console.warn('[Discover] Load more error:', err);
     } finally {
       setIsLoadingMore(false);
     }
@@ -542,7 +545,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
         <FlatList
           data={feedPosts}
           extraData={{ activePostId, postVideos, isDiscoverVisible, savedItemIds, isLoadingMore }}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => (item?.id ? `${item.id}-${index}` : `feed-post-${index}`)}
           renderItem={renderFeedPost}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
