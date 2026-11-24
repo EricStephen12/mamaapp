@@ -60,7 +60,9 @@ app.get('/api/health', (_req: Request, res: Response) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     groqConfigured: !!process.env.GROQ_API_KEY,
+    openRouterConfigured: !!(process.env.OPENROUTER_API_KEY || process.env.EXPO_PUBLIC_OPENROUTER_API_KEY),
     dbConfigured: !!process.env.DATABASE_URL,
+    aiRouting: 'openrouter-llama-v3',
   });
 });
 

@@ -30,6 +30,7 @@ import { BottomNavigation } from '../../components/navigation/BottomNavigation';
 import { useTabNavigation } from '../../context/TabNavigationContext';
 import { TactileToast } from '../../components/common';
 import { AiMamaService, textMentionsPantryItem } from '../../services/aiMamaService';
+import { discoverCache } from '../../services/api/discoverCache';
 import { MealImageService } from '../../services/mealImageService';
 import { pantryService } from '../../services/api/pantryService';
 import { isMealDietCompliant, getCurrentTimeOfDay } from '../../services/api/rollService';
@@ -104,6 +105,14 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
     meals: RawDiscoveryItem[];
     status: 'loading' | 'ready' | 'error';
   }>({ regionKey: '', meals: [], status: 'loading' });
+  const decksByFilterRef = useRef<Record<DiscoverFilterId, RawDiscoveryItem[]>>({
+    all: [],
+    clean_healthy: [],
+    high_protein: [],
+    light_night: [],
+  });
+  const cacheContextRef = useRef<string>('');
+  const loadMoreInFlightRef = useRef<boolean>(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
@@ -165,7 +174,9 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
 
   const dietKey = (kitchenPass.dietaryRestrictions || []).join(',');
   const pantrySig = [...pantryItems].sort().join(',');
-  const regionKey = `${kitchenPass.country}|${kitchenPass.cuisineAnchor}|${retryNonce}`;
+  const persistContextKey = `${kitchenPass.country}|${kitchenPass.cuisineAnchor}|${kitchenPass.bodyGoal || ''}|${kitchenPass.timeLimitMinutes}|${kitchenPass.cookingGear}|${dietKey}|${pantrySig}`;
+  const baseContextKey = `${persistContextKey}|${retryNonce}`;
+  const regionKey = `${baseContextKey}|${activeFilter}`;
 
   useEffect(() => {
     // Do not hammer LLM from hidden tab during initial Home boot; wait until Discover is opened.
@@ -173,59 +184,153 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
       return;
     }
     let isMounted = true;
-    const requestRegionKey = `${kitchenPass.country}|${kitchenPass.cuisineAnchor}|${retryNonce}`;
-    AiMamaService.generateDiscoverDeck(kitchenPass, pantryItems)
-      .then((meals) => {
+    if (cacheContextRef.current !== baseContextKey) {
+      cacheContextRef.current = baseContextKey;
+      decksByFilterRef.current = {
+        all: [],
+        clean_healthy: [],
+        high_protein: [],
+        light_night: [],
+      };
+    }
+
+    const targetFilter = activeFilter;
+    const requestRegionKey = `${baseContextKey}|${targetFilter}`;
+
+    // 1. Instant switch if already in memory for this category filter
+    const memCached = decksByFilterRef.current[targetFilter];
+    if (memCached && memCached.length > 0) {
+      setApiDeckState({ regionKey: requestRegionKey, meals: memCached, status: 'ready' });
+      return;
+    }
+
+    setApiDeckState({ regionKey: requestRegionKey, meals: [], status: 'loading' });
+
+    const runFetch = async () => {
+      let paintedFromCache = false;
+      if (retryNonce === 0) {
+        const diskCached = await discoverCache.get(targetFilter, persistContextKey);
         if (!isMounted) return;
-        if (Array.isArray(meals) && meals.length > 0) {
-          setApiDeckState({ regionKey: requestRegionKey, meals, status: 'ready' });
-        } else {
-          setApiDeckState({ regionKey: requestRegionKey, meals: [], status: 'error' });
+        if (diskCached.length > 0) {
+          paintedFromCache = true;
+          decksByFilterRef.current[targetFilter] = diskCached;
+          setApiDeckState({ regionKey: requestRegionKey, meals: diskCached, status: 'ready' });
+          // Refresh silently in background if persistent cache only had <= 3 starter items
+          if (diskCached.length >= 5) return;
         }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setApiDeckState({ regionKey: requestRegionKey, meals: [], status: 'error' });
+      }
+
+      let paintedPartial = paintedFromCache;
+      const avoidSeed = paintedFromCache
+        ? (decksByFilterRef.current[targetFilter] || []).map((m) => m.title)
+        : [];
+
+      const mergeMeals = (incoming: RawDiscoveryItem[]) => {
+        setApiDeckState((prev) => {
+          if (prev.regionKey !== requestRegionKey) return prev;
+          const base = prev.meals;
+          const seen = new Set(base.map((m) => m.title.toLowerCase()));
+          const fresh = incoming.filter((m) => m && m.title && !seen.has(m.title.toLowerCase()));
+          const updated = base.length === 0 ? incoming : fresh.length > 0 ? [...base, ...fresh] : base;
+          decksByFilterRef.current[targetFilter] = updated;
+          return { regionKey: requestRegionKey, meals: updated, status: 'ready' };
+        });
+      };
+
+      const meals = await AiMamaService.generateDiscoverDeck(
+        kitchenPass,
+        pantryItems,
+        avoidSeed,
+        targetFilter,
+        (partialMeals) => {
+          if (!isMounted || partialMeals.length === 0) return;
+          paintedPartial = true;
+          mergeMeals(partialMeals);
         }
-      });
+      );
+      if (!isMounted) return;
+
+      if (Array.isArray(meals) && meals.length > 0) {
+        mergeMeals(meals);
+        discoverCache.set(targetFilter, persistContextKey, decksByFilterRef.current[targetFilter] || meals);
+
+        // Pre-warm remaining category tabs quietly in background while viewing For You
+        if (targetFilter === 'all' && isDiscoverVisible) {
+          const otherFilters: DiscoverFilterId[] = ['clean_healthy', 'high_protein', 'light_night'];
+          for (const cat of otherFilters) {
+            if (!isMounted) break;
+            if ((decksByFilterRef.current[cat] || []).length > 0) continue;
+            const diskCat = await discoverCache.get(cat, persistContextKey);
+            if (!isMounted) break;
+            if (diskCat.length > 0) {
+              decksByFilterRef.current[cat] = diskCat;
+              continue;
+            }
+            const catMeals = await AiMamaService.generateDiscoverDeck(
+              kitchenPass,
+              pantryItems,
+              [],
+              cat
+            ).catch(() => []);
+            if (!isMounted) break;
+            if (Array.isArray(catMeals) && catMeals.length > 0) {
+              decksByFilterRef.current[cat] = catMeals;
+              discoverCache.set(cat, persistContextKey, catMeals);
+            }
+          }
+        }
+      } else if (!paintedPartial) {
+        setApiDeckState({ regionKey: requestRegionKey, meals: [], status: 'error' });
+      }
+    };
+
+    runFetch().catch(() => {
+      if (isMounted) {
+        setApiDeckState((prev) =>
+          prev.regionKey === requestRegionKey && prev.meals.length > 0
+            ? prev
+            : { regionKey: requestRegionKey, meals: [], status: 'error' }
+        );
+      }
+    });
     return () => {
       isMounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isDiscoverVisible,
-    kitchenPass.timeLimitMinutes,
-    kitchenPass.cookingGear,
-    kitchenPass.cuisineAnchor,
-    kitchenPass.country,
-    kitchenPass.bodyGoal,
-    dietKey,
-    pantrySig,
-    retryNonce,
+    activeFilter,
+    baseContextKey,
   ]);
 
   const isFeedLoading = apiDeckState.regionKey !== regionKey || apiDeckState.status === 'loading';
 
   const handleLoadMore = useCallback(async () => {
-    if (isLoadingMore || isFeedLoading) return;
+    if (loadMoreInFlightRef.current || isLoadingMore || isFeedLoading) return;
+    loadMoreInFlightRef.current = true;
     setIsLoadingMore(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    const targetFilter = activeFilter;
+    const targetRegionKey = regionKey;
     try {
       const existingTitles = apiDeckState.meals.map((m) => m.title);
       const moreMeals = await AiMamaService.generateDiscoverDeck(
         kitchenPass,
         pantryItems,
-        existingTitles
+        existingTitles,
+        targetFilter
       );
       if (Array.isArray(moreMeals) && moreMeals.length > 0) {
         setApiDeckState((prev) => {
-          if (prev.regionKey !== regionKey) return prev;
+          if (prev.regionKey !== targetRegionKey) return prev;
           const seen = new Set(prev.meals.map((m) => m.title.toLowerCase()));
           const fresh = moreMeals.filter((m) => m && m.title && !seen.has(m.title.toLowerCase()));
           if (fresh.length === 0) return prev;
+          const updated = [...prev.meals, ...fresh];
+          decksByFilterRef.current[targetFilter] = updated;
           return {
             ...prev,
-            meals: [...prev.meals, ...fresh],
+            meals: updated,
             status: 'ready',
           };
         });
@@ -233,15 +338,16 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
     } catch (err) {
       if (__DEV__) console.warn('[Discover] Load more error:', err);
     } finally {
+      loadMoreInFlightRef.current = false;
       setIsLoadingMore(false);
     }
-  }, [apiDeckState.meals, isFeedLoading, isLoadingMore, kitchenPass, pantryItems, regionKey]);
+  }, [activeFilter, apiDeckState.meals, isFeedLoading, isLoadingMore, kitchenPass, pantryItems, regionKey]);
 
   const filteredRawDeck = useMemo<RawDiscoveryItem[]>(() => {
     const activeApiMeals = apiDeckState.regionKey === regionKey ? apiDeckState.meals : [];
     const neverShow = (kitchenPass.neverShowDishes || []).map((t) => t.toLowerCase());
     const seen = new Set<string>();
-    const combined = activeApiMeals.filter((m) => {
+    return activeApiMeals.filter((m) => {
       const key = m.title.toLowerCase();
       if (seen.has(key) || neverShow.includes(key)) return false;
       seen.add(key);
@@ -259,17 +365,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
         kitchenPass
       );
     });
-
-    if (activeFilter === 'all') {
-      return combined;
-    }
-    const matching = combined.filter(
-      (item) =>
-        item.healthCategory === activeFilter ||
-        (Array.isArray(item.cuisineTags) && item.cuisineTags.includes(activeFilter))
-    );
-    return matching.length > 0 ? matching : combined;
-  }, [activeFilter, apiDeckState, regionKey, kitchenPass]);
+  }, [apiDeckState, regionKey, kitchenPass]);
 
   const feedPosts = useMemo<FeedPostItem[]>(() => {
     const deckPhotos = MealImageService.getCarouselDeckImages(
@@ -479,8 +575,7 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
             size={36}
             onPress={() => setPassModalVisible(true)}
           />
-          <Text style={styles.brandTitle}>Mama</Text>
-          <Text style={styles.periodPillText}>Discover</Text>
+          <Text style={styles.brandTitle}>Discover</Text>
         </View>
 
         <View style={styles.iconCluster}>
@@ -501,13 +596,12 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.headerChip}
+            style={styles.profileCircleBtn}
             onPress={() => setPassModalVisible(true)}
-            activeOpacity={0.75}
+            activeOpacity={0.8}
             accessibilityLabel="Profile and Settings"
           >
-            <Ionicons name="person-outline" size={15} color={colors.primary} />
-            <Text style={styles.headerChipText}>Profile</Text>
+            <Ionicons name="person-outline" size={16} color={colors.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -527,7 +621,10 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
                 style={[styles.filterPill, active && styles.filterPillActive]}
                 onPress={() => {
                   Haptics.selectionAsync().catch(() => {});
-                  setActiveFilter(filter.id);
+                  if (filter.id !== activeFilter) {
+                    setVisiblePostId(null);
+                    setActiveFilter(filter.id);
+                  }
                 }}
                 activeOpacity={0.82}
               >
@@ -561,7 +658,9 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
                 <>
                   <ActivityIndicator size="large" color={colors.primary} />
                   <Text style={styles.emptyFeedTitle}>
-                    Finding fresh {kitchenPass.countryName} home ideas
+                    {activeFilter === 'all'
+                      ? `Finding fresh ${kitchenPass.countryName} home ideas`
+                      : `Finding ${DISCOVER_FILTERS.find((f) => f.id === activeFilter)?.label || ''} ${kitchenPass.countryName} dishes`}
                   </Text>
                   <Text style={styles.emptyFeedSub}>
                     Tailoring dishes to your kitchen and local ingredients...
@@ -667,11 +766,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     letterSpacing: -0.4,
   },
-  periodPillText: {
-    fontSize: 14.5,
-    fontWeight: '700',
-    color: colors.text.secondary,
-  },
   iconCluster: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -690,6 +784,14 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     fontWeight: '700',
     color: colors.primary,
+  },
+  profileCircleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(36, 40, 32, 0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   filterBarWrap: {
     paddingVertical: 8,

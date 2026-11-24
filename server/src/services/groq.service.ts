@@ -1,14 +1,8 @@
-import Groq from 'groq-sdk';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const groqApiKey = process.env.GROQ_API_KEY || '';
 const openRouterApiKey = process.env.OPENROUTER_API_KEY || process.env.EXPO_PUBLIC_OPENROUTER_API_KEY || '';
-
-const groqClient = groqApiKey
-  ? new Groq({ apiKey: groqApiKey, maxRetries: 0, timeout: 6500 })
-  : null;
 
 // OpenRouter → Groq provider: fastest available models (~1.5-2.7s)
 // Groq SDK direct calls are disabled — the configured key hits 404 on these models.
@@ -18,6 +12,27 @@ const OPENROUTER_PRIMARY_MODELS = [
   'meta-llama/llama-3.3-70b-instruct',  // ~2.7s via Groq provider on OR (better quality)
   'openai/gpt-4o-mini',                  // ~8-10s — last resort fallback only
 ];
+
+function parseJsonSafely<T>(raw: string): T | null {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    const stripped = raw
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/```$/i, '')
+      .trim();
+    const start = stripped.indexOf('{');
+    const end = stripped.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(stripped.slice(start, end + 1)) as T;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
 
 export interface PantryAnalysisResult {
   freshProduce: string[];
@@ -165,8 +180,10 @@ export class GroqService {
           if (res.ok) {
             return await res.json();
           }
-        } catch {
-          // try next model
+          const errSnippet = (await res.text().catch(() => '')).slice(0, 140);
+          console.warn(`[OpenRouter] ${orModel} HTTP ${res.status}: ${errSnippet}`);
+        } catch (err: any) {
+          console.warn(`[OpenRouter] ${orModel} error:`, err?.message || err);
         }
       }
     }
@@ -175,7 +192,7 @@ export class GroqService {
   }
 
   /**
-   * Helper to execute a structured JSON prompt with Groq first, OpenRouter fallback
+   * Helper to execute a structured JSON prompt via OpenRouter
    */
   private static async executeStructuredPrompt<T>(systemPrompt: string, userPrompt: string, fallback: T): Promise<T> {
     if (openRouterApiKey) {
@@ -208,10 +225,16 @@ export class GroqService {
           if (res.ok) {
             const data = (await res.json()) as any;
             const content = data?.choices?.[0]?.message?.content;
-            if (content) return JSON.parse(content) as T;
+            if (content) {
+              const parsed = parseJsonSafely<T>(content);
+              if (parsed) return parsed;
+            }
+          } else {
+            const errSnippet = (await res.text().catch(() => '')).slice(0, 140);
+            console.warn(`[OpenRouter] structured ${orModel} HTTP ${res.status}: ${errSnippet}`);
           }
-        } catch {
-          // try next model
+        } catch (err: any) {
+          console.warn(`[OpenRouter] structured ${orModel} error:`, err?.message || err);
         }
       }
     }

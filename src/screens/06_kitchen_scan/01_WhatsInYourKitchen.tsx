@@ -159,8 +159,7 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
             size={36}
             onPress={() => setPassModalVisible(true)}
           />
-          <Text style={styles.brandTitle}>Mama</Text>
-          <Text style={styles.periodPillText}>Kitchen</Text>
+          <Text style={styles.brandTitle}>Kitchen</Text>
         </View>
 
         <View style={styles.headerRight}>
@@ -168,29 +167,18 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
             <Ionicons name="basket-outline" size={14} color={colors.primary} />
             <Text style={styles.countPillText}>
               {kitchenItems.length > 0
-                ? `${kitchenItems.length} ${kitchenItems.length === 1 ? 'item' : 'items'}`
-                : 'Empty kitchen'}
+                ? `${kitchenItems.length} in kitchen`
+                : 'Empty'}
             </Text>
           </View>
 
-          {kitchenItems.length > 0 && (
-            <TouchableOpacity
-              style={styles.countPill}
-              onPress={handleClearKitchen}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.countPillText}>Clear</Text>
-            </TouchableOpacity>
-          )}
-
           <TouchableOpacity
-            style={styles.profileBadge}
+            style={styles.profileCircleBtn}
             onPress={() => setPassModalVisible(true)}
             activeOpacity={0.8}
             accessibilityLabel="Profile and Settings"
           >
-            <Ionicons name="person-outline" size={15} color={colors.primary} />
-            <Text style={styles.profileBadgeText}>Profile</Text>
+            <Ionicons name="person-outline" size={16} color={colors.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -215,6 +203,22 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
           >
             {/* UNIFIED KITCHEN INGREDIENTS STUDIO */}
             <View style={styles.pantryCard}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={styles.cardHeaderHint}>
+                  Tap what you have at home
+                </Text>
+                {kitchenItems.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.clearBtn}
+                    onPress={handleClearKitchen}
+                    activeOpacity={0.75}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={styles.clearBtnText}>Clear all ({kitchenItems.length})</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               {/* Quick Add Input */}
               <View style={styles.inputRow}>
                 <Ionicons name="search-outline" size={16} color={colors.text.muted} />
@@ -361,11 +365,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     letterSpacing: -0.5,
   },
-  periodPillText: {
-    fontSize: 14.5,
-    fontWeight: '700',
-    color: colors.text.secondary,
-  },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -385,20 +384,34 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text.primary,
   },
-  profileBadge: {
+  cardHeaderRow: {
     flexDirection: 'row',
-    gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardHeaderHint: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  clearBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#F6F3EC',
+  },
+  clearBtnText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.text.secondary,
+  },
+  profileCircleBtn: {
+    width: 34,
+    height: 34,
     borderRadius: 17,
     backgroundColor: '#F3EFE6',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  profileBadgeText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.primary,
   },
   scrollContent: {
     paddingHorizontal: 18,
