@@ -91,7 +91,7 @@ interface KitchenTicketDividerProps {
  * Makes meal detail screenshots immediately recognizable as Mama Kitchen.
  */
 export const KitchenTicketDivider: React.FC<KitchenTicketDividerProps> = ({
-  label = 'MAMA KITCHEN TICKET',
+  label = 'MAMA DISH TICKET',
 }) => {
   return (
     <View style={styles.ticketRow} pointerEvents="none">

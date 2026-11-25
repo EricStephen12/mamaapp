@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Account &amp; Data Deletion — Mama Dish</title>
+  <meta name="description" content="Permanently delete your Mama Dish account and associated user data online or inside the mobile app." />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;1,6..72,500&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="./index.html" class="brand-link">
+        <svg width="36" height="36" viewBox="0 0 96 96" fill="none" aria-hidden="true">
+          <circle cx="48" cy="48" r="44" fill="#FFFCF7" stroke="#66704A" stroke-width="2"/>
+          <circle cx="48" cy="48" r="39" stroke="#C8923B" stroke-width="1.1" stroke-opacity="0.8"/>
+          <path d="M33 38V30C33 22 40.5 21 43.5 28L48 38.5L52.5 28C55.5 21 63 22 63 30V38" stroke="#C8923B" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M25 48H71C68.5 61 60.5 68 48 68C35.5 68 27.5 61 25 48Z" fill="#66704A" fill-opacity="0.12" stroke="#66704A" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M39 73H57" stroke="#C8923B" stroke-width="3.4" stroke-linecap="round"/>
+        </svg>
+        <span class="brand-wordmark">Mama</span>
+        <span class="brand-sub">Dish</span>
+      </a>
+
+      <nav class="nav-links" aria-label="Primary">
+        <a href="./index.html" class="nav-hide-mobile">Home</a>
+        <a href="./privacy.html">Privacy Policy</a>
+        <a href="./terms.html" class="nav-hide-mobile">Terms</a>
+        <a href="./delete-account.html" class="active">Delete Account</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="legal-hero">
+      <div class="container-narrow">
+        <div class="legal-meta">Mama Dish &middot; User Data Control</div>
+        <h1 class="legal-title">Account &amp; Data Deletion</h1>
+        <p class="legal-lead">
+          Permanently delete your Mama Dish account and all associated personal data—either right here on the web or directly inside the mobile app.
+        </p>
+      </div>
+    </section>
+
+    <section class="legal-body">
+      <div class="container-narrow">
+        <div class="legal-card">
+          <h2>Option 1: Delete Instantly on the Web</h2>
+          <p>
+            If you have already uninstalled the Mama Dish app, verify your account credentials below to immediately and permanently erase your account and all synced data from our servers.
+          </p>
+
+          <form class="delete-form-box" id="web-delete-form">
+            <div id="delete-status" class="status-banner" role="alert"></div>
+
+            <div class="form-group">
+              <label for="del-email">Mama Dish Account Email</label>
+              <input
+                type="email"
+                id="del-email"
+                class="form-input"
+                placeholder="you@example.com"
+                required
+                autocomplete="email"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="del-password">Account Password</label>
+              <input
+                type="password"
+                id="del-password"
+                class="form-input"
+                placeholder="Enter your password to confirm"
+                required
+                autocomplete="current-password"
+              />
+            </div>
+
+            <p style="font-size: 13px; color: var(--ink-muted); margin: 0 0 16px;">
+              This action is immediate and irreversible. All saved recipes, pantry items, and taste preferences tied to this account will be permanently erased.
+            </p>
+
+            <button type="submit" class="btn btn-danger" id="del-submit-btn">
+              Permanently Delete My Account &amp; Data
+            </button>
+          </form>
+
+          <h2>Option 2: Delete Directly Inside the Mama Dish App</h2>
+          <ol>
+            <li>Open the <strong>Mama Dish</strong> app on your phone.</li>
+            <li>Tap your <strong>Profile</strong> button (or Mama medallion) in the top bar to open your <strong>Kitchen Pass</strong>.</li>
+            <li>Select the <strong>Account</strong> tab.</li>
+            <li>Tap <strong>Delete Account</strong> and confirm <strong>Delete Permanently</strong>.</li>
+          </ol>
+
+          <h2>Option 3: Forgot Password / Email Deletion Request</h2>
+          <p>
+            If you no longer remember your password and cannot access password reset, email <a href="mailto:support@mamadish.app?subject=Account%20Deletion%20Request%20-%20Mama%20Kitchen">support@mamadish.app</a> from the email address registered to your Mama Dish account with the subject line <strong>&ldquo;Delete My Account&rdquo;</strong>. We process verified email deletion requests within 7 days.
+          </p>
+
+          <h2>What Data Is Deleted vs. Retained</h2>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Data Type</th>
+                <th>Action Upon Deletion</th>
+                <th>Retention Period</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Account Profile</strong> (Name, email address, password hash)</td>
+                <td>Permanently deleted from our database</td>
+                <td>0 days (Immediate)</td>
+              </tr>
+              <tr>
+                <td><strong>Kitchen Pass &amp; Taste Profile</strong> (Country, budget, dietary restrictions, wellness goals)</td>
+                <td>Permanently deleted via cascading deletion</td>
+                <td>0 days (Immediate)</td>
+              </tr>
+              <tr>
+                <td><strong>Pantry Items, Saved Meals &amp; Roll History</strong></td>
+                <td>Permanently deleted via cascading deletion</td>
+                <td>0 days (Immediate)</td>
+              </tr>
+              <tr>
+                <td><strong>App Store / Google Play Purchase Receipts</strong></td>
+                <td>Managed directly by Google Play / Apple App Store (de-linked from deleted account email)</td>
+                <td>Retained by Google/Apple per statutory tax &amp; financial regulations</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="callout-box">
+            <p>
+              <strong>Active Subscriptions Reminder:</strong> Deleting your Mama Dish account erases your app data, but if you have an active <em>Mama Dish Pro</em> subscription on Google Play, remember to also cancel the recurring subscription under <strong>Google Play Store &rarr; Payments &amp; subscriptions &rarr; Subscriptions</strong>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <a href="./index.html" class="brand-link">
+        <span class="brand-wordmark">Mama Dish</span>
+      </a>
+      <div class="footer-links">
+        <a href="./index.html">Home</a>
+        <a href="./privacy.html">Privacy Policy</a>
+        <a href="./terms.html">Terms of Service</a>
+        <a href="./delete-account.html">Delete Account</a>
+        <a href="mailto:support@mamadish.app">Contact Support</a>
+      </div>
+      <div class="footer-copy">
+        <span>&copy; 2026 Mama Dish. All rights reserved.</span>
+        <span>Good food. Your taste. Your budget.</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var form = document.getElementById('web-delete-form');
+      var statusEl = document.getElementById('delete-status');
+      var submitBtn = document.getElementById('del-submit-btn');
+      if (!form) return;
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var email = document.getElementById('del-email').value.trim();
+        var password = document.getElementById('del-password').value;
+        if (!email || !password) return;
+
+        if (!window.confirm('Are you sure you want to permanently delete your Mama Dish account and all associated data? This cannot be undone.')) {
+          return;
+        }
+
+        statusEl.className = 'status-banner';
+        statusEl.textContent = '';
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Deleting account...';
+
+        fetch('https://mama-backend-0k9s.onrender.com/api/auth/delete-account-web', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email, password: password })
+        })
+          .then(function (res) {
+            return res.json().then(function (body) {
+              return { ok: res.ok, body: body };
+            });
+          })
+          .then(function (result) {
+            if (result.ok) {
+              statusEl.className = 'status-banner success';
+              statusEl.textContent = result.body.message || 'Your account and all associated data have been permanently deleted.';
+              form.reset();
+            } else {
+              statusEl.className = 'status-banner error';
+              statusEl.textContent = (result.body && result.body.error) || 'Could not verify credentials. Please check your email and password.';
+            }
+          })
+          .catch(function () {
+            statusEl.className = 'status-banner error';
+            statusEl.textContent = 'Network error reaching server. Please try again in a moment or email support@mamadish.app.';
+          })
+          .finally(function () {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Permanently Delete My Account & Data';
+          });
+      });
+    })();
+  </script>
+</body>
+</html>
+

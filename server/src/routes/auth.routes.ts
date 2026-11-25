@@ -159,3 +159,42 @@ authRouter.delete('/account', requireAuth, async (req: AuthRequest, res: Respons
     res.status(500).json({ error: 'Failed to delete account' });
   }
 });
+
+/**
+ * POST /api/auth/delete-account-web
+ * Public web portal endpoint required by Google Play Data Safety so users can
+ * permanently delete their account and cascaded data without reinstalling the app.
+ */
+authRouter.post('/delete-account-web', authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { email, password } = (req.body || {}) as { email?: string; password?: string };
+    if (!email || !password) {
+      res.status(400).json({ error: 'Email and password are required to verify account ownership.' });
+      return;
+    }
+
+    const cleanEmail = sanitizeEmail(email);
+    const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+
+    const dummyHash = '$2a$12$invalidhashfortimingprotection00000000000000000000000000';
+    const hashToCheck = user?.passwordHash || dummyHash;
+    const valid = await bcrypt.compare(password, hashToCheck);
+
+    if (!user || !user.passwordHash || !valid) {
+      res.status(401).json({ error: 'Invalid email or password.' });
+      return;
+    }
+
+    await prisma.user.delete({
+      where: { id: user.id },
+    });
+
+    res.json({
+      success: true,
+      message: 'Your Mama Dish account and all associated data have been permanently deleted.',
+    });
+  } catch (err) {
+    console.error('[AUTH] /delete-account-web error:', err);
+    res.status(500).json({ error: 'Failed to process account deletion. Please try again.' });
+  }
+});

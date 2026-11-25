@@ -886,12 +886,12 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
         initialTab={passModalInitialTab}
       />
 
-      {/* Mama Kitchen Pro Paywall Modal */}
+      {/* Mama Dish Pro Paywall Modal */}
       <MamaPaywallModal
         visible={paywallModalVisible}
         onClose={() => setPaywallModalVisible(false)}
         onSubscribed={() => {
-          setToastMessage('Welcome to Mama Kitchen Pro! Unlimited rolls unlocked.');
+          setToastMessage('Welcome to Mama Dish Pro! Unlimited rolls unlocked.');
           setPendingRolledMeal(null);
           setRollRevealVisible(true);
           executeRoll();
@@ -916,7 +916,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
               const outcome = await subscriptionService.presentPaywallIfNeeded();
               if (outcome === 'purchased' || outcome === 'restored') {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                setToastMessage('Welcome to Mama Kitchen Pro! Unlimited rolls unlocked.');
+                setToastMessage('Welcome to Mama Dish Pro! Unlimited rolls unlocked.');
                 setPendingRolledMeal(null);
                 setRollRevealVisible(true);
                 executeRoll();

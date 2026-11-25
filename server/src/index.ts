@@ -29,15 +29,28 @@ const allowedOrigins = [
   process.env.APP_ORIGIN,
 ].filter(Boolean);
 
-app.use(cors({
-  origin: (origin, cb) => {
-    // Allow native app (no origin) + allowed list
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    cb(new Error('CORS: origin not allowed'));
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+app.use(cors((req, cb) => {
+  const origin = req.header('Origin');
+  // Allow public web Account Deletion portal from any static host (Google Play Data Safety requirement)
+  if (req.path === '/api/auth/delete-account-web') {
+    cb(null, {
+      origin: true,
+      methods: ['POST', 'OPTIONS'],
+      allowedHeaders: ['Content-Type'],
+    });
+    return;
+  }
+  // Allow native app (no origin) + allowed list
+  if (!origin || allowedOrigins.includes(origin)) {
+    cb(null, {
+      origin: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      credentials: true,
+    });
+    return;
+  }
+  cb(new Error('CORS: origin not allowed'));
 }));
 
 // ─── Body Parser (size limit prevents DOS) ────────────────────────────────────
@@ -202,7 +215,7 @@ app.use('/api', requireAuth as express.RequestHandler, apiRouter);
 // ─── Root Info ────────────────────────────────────────────────────────────────
 app.get('/', (_req: Request, res: Response) => {
   res.json({
-    app: 'Mama Kitchen API Backend',
+    app: 'Mama Dish API Backend',
     version: '1.0.0',
     documentation: {
       health: 'GET /api/health',
@@ -222,7 +235,7 @@ app.use((_req: Request, res: Response) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Mama Kitchen Backend running on http://localhost:${PORT}`);
+  console.log(`✅ Mama Dish Backend running on http://localhost:${PORT}`);
   console.log(`🔒 Auth: JWT (30d expiry) + bcrypt + rate limiting`);
   console.log(`🤖 Groq AI: ${process.env.GROQ_API_KEY ? 'Connected' : '⚠️ Missing'}`);
   console.log(`🎨 Cloudflare FLUX: ${process.env.CLOUDFLARE_ACCOUNT_ID ? 'Connected' : '⚠️ Missing'}`);

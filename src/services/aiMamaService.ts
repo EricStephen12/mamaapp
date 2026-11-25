@@ -767,7 +767,7 @@ export class AiMamaService {
           ? 'Goal: Gain Weight (Healthy Fullness). In 1 short warm sentence, warmly encourage your child to eat hearty, calorie-dense food to build good strength and body weight.'
           : 'Goal: Balanced Energy. In 1 short warm sentence, reassure your child this wholesome home meal gives them steady stamina without feeling heavy.';
 
-      const systemPrompt = `You are "Mama", the user's caring, loving home-cook mother and intuitive nutritionist in the "Mama Kitchen" app.
+      const systemPrompt = `You are "Mama", the user's caring, loving home-cook mother and intuitive nutritionist in the "Mama Dish" app.
 You know your child's exact kitchen, wallet, and body goal:
 - Country: ${pass.countryName} (Currency: ${pass.currencySymbol})
 - Cooking Gear: ${gearLabel}
@@ -836,7 +836,7 @@ Tone & Rules:
           ? `Strict Dietary Requirements: ${pass.dietaryRestrictions.join(', ')}. NEVER include forbidden ingredients or allergens.`
           : '';
 
-      const systemPrompt = `You are Mama, a loving home cook in the Mama Kitchen app.
+      const systemPrompt = `You are Mama, a loving home cook in the Mama Dish app.
 Generate ONE realistic, fast, comforting home recipe the user can cook RIGHT NOW with what they already have.
 Constraints:
 - User Country: ${pass.countryName} (${pass.currencyCode})

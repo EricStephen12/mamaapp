@@ -164,8 +164,8 @@ export class GroqService {
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${openRouterApiKey}`,
-              'HTTP-Referer': 'https://mamakitchen.app',
-              'X-Title': 'Mama Kitchen',
+              'HTTP-Referer': 'https://mamadish.app',
+              'X-Title': 'Mama Dish',
             },
             body: JSON.stringify({
               model: orModel,
@@ -206,8 +206,8 @@ export class GroqService {
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${openRouterApiKey}`,
-              'HTTP-Referer': 'https://mamakitchen.app',
-              'X-Title': 'Mama Kitchen',
+              'HTTP-Referer': 'https://mamadish.app',
+              'X-Title': 'Mama Dish',
             },
             body: JSON.stringify({
               model: orModel,

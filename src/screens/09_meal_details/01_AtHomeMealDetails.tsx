@@ -767,7 +767,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
             </View>
           </TouchableOpacity>
 
-          <KitchenTicketDivider label="MAMA KITCHEN" />
+          <KitchenTicketDivider label="MAMA DISH" />
 
           {/* Section: Minimal Tactile Ingredient Tiles */}
           <View style={styles.sectionCard}>

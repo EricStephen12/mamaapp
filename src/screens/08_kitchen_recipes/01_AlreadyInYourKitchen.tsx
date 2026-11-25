@@ -328,7 +328,7 @@ export const AlreadyInYourKitchen: React.FC<Props> = ({ navigation, route }) => 
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.brandTitle}>Mama Kitchen</Text>
+        <Text style={styles.brandTitle}>Mama Dish</Text>
 
         <TouchableOpacity
           style={styles.countryBtn}

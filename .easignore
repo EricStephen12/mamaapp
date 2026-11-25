@@ -23,5 +23,8 @@ yarn-error.*
 /android
 .neon
 .github/
+.git/
 server/
+website/
+promo-videos/
 

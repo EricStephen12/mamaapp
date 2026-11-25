@@ -177,7 +177,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
   };
 
   const handleLogout = () => {
-    mamaAlert.alert('Log Out', 'Are you sure you want to log out of Mama Kitchen?', [
+    mamaAlert.alert('Log Out', 'Are you sure you want to log out of Mama Dish?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Log Out',
@@ -281,7 +281,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
 
       const isLive = subscriptionService.isLive();
       mamaAlert.alert(
-        'Mama Kitchen Pro Active',
+        'Mama Dish Pro Active',
         isLive
           ? "You have Unlimited Daily Rolls, Free Healthy Remixes, and 2x XP. Manage or cancel anytime in your phone's App Store / Play Store subscriptions."
           : 'You have Unlimited Daily Rolls, Free Instant Healthy Remixes, and 2x XP (+100 XP per home meal).',
@@ -408,7 +408,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
                     <Ionicons name="leaf-outline" size={13} color={colors.primary} />
                     <Text style={styles.xpPerkHintText} numberOfLines={1}>
                       {isPlusActive
-                        ? 'Mama Kitchen Pro • Unlimited Rolls & 2x XP'
+                        ? 'Mama Dish Pro • Unlimited Rolls & 2x XP'
                         : `Free Plan • ${preferencesStore.getRemainingDailyRolls()}/${FREE_DAILY_ROLL_LIMIT} Rolls left today`}
                     </Text>
                   </View>
@@ -419,7 +419,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
             <View style={[styles.planCard, isPlusActive && styles.planCardActive]}>
               <View style={styles.planCardTextWrap}>
                 <Text style={[styles.planCardTitle, isPlusActive && styles.planCardTitleActive]}>
-                  {isPlusActive ? 'Mama Kitchen Pro' : 'Upgrade to Mama Pro'}
+                  {isPlusActive ? 'Mama Dish Pro' : 'Upgrade to Mama Pro'}
                 </Text>
                 <Text style={[styles.planCardSub, isPlusActive && styles.planCardSubActive]}>
                   {isPlusActive

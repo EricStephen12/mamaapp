@@ -126,7 +126,7 @@ export const MamaKitchenSignUp: React.FC<Props> = ({ navigation }) => {
   const handleTerms = () => {
     mamaAlert.alert(
       'Terms of Service',
-      'Mama Kitchen provides personalized home cooking suggestions and budget planning tools for informational use. You are responsible for verifying food allergies, ingredient safety, and proper cooking temperatures in your kitchen.'
+      'Mama Dish provides personalized home cooking suggestions and budget planning tools for informational use. You are responsible for verifying food allergies, ingredient safety, and proper cooking temperatures in your kitchen.'
     );
   };
 

@@ -103,7 +103,7 @@ export const ConfirmYourPantry: React.FC<Props> = ({ navigation, route }) => {
         >
           <Ionicons name="arrow-back" size={18} color={colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.brandTitle}>Mama Kitchen</Text>
+        <Text style={styles.brandTitle}>Mama Dish</Text>
         <TouchableOpacity
           style={styles.profileBadge}
           onPress={() => setPassModalVisible(true)}

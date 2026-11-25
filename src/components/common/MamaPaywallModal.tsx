@@ -27,7 +27,7 @@ export interface MamaPaywallProps {
 type PlanType = 'monthly' | 'yearly';
 
 /**
- * Full Mama Kitchen Pro Paywall view.
+ * Full Mama Dish Pro Paywall view.
  * Can be rendered inline inside any existing modal or standalone.
  */
 export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
@@ -100,12 +100,12 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
       const restored = await subscriptionService.restore();
       if (restored) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        mamaAlert.alert('Restored!', 'Your Mama Kitchen Pro access has been restored.');
+        mamaAlert.alert('Restored!', 'Your Mama Dish Pro access has been restored.');
         onSubscribed?.();
       } else {
         mamaAlert.alert(
           'Nothing to Restore',
-          'No active Mama Kitchen Pro subscription was found on this account.'
+          'No active Mama Dish Pro subscription was found on this account.'
         );
       }
     } finally {
@@ -158,7 +158,7 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
             </View>
           </View>
 
-          <Text style={styles.heroTitle}>Mama Kitchen Pro</Text>
+          <Text style={styles.heroTitle}>Mama Dish Pro</Text>
           <Text style={styles.heroSubtitle}>
             Cook what you love, whenever you want. Complete kitchen freedom.
           </Text>
