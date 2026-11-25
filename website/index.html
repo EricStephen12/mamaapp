@@ -48,7 +48,12 @@
           </div>
 
           <h1 class="hero-title">
-            Dinner decided in <em>ten seconds.</em>
+            <span class="meal-slot" data-meal-rotator aria-live="polite">
+              <span class="meal-slot-word is-active">Breakfast</span>
+              <span class="meal-slot-word">Lunch</span>
+              <span class="meal-slot-word">Dinner</span>
+            </span>
+            decided in <em>ten seconds.</em>
           </h1>
 
           <p class="hero-lead">
@@ -151,7 +156,7 @@
                 <div class="mama-app-brand-left">
                   <div class="mama-app-monogram">M</div>
                   <span class="mama-app-serif-title">Mama</span>
-                  <span class="mama-period-tag"><span class="simmer-dot"></span>Dinner &#9662;</span>
+                  <span class="mama-period-tag" id="phone-period-btn" style="cursor: pointer;"><span class="simmer-dot" id="phone-simmer-dot"></span><span id="phone-period-label">Breakfast</span> &#9662;</span>
                 </div>
                 <span class="mama-header-chip">Profile</span>
               </div>
@@ -823,7 +828,14 @@
     <section class="olive-closer-section">
       <div class="container">
         <div class="olive-closer-card reveal">
-          <h2 class="olive-closer-title">Dinner, sorted.</h2>
+          <h2 class="olive-closer-title">
+            <span class="meal-slot meal-slot-closer" data-meal-rotator aria-hidden="true">
+              <span class="meal-slot-word is-active">Breakfast,</span>
+              <span class="meal-slot-word">Lunch,</span>
+              <span class="meal-slot-word">Dinner,</span>
+            </span>
+            sorted.
+          </h2>
           <p class="olive-closer-sub">
             Open Mama. Roll once. Start cooking.
           </p>
@@ -914,6 +926,57 @@
             siteToast.classList.remove('show');
           }, 2600);
         });
+      }
+
+      /* 0b. Alternating Breakfast -> Lunch -> Dinner rotator (Hero, Phone & Closer) */
+      var mealPeriods = [
+        { label: 'Breakfast', dot: '#D99B38' },
+        { label: 'Lunch', dot: '#66704A' },
+        { label: 'Dinner', dot: '#C86A3B' }
+      ];
+      var mealIdx = 0;
+      var mealRotators = document.querySelectorAll('[data-meal-rotator]');
+      var phonePeriodLabel = document.getElementById('phone-period-label');
+      var phoneSimmerDot = document.getElementById('phone-simmer-dot');
+      var phonePeriodBtn = document.getElementById('phone-period-btn');
+
+      function advanceMealPeriod() {
+        var prevIdx = mealIdx;
+        mealIdx = (mealIdx + 1) % mealPeriods.length;
+
+        mealRotators.forEach(function (slot) {
+          var words = slot.querySelectorAll('.meal-slot-word');
+          var prevEl = words[prevIdx];
+          var nextEl = words[mealIdx];
+          if (prevEl) {
+            prevEl.classList.remove('is-active');
+            prevEl.classList.add('is-exit');
+            setTimeout(function () {
+              prevEl.classList.remove('is-exit');
+              prevEl.classList.add('is-reset');
+              void prevEl.offsetHeight;
+              prevEl.classList.remove('is-reset');
+            }, 640);
+          }
+          if (nextEl) {
+            nextEl.classList.remove('is-exit', 'is-reset');
+            nextEl.classList.add('is-active');
+          }
+        });
+
+        if (phonePeriodLabel) phonePeriodLabel.textContent = mealPeriods[mealIdx].label;
+        if (phoneSimmerDot) phoneSimmerDot.style.background = mealPeriods[mealIdx].dot;
+      }
+
+      if (mealRotators.length) {
+        var mealTimer = setInterval(advanceMealPeriod, 2400);
+        if (phonePeriodBtn) {
+          phonePeriodBtn.addEventListener('click', function () {
+            clearInterval(mealTimer);
+            advanceMealPeriod();
+            mealTimer = setInterval(advanceMealPeriod, 2400);
+          });
+        }
       }
 
       /* 1. Interactive Roll Dice inside Center Home Phone (cycles all 8 clips + live creator credits) */
