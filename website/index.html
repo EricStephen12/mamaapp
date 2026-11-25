@@ -320,7 +320,7 @@
             <h2 class="section-serif-title">Watch before you cook.</h2>
           </div>
           <div class="reels-controls">
-            <span style="font-size: 13px; font-weight: 600; color: var(--ink-muted);">Hover to pause &middot; Tap for sound</span>
+            <span style="font-size: 13px; font-weight: 600; color: var(--ink-muted);">Tap any clip for sound</span>
           </div>
         </div>
       </div>
@@ -665,7 +665,7 @@
     <section class="recipe-split-section">
       <div class="container recipe-split-grid">
         <div style="display:flex; justify-content:center;" class="reveal">
-          <div class="app-phone-shell" style="width: 304px; cursor: default;">
+          <div class="app-phone-shell guide-phone-shell" style="width: 304px; cursor: default;">
             <div class="phone-notch"></div>
             <div class="app-phone-screen" style="height: 618px;">
               <div class="guide-masthead">
@@ -1184,7 +1184,7 @@
         entries.forEach(function (entry) {
           if (entry.isIntersecting) entry.target.classList.add('visible');
         });
-      }, { threshold: 0.12 });
+      }, { threshold: 0.04, rootMargin: '0px 0px -20px 0px' });
       document.querySelectorAll('.reveal').forEach(function (el) { observer.observe(el); });
     })();
   </script>

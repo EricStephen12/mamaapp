@@ -34,6 +34,8 @@ html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 body {
@@ -43,7 +45,12 @@ body {
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.62;
-  overflow-x: hidden;
+  overflow-x: clip;
+  max-width: 100%;
+}
+
+main {
+  overflow-x: clip;
 }
 
 a {
@@ -855,6 +862,7 @@ a {
   width: 100%;
   overflow: hidden;
   padding: 8px 0 22px;
+  touch-action: pan-y;
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 3.5%, #000 96.5%, transparent 100%);
   mask-image: linear-gradient(90deg, transparent 0%, #000 3.5%, #000 96.5%, transparent 100%);
 }
@@ -1059,27 +1067,6 @@ a {
   opacity: 0.5;
 }
 
-@media (max-width: 640px) {
-  .reel-card {
-    flex: 0 0 236px;
-  }
-}
-
-/* ─── SECTION 2: HORIZONTAL EDITORIAL FOOD PHOTO GALLERY ───────────────── */
-.gallery-strip-section {
-  padding: 40px 0 84px;
-  overflow: hidden;
-}
-
-.gallery-label-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 28px;
-  flex-wrap: wrap;
-}
-
 .section-kicker {
   font-size: 12px;
   font-weight: 800;
@@ -1097,62 +1084,6 @@ a {
   letter-spacing: -0.025em;
   margin: 0;
   color: var(--ink-primary);
-}
-
-.dish-marquee-viewport {
-  overflow: hidden;
-  padding: 6px 0 18px;
-}
-
-.dish-marquee-track {
-  display: flex;
-  gap: 20px;
-  width: max-content;
-  animation: marqueeGlide 44s linear infinite;
-}
-
-.dish-marquee-track:hover {
-  animation-play-state: paused;
-}
-
-@keyframes marqueeGlide {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-
-.editorial-dish-tile {
-  width: 284px;
-  border-radius: 24px;
-  overflow: hidden;
-  background: #FFFFFF;
-  border: 1px solid var(--border-fine);
-  box-shadow: var(--shadow-card);
-  flex-shrink: 0;
-}
-
-.editorial-dish-img {
-  width: 100%;
-  height: 240px;
-  object-fit: cover;
-  display: block;
-}
-
-.editorial-dish-caption {
-  padding: 15px 18px 17px;
-}
-
-.editorial-dish-name {
-  font-family: var(--font-serif);
-  font-size: 20px;
-  font-weight: 600;
-  margin: 0 0 4px;
-  color: var(--ink-primary);
-}
-
-.editorial-dish-meta {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--olive);
 }
 
 /* ─── SECTION 3: ASYMMETRIC EDITORIAL BENTO GRID ───────────────────────── */
@@ -1176,6 +1107,7 @@ a {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  min-width: 0;
 }
 
 .bento-wide { grid-column: span 7; background: #FFFFFF; }
@@ -1605,11 +1537,11 @@ a {
 .site-toast {
   position: fixed;
   left: 50%;
-  bottom: 28px;
+  bottom: 24px;
   transform: translateX(-50%) translateY(18px);
   background: var(--surface-olive-deep);
   color: #F8F5EF;
-  padding: 12px 22px;
+  padding: 12px 20px;
   border-radius: 999px;
   font-size: 13.5px;
   font-weight: 700;
@@ -1620,7 +1552,8 @@ a {
   pointer-events: none;
   z-index: 999;
   transition: opacity 0.22s ease, transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
-  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  text-align: center;
 }
 
 .site-toast.show {
@@ -1855,21 +1788,38 @@ a {
   color: var(--ink-muted);
 }
 
-@media (max-width: 980px) {
+.recipe-split-grid > *,
+.editorial-faq-grid > *,
+.footer-grid > * {
+  min-width: 0;
+}
+
+@media (max-width: 1040px) {
   .app-phone-side-left,
   .app-phone-side-right {
     display: none;
   }
+}
 
+@media (max-width: 980px) {
   .bento-wide,
   .bento-narrow {
     grid-column: span 12;
   }
 
   .recipe-split-grid,
-  .editorial-faq-grid,
-  .footer-grid {
+  .editorial-faq-grid {
     grid-template-columns: 1fr;
+    gap: 36px;
+  }
+
+  .footer-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 28px 20px;
+  }
+
+  .footer-grid > div:first-child {
+    grid-column: 1 / -1;
   }
 
   .nav-hide-mobile {
@@ -1878,5 +1828,327 @@ a {
 
   .legal-card {
     padding: 24px 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .container,
+  .container-narrow {
+    padding: 0 16px;
+  }
+
+  .header-inner {
+    height: 62px;
+    gap: 10px;
+  }
+
+  .brand-link {
+    gap: 7px;
+  }
+
+  .brand-link svg {
+    width: 30px;
+    height: 30px;
+  }
+
+  .brand-wordmark {
+    font-size: 22px;
+  }
+
+  .brand-sub {
+    font-size: 10px;
+    padding: 3px 7px;
+  }
+
+  .nav-links {
+    gap: 14px;
+  }
+
+  .nav-links a {
+    font-size: 13px;
+  }
+
+  .nav-cta-pill {
+    padding: 8px 14px;
+    font-size: 12.5px !important;
+  }
+
+  .editorial-hero {
+    padding: 36px 0 52px;
+  }
+
+  .hero-center-copy {
+    margin-bottom: 30px;
+  }
+
+  .hero-eyebrow {
+    font-size: 11.5px;
+    padding: 5px 12px;
+    margin-bottom: 16px;
+  }
+
+  .hero-title {
+    font-size: clamp(36px, 10.5vw, 48px);
+    line-height: 1.05;
+    margin-bottom: 14px;
+  }
+
+  .hero-lead {
+    font-size: 15.5px;
+    margin-bottom: 22px;
+  }
+
+  .store-badges {
+    gap: 10px;
+    width: 100%;
+    max-width: 340px;
+    margin: 0 auto;
+  }
+
+  .store-badge {
+    flex: 1 1 140px;
+    justify-content: center;
+    padding: 10px 14px;
+    border-radius: 13px;
+  }
+
+  .store-badge-big {
+    font-size: 13.5px;
+  }
+
+  .app-showcase-stage {
+    margin-top: 16px;
+    gap: 0;
+  }
+
+  .app-phone-shell,
+  .app-phone-center,
+  .guide-phone-shell {
+    width: min(100%, 304px) !important;
+    max-width: 100%;
+    border-radius: 40px;
+    padding: 8px;
+  }
+
+  .app-phone-screen,
+  .app-phone-center .app-phone-screen,
+  .guide-phone-shell .app-phone-screen {
+    height: auto !important;
+    min-height: 556px;
+    border-radius: 32px;
+  }
+
+  .mama-side-poster {
+    width: 36px;
+    height: 176px;
+  }
+
+  .mama-center-poster {
+    width: min(62vw, 178px);
+    height: 198px;
+  }
+
+  .deck-dish-title {
+    font-size: 17.5px;
+  }
+
+  .mama-hub-bridge {
+    margin-bottom: 12px;
+  }
+
+  .reels-section {
+    padding: 16px 0 56px;
+  }
+
+  .reels-header-row {
+    margin-bottom: 18px;
+    gap: 8px;
+  }
+
+  .section-serif-title {
+    font-size: clamp(28px, 8vw, 36px);
+  }
+
+  .reels-viewport {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 2%, #000 98%, transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0%, #000 2%, #000 98%, transparent 100%);
+  }
+
+  .reels-marquee-track {
+    gap: 14px;
+    animation-duration: 44s;
+  }
+
+  .reel-card {
+    flex: 0 0 212px;
+    aspect-ratio: 9 / 14;
+    border-radius: 22px;
+  }
+
+  .reel-title {
+    font-size: 17.5px;
+  }
+
+  .reel-meta {
+    font-size: 11px;
+  }
+
+  .reels-whisper {
+    flex-wrap: wrap;
+    text-align: center;
+    font-size: 11px;
+  }
+
+  .bento-section {
+    padding: 52px 0 60px;
+  }
+
+  .bento-grid {
+    gap: 14px;
+    margin-top: 24px;
+  }
+
+  .bento-card {
+    padding: 22px 18px;
+    border-radius: 22px;
+  }
+
+  .bento-card h3 {
+    font-size: 23px;
+  }
+
+  .bento-card p {
+    font-size: 14px;
+  }
+
+  .country-btn,
+  .demo-pantry-btn {
+    padding: 7px 12px;
+    font-size: 12.5px;
+  }
+
+  .live-budget-readout {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .budget-dish-val {
+    font-size: 20px;
+  }
+
+  .budget-price-badge {
+    width: 100%;
+    text-align: left;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 9px 14px;
+  }
+
+  .recipe-split-section {
+    padding: 56px 0;
+  }
+
+  .recipe-steps-timeline {
+    gap: 18px;
+    margin-top: 22px;
+  }
+
+  .timeline-row {
+    gap: 14px;
+  }
+
+  .timeline-num {
+    font-size: 20px;
+    min-width: 28px;
+  }
+
+  .timeline-row h4 {
+    font-size: 15.5px;
+  }
+
+  .editorial-faq-section {
+    padding: 56px 0;
+  }
+
+  .faq-trigger {
+    padding: 18px 0;
+    font-size: 15px;
+  }
+
+  .faq-answer-inner {
+    font-size: 14px;
+  }
+
+  .olive-closer-section {
+    padding: 8px 0 56px;
+  }
+
+  .olive-closer-card {
+    padding: 44px 20px;
+    border-radius: 26px;
+  }
+
+  .olive-closer-title {
+    font-size: clamp(32px, 9.5vw, 44px);
+  }
+
+  .olive-closer-sub {
+    font-size: 15px;
+    margin-bottom: 24px;
+  }
+
+  .site-footer {
+    padding: 44px 0 32px;
+  }
+
+  .footer-grid {
+    margin-bottom: 28px;
+  }
+
+  .footer-bottom {
+    font-size: 12px;
+  }
+
+  .legal-hero {
+    padding: 36px 0 24px;
+  }
+
+  .legal-body {
+    padding: 28px 0 56px;
+  }
+
+  .legal-card {
+    padding: 22px 16px;
+    border-radius: 20px;
+  }
+
+  .legal-card h2 {
+    font-size: 21px;
+    margin: 26px 0 10px;
+    padding-top: 20px;
+  }
+
+  .data-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 13px;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 10px 10px;
+    min-width: 115px;
+  }
+
+  .delete-form-box {
+    padding: 18px 16px;
+  }
+
+  .btn {
+    width: 100%;
+    font-size: 14px;
+    padding: 13px 16px;
   }
 }
