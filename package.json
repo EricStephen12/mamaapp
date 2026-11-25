@@ -38,6 +38,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "build": "echo Static website ready in website/",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit"
   },
