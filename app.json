@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.mamakitchen.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
         "com.android.vending.BILLING"
       ],
