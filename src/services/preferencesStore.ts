@@ -291,8 +291,16 @@ export interface UserKitchenPass {
   passedDishes: string[];
   neverShowDishes: string[];
   shakeToRollEnabled: boolean;
+  notificationsEnabled?: boolean;
+  hasPromptedNotifications?: boolean;
   weekStartKey?: string;
   xpBalance?: number;
+  xpAwardsToday?: number;
+  xpAwardsDateKey?: string;
+  lastXpAwardAt?: number;
+  xpAwardedDishesToday?: string[];
+  bonusRollsUsedToday?: number;
+  bonusRollsDateKey?: string;
   planTier?: 'free' | 'plus';
   dailyRollsCount?: number;
   dailyRollsDateKey?: string;
@@ -372,14 +380,25 @@ const DEFAULT_KITCHEN_PASS: UserKitchenPass = {
   passedDishes: [],
   neverShowDishes: [],
   shakeToRollEnabled: true,
+  notificationsEnabled: false,
+  hasPromptedNotifications: false,
   weekStartKey: getCurrentMondayKey(),
-  xpBalance: 100,
+  xpBalance: 0,
+  xpAwardsToday: 0,
+  xpAwardsDateKey: getTodayDateKey(),
+  lastXpAwardAt: 0,
+  xpAwardedDishesToday: [],
+  bonusRollsUsedToday: 0,
+  bonusRollsDateKey: getTodayDateKey(),
   planTier: 'free',
   dailyRollsCount: 0,
   dailyRollsDateKey: getTodayDateKey(),
 };
 
 let currentKitchenPass: UserKitchenPass = { ...DEFAULT_KITCHEN_PASS };
+let lastCookXpOutcome: { awarded: number; reason?: 'daily_cap' | 'cooldown' | 'duplicate_dish' } = {
+  awarded: 0,
+};
 const listeners = new Set<(pass: UserKitchenPass) => void>();
 
 export function formatCurrency(
@@ -440,6 +459,10 @@ export function convertMealCost(
 }
 
 export const FREE_DAILY_ROLL_LIMIT = 2;
+export const MAX_DAILY_XP_AWARDS = 2;
+export const XP_AWARD_COOLDOWN_MS = 3 * 60 * 60 * 1000; // 3 hours between XP meals
+export const BONUS_ROLL_XP_COST = 100;
+export const MAX_DAILY_XP_BONUS_ROLLS = 1;
 
 export const preferencesStore = {
   getKitchenPass(): UserKitchenPass {
@@ -569,13 +592,38 @@ export const preferencesStore = {
     const currentXp =
       typeof currentKitchenPass.xpBalance === 'number'
         ? currentKitchenPass.xpBalance
-        : (currentKitchenPass.likedDishes || []).length * 50 + 100;
+        : 0;
     let nextXp = currentXp;
+    const today = getTodayDateKey();
+    const isSameXpDay = currentKitchenPass.xpAwardsDateKey === today;
+    let nextXpAwardsToday = isSameXpDay ? currentKitchenPass.xpAwardsToday || 0 : 0;
+    let nextAwardedDishes = isSameXpDay ? currentKitchenPass.xpAwardedDishesToday || [] : [];
+    let nextLastXpAwardAt = currentKitchenPass.lastXpAwardAt || 0;
+
     if (isCooked) {
       const costInLocalCurrency = getMealCostInCurrency(mealCostUsd, currentKitchenPass.currencyCode);
       newSpent = Math.min(currentKitchenPass.weeklyBudget, currentKitchenPass.spentThisWeek + costInLocalCurrency);
-      const xpReward = currentKitchenPass.planTier === 'plus' ? 100 : 50;
-      nextXp = currentXp + xpReward;
+
+      const normalizedDish = dishId.trim().toLowerCase();
+      const now = Date.now();
+      const alreadyAwardedDish = nextAwardedDishes.includes(normalizedDish);
+      const hitDailyCap = nextXpAwardsToday >= MAX_DAILY_XP_AWARDS;
+      const inCooldown = nextLastXpAwardAt > 0 && now - nextLastXpAwardAt < XP_AWARD_COOLDOWN_MS;
+
+      if (alreadyAwardedDish) {
+        lastCookXpOutcome = { awarded: 0, reason: 'duplicate_dish' };
+      } else if (hitDailyCap) {
+        lastCookXpOutcome = { awarded: 0, reason: 'daily_cap' };
+      } else if (inCooldown) {
+        lastCookXpOutcome = { awarded: 0, reason: 'cooldown' };
+      } else {
+        const xpReward = currentKitchenPass.planTier === 'plus' ? 100 : 50;
+        nextXp = currentXp + xpReward;
+        nextXpAwardsToday += 1;
+        nextAwardedDishes = [...nextAwardedDishes, normalizedDish];
+        nextLastXpAwardAt = now;
+        lastCookXpOutcome = { awarded: xpReward };
+      }
     }
 
     return this.updateKitchenPass({
@@ -583,20 +631,63 @@ export const preferencesStore = {
       passedDishes,
       spentThisWeek: newSpent,
       xpBalance: nextXp,
+      xpAwardsToday: nextXpAwardsToday,
+      xpAwardsDateKey: today,
+      lastXpAwardAt: nextLastXpAwardAt,
+      xpAwardedDishesToday: nextAwardedDishes,
     });
+  },
+
+  getLastCookXpOutcome(): { awarded: number; reason?: 'daily_cap' | 'cooldown' | 'duplicate_dish' } {
+    return lastCookXpOutcome;
   },
 
   getXpBalance(): number {
     if (typeof currentKitchenPass.xpBalance === 'number') {
       return currentKitchenPass.xpBalance;
     }
-    return (currentKitchenPass.likedDishes || []).length * 50 + 100;
+    return 0;
   },
 
   spendXp(amount: number): boolean {
     const currentXp = this.getXpBalance();
     if (currentXp < amount) return false;
     this.updateKitchenPass({ xpBalance: currentXp - amount });
+    return true;
+  },
+
+  canRedeemXpBonusRoll(): {
+    allowed: boolean;
+    reason?: 'already_used' | 'not_enough_xp';
+    cost: number;
+  } {
+    const today = getTodayDateKey();
+    const usedBonusToday =
+      currentKitchenPass.bonusRollsDateKey === today
+        ? currentKitchenPass.bonusRollsUsedToday || 0
+        : 0;
+    if (usedBonusToday >= MAX_DAILY_XP_BONUS_ROLLS) {
+      return { allowed: false, reason: 'already_used', cost: BONUS_ROLL_XP_COST };
+    }
+    if (this.getXpBalance() < BONUS_ROLL_XP_COST) {
+      return { allowed: false, reason: 'not_enough_xp', cost: BONUS_ROLL_XP_COST };
+    }
+    return { allowed: true, cost: BONUS_ROLL_XP_COST };
+  },
+
+  redeemXpBonusRoll(): boolean {
+    const check = this.canRedeemXpBonusRoll();
+    if (!check.allowed) return false;
+    const today = getTodayDateKey();
+    const usedBonusToday =
+      currentKitchenPass.bonusRollsDateKey === today
+        ? currentKitchenPass.bonusRollsUsedToday || 0
+        : 0;
+    this.updateKitchenPass({
+      xpBalance: this.getXpBalance() - BONUS_ROLL_XP_COST,
+      bonusRollsUsedToday: usedBonusToday + 1,
+      bonusRollsDateKey: today,
+    });
     return true;
   },
 
@@ -690,6 +781,17 @@ export const preferencesStore = {
 
   setShakeToRollEnabled(enabled: boolean): UserKitchenPass {
     return this.updateKitchenPass({ shakeToRollEnabled: enabled });
+  },
+
+  setNotificationsEnabled(enabled: boolean): UserKitchenPass {
+    return this.updateKitchenPass({
+      notificationsEnabled: enabled,
+      hasPromptedNotifications: true,
+    });
+  },
+
+  markNotificationsPrompted(): UserKitchenPass {
+    return this.updateKitchenPass({ hasPromptedNotifications: true });
   },
 
   setBodyGoal(goal: BodyGoal): UserKitchenPass {

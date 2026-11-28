@@ -27,4 +27,6 @@ yarn-error.*
 server/
 website/
 promo-videos/
+play-store-assets/
+.agents/
 

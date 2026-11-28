@@ -16,9 +16,10 @@ Produce fluid, hand-drawn boiling-ink stickman comedy episodes (1080×1920 @ 24f
 
 ## Core Marketing & Comedy Strategy
 
+- **Product Positioning (CRITICAL):** **Mama Dish is a 10-second Meal Decision-Maker ("Breakfast / Lunch / Dinner decided in 10 seconds") — NOT a recipe app!** Never portray it as a recipe library or cooking tutorial app. Its superpower is ending "what should I eat?" decision paralysis via **Shake / Roll the Dice** using your taste, budget, and what's at home.
 - **4:1 Ratio (Pure Comedy → Subtle Shade):** Create **3–4 pure comedy episodes** (zero app mentions) for every **1 subtle Mama Dish mix-in episode**.
-- **Organic Mix-In Rule:** On mix-in episodes, keep 90% pure comedy and show **Mama Dish** naturally in the character's hand for 2.5–3.8 seconds as the story's plot twist (`drawMamaDishPhone`). Never add pushy "Download now!" ad banners or sales voiceovers.
-- **Universally Relatable Slapstick:** Base every episode on a universally lived kitchen, food, or everyday human trauma (e.g., 2 AM microwave, hot oil riot shield, ceiling pancake, couch "what should we eat?" skeletons, ice cream tub frozen stew + sewing kit cookie tin, wet sink food + 900 PSI spoon). Avoid AI-written stand-up dialogue jokes.
+- **Anti-Commercial Rule:** NEVER stop the cartoon for a full-screen greyed-out app demo or cheesy *"Look how amazing my app is!"* happy-ending commercial. Even when Mama Dish appears, keep it as a **quick in-scene prop inside an unhinged, laugh-out-loud comedy disaster/punchline** so viewers laugh from start to finish.
+- **Universally Relatable Slapstick:** Base every episode on a universally lived kitchen, food, or everyday human trauma. Avoid AI-written stand-up dialogue jokes.
 
 ## The 5 Non-Negotiable Craft Laws
 
@@ -26,7 +27,7 @@ Produce fluid, hand-drawn boiling-ink stickman comedy episodes (1080×1920 @ 24f
 2. **Floor-Locked 2-Bone IK Walking:** Always use `computeWalkCycle` + `floorY` from [sketchEngine.js](../../../promo-videos/stickman-studio/sketchEngine.js). Match walk distances to exact half/full stride multiples (`strideLen * 2`: `184px` tiptoe, `208px` walk, `300px` sprint) so planted feet never slide or float and both feet land flat when stopping.
 3. **Smooth Continuous Interpolation:** Drive camera (`camX`, `camY`, `camZoom`), arms (`rElbow`, `rHand`, `lElbow`, `lHand`), `lean`, `squash`, and `headTilt` with cubic smoothstep keyframe tracks (`evalScalar` / `evalVec2`) — never abrupt pose teleports.
 4. **Exaggerated, Non-Repetitive Payoffs:** Vary episode endings (mid-air spinning-wheel burnout + Mach-10 rocket launch via `drawExaggeratedRun`, anime rage table flip, soul floating out with angel halo, diving through a window leaving a stickman-shaped hole, etc.). Keep `dir = 1 | -1` and world-space viewport culling so `@resvg/resvg-js` never clips an empty off-screen opacity group (`geom.rs:27` panic).
-5. **Fresh, Zero-Clash Audio Design:** Read [references/audio_library.md](./references/audio_library.md) before designing `AUDIO_PLAN`. Rotate across all 33+ SFX and 4 CC-BY music tracks (and download new scene-specific SFX from Myinstants when needed). Always mute background music cleanly (`muteWindows`) under punchlines, leave air between consecutive loud SFX, and **audition the mixed `.m4a` via `read_file`** before rendering the full MP4.
+5. **Subtle BGM & Zero-Reuse Context SFX:** Read [references/audio_library.md](./references/audio_library.md) before designing `AUDIO_PLAN`. Keep background music subtle (`0.13–0.16` — light glue underneath, NEVER loud enough to compete with or take over the comedy!), stick to ONE clean track per episode, and cut music silent on major punchlines (`muteWindows`). **NEVER recycle the same generic 5–8 SFX (`vine_boom`, `tom_scream`, `bruh`, `oh_my_god`) across back-to-back episodes!** Always match the exact physical action with realistic/specific SFX from our 60-SFX library (or download fresh ones first!) — e.g., singing mosquito, real light switch click, keys jingle, flamethrower, Kirby vacuum, prison gate slam, wood break, crispy crunch, pots & pans crash, duct tape rip, heavenly choir, viral snore. Always audition every new clip AND the final mixed `.m4a` via `read_file` before rendering.
 
 ## Windows Rendering Rules (`@resvg/resvg-js`)
 
@@ -60,6 +61,5 @@ Produce fluid, hand-drawn boiling-ink stickman comedy episodes (1080×1920 @ 24f
    node promo-videos/stickman-studio/<file>.js
    ```
    - Extract an 8-frame contact sheet from the final encoded `.mp4` with `ffmpeg` and inspect via `read_file`.
-   - For audio-only tweaks on an already rendered MP4, remix the `.m4a` and fast-mux in ~1 second using `ffmpeg -c:v copy -c:a copy`.
+   - For audio-only tweaks on an already rendered MP4, remix the `.m4a` and fast-mux in ~1.5 seconds using `node promo-videos/stickman-studio/remux_audio.js <episode.js>`.
 5. **Serve in the Click-Click Studio:** Ensure `promo-videos/stickman-studio/studio_server.js` is running on `http://localhost:3334` (`BypassSandbox: true`, `IsDaemon: true`) — new MP4s in `promo-videos/stickman-studio/out/` and new MP3s in `audio/sfx/` appear automatically on refresh.
-

@@ -38,6 +38,7 @@ import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere'
 import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
 import { SteamWisps } from '../../components/signature/SteamWisps';
 import { MamaPlatePlaceholder } from '../../components/common/MamaPlatePlaceholder';
+import { MamaCharacter } from '../../components/common/MamaCharacter';
 import { VideoService, MealVideoData } from '../../services/videoService';
 import { MealVideoPlayer } from '../../components/MealVideoPlayer';
 
@@ -658,22 +659,17 @@ export const DiscoverYourNextMeal: React.FC<Props> = ({ navigation }) => {
                 <>
                   <ActivityIndicator size="large" color={colors.primary} />
                   <Text style={styles.emptyFeedTitle}>
-                    {activeFilter === 'all'
-                      ? `Finding fresh ${kitchenPass.countryName} home ideas`
-                      : `Finding ${DISCOVER_FILTERS.find((f) => f.id === activeFilter)?.label || ''} ${kitchenPass.countryName} dishes`}
-                  </Text>
-                  <Text style={styles.emptyFeedSub}>
-                    Tailoring dishes to your kitchen and local ingredients...
+                    Finding {kitchenPass.countryName} dishes...
                   </Text>
                 </>
               ) : (
                 <>
-                  <Ionicons name="compass-outline" size={32} color={colors.primary} />
+                  <MamaCharacter pose="hungry" size={88} isSpeaking={false} />
                   <Text style={styles.emptyFeedTitle}>
-                    Couldn&apos;t load {kitchenPass.countryName} ideas
+                    Couldn&apos;t load dishes
                   </Text>
                   <Text style={styles.emptyFeedSub}>
-                    Check your connection and tap below to refresh.
+                    Check your connection and retry.
                   </Text>
                   <TouchableOpacity
                     style={styles.retryFeedBtn}

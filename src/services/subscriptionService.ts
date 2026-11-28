@@ -46,6 +46,7 @@ const ANDROID_KEY =
 
 let configured = false;
 let latestCustomerInfo: CustomerInfo | null = null;
+let lastErrorMessage: string | null = null;
 const entitlementListeners = new Set<(isPro: boolean, info: CustomerInfo | null) => void>();
 
 function getApiKey(): string {
@@ -108,6 +109,11 @@ export const subscriptionService = {
   /** True when RevenueCat SDK is configured on a native platform */
   isLive(): boolean {
     return configured;
+  },
+
+  /** Most recent diagnostic error message from RevenueCat / Play Billing */
+  getLastError(): string | null {
+    return lastErrorMessage;
   },
 
   /** Subscribe to live mama_kitchen_pro entitlement updates */
@@ -233,14 +239,22 @@ export const subscriptionService = {
 
   /**
    * Present the hosted RevenueCat Paywall modal (Monthly / Yearly / Lifetime).
-   * Returns 'unavailable' when native Paywall UI isn't supported (e.g. Web / Expo Go fallback).
+   * Pre-verifies offerings exist so Android never flashes an empty-offering error screen.
+   * Returns 'unavailable' when native Paywall UI isn't ready so the warm in-app paywall opens cleanly.
    */
   async presentPaywall(): Promise<PurchaseOutcome> {
+    lastErrorMessage = null;
     if (!configured || Platform.OS === 'web') {
       return 'unavailable';
     }
     try {
+      const bundle = await this.getAvailablePackages();
+      if (!bundle.offering || bundle.all.length === 0) {
+        lastErrorMessage = 'Store subscriptions are still syncing with Google Play.';
+        return 'unavailable';
+      }
       const result: PAYWALL_RESULT = await RevenueCatUI.presentPaywall({
+        offering: bundle.offering,
         displayCloseButton: true,
       });
       await this.getCustomerInfo();
@@ -256,10 +270,13 @@ export const subscriptionService = {
           return 'unavailable';
         case PAYWALL_RESULT.ERROR:
         default:
+          lastErrorMessage = 'Could not load the Google Play checkout sheet.';
           return 'error';
       }
     } catch (err) {
-      console.warn('[subscriptionService] presentPaywall unavailable, using fallback:', err);
+      const msg = (err as PurchasesError)?.message || String(err);
+      lastErrorMessage = msg;
+      console.warn('[subscriptionService] presentPaywall unavailable, using fallback:', msg);
       return 'unavailable';
     }
   },
@@ -268,11 +285,18 @@ export const subscriptionService = {
    * Present the RevenueCat Paywall ONLY if mama_kitchen_pro is not active.
    */
   async presentPaywallIfNeeded(): Promise<PurchaseOutcome> {
+    lastErrorMessage = null;
     if (!configured || Platform.OS === 'web') {
       return 'unavailable';
     }
     try {
+      const bundle = await this.getAvailablePackages();
+      if (!bundle.offering || bundle.all.length === 0) {
+        lastErrorMessage = 'Store subscriptions are still syncing with Google Play.';
+        return 'unavailable';
+      }
       const result: PAYWALL_RESULT = await RevenueCatUI.presentPaywallIfNeeded({
+        offering: bundle.offering,
         requiredEntitlementIdentifier: PRO_ENTITLEMENT_ID,
         displayCloseButton: true,
       });
@@ -289,10 +313,13 @@ export const subscriptionService = {
           return preferencesStore.isMamaPlus() ? 'purchased' : 'unavailable';
         case PAYWALL_RESULT.ERROR:
         default:
+          lastErrorMessage = 'Could not load the Google Play checkout sheet.';
           return 'error';
       }
     } catch (err) {
-      console.warn('[subscriptionService] presentPaywallIfNeeded unavailable, using fallback:', err);
+      const msg = (err as PurchasesError)?.message || String(err);
+      lastErrorMessage = msg;
+      console.warn('[subscriptionService] presentPaywallIfNeeded unavailable, using fallback:', msg);
       return 'unavailable';
     }
   },
@@ -324,6 +351,7 @@ export const subscriptionService = {
 
   /** Direct package purchase (Monthly, Yearly, or Lifetime) */
   async purchasePackage(pkg: PurchasesPackage): Promise<PurchaseOutcome> {
+    lastErrorMessage = null;
     if (!configured) {
       preferencesStore.setPlanTier('plus');
       return 'preview';
@@ -331,17 +359,22 @@ export const subscriptionService = {
     try {
       const { customerInfo } = await Purchases.purchasePackage(pkg);
       const active = syncPlanTier(customerInfo);
+      if (!active) {
+        lastErrorMessage = 'Purchase completed but entitlement mama_kitchen_pro was not granted yet.';
+      }
       return active ? 'purchased' : 'error';
     } catch (err) {
       const rcErr = err as PurchasesError & { userCancelled?: boolean };
       if (rcErr?.userCancelled) return 'cancelled';
-      console.warn('[subscriptionService] purchasePackage failed:', rcErr?.message || err);
+      lastErrorMessage = rcErr?.message || String(err);
+      console.warn('[subscriptionService] purchasePackage failed:', lastErrorMessage);
       return 'error';
     }
   },
 
   /** Convenience helper: purchase the monthly package (or first available package) */
   async purchasePlus(plan: 'monthly' | 'yearly' | 'lifetime' = 'monthly'): Promise<PurchaseOutcome> {
+    lastErrorMessage = null;
     if (!configured) {
       preferencesStore.setPlanTier('plus');
       return 'preview';
@@ -353,7 +386,10 @@ export const subscriptionService = {
       bundle.monthly ||
       bundle.all[0];
 
-    if (!targetPkg) return 'error';
+    if (!targetPkg) {
+      lastErrorMessage = 'No active Google Play subscription package found yet. Make sure subscriptions are active in Play Console & RevenueCat.';
+      return 'error';
+    }
     return this.purchasePackage(targetPkg);
   },
 

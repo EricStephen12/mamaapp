@@ -11,6 +11,7 @@ import { preferencesStore } from './src/services/preferencesStore';
 import { pantryService } from './src/services/api/pantryService';
 import { savedMealsService } from './src/services/api/savedMealsService';
 import { subscriptionService } from './src/services/subscriptionService';
+import { notificationService } from './src/services/notificationService';
 import { UserDataBankProvider } from './src/context/UserDataBankContext';
 import { MamaAlertHost } from './src/components/common/MamaAlertHost';
 import { colors } from './src/theme/colors';
@@ -56,12 +57,14 @@ export default function App() {
       pantryService.fetchAll().catch(() => {});
       savedMealsService.fetchAll().catch(() => {});
       subscriptionService.init(tokenStore.getUser()?.id).catch(() => {});
+      notificationService.syncScheduleIfEnabled().catch(() => {});
     };
     initApp();
 
     const appStateSub = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         checkAndApplyOtaUpdate();
+        notificationService.syncScheduleIfEnabled().catch(() => {});
       }
     });
     return () => appStateSub.remove();

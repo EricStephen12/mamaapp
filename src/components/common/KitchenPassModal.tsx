@@ -25,6 +25,7 @@ import {
   formatCurrency,
 } from '../../services/preferencesStore';
 import { subscriptionService } from '../../services/subscriptionService';
+import { notificationService } from '../../services/notificationService';
 import { authService } from '../../services/api/authService';
 import { pantryService } from '../../services/api/pantryService';
 import { rollService } from '../../services/api/rollService';
@@ -33,33 +34,53 @@ import { useUserDataBank } from '../../context/UserDataBankContext';
 import { useModalBottomInset } from '../../hooks/useBottomNavInset';
 import { MamaPaywallContent } from './MamaPaywallModal';
 import { MamaAlertHost } from './MamaAlertHost';
+import { MamaCharacter } from './MamaCharacter';
+
+export type KitchenPassInitialTab =
+  | 'gear'
+  | 'time'
+  | 'flavor'
+  | 'diet'
+  | 'goal'
+  | 'account'
+  | 'budget';
+
+type SettingsTab = 'account' | 'budget' | 'taste';
 
 interface KitchenPassModalProps {
   visible: boolean;
   onClose: () => void;
-  initialTab?: 'gear' | 'time' | 'flavor' | 'diet' | 'goal' | 'account';
+  initialTab?: KitchenPassInitialTab;
 }
+
+const mapInitialTab = (tab?: KitchenPassInitialTab): SettingsTab => {
+  if (tab === 'budget') return 'budget';
+  if (tab === 'gear' || tab === 'time' || tab === 'flavor' || tab === 'diet' || tab === 'goal') {
+    return 'taste';
+  }
+  return 'account';
+};
 
 const GEAR_OPTIONS = [
   { id: 'one_pan', title: '1 Pan', fullTitle: '1 Pan & Burner', icon: 'flame-outline' as const },
   { id: 'air_fryer', title: 'Air Fryer', fullTitle: 'Air Fryer & Stovetop', icon: 'flash-outline' as const },
-  { id: 'full_kitchen', title: 'Full Kitchen', fullTitle: 'Full Kitchen', icon: 'restaurant-outline' as const },
+  { id: 'full_kitchen', title: 'Full', fullTitle: 'Full Kitchen', icon: 'restaurant-outline' as const },
 ];
 
 const TIME_OPTIONS = [
-  { id: 'under_15', minutes: 15, title: 'Under 15m', fullTitle: 'Under 15 mins', icon: 'speedometer-outline' as const },
+  { id: 'under_15', minutes: 15, title: '< 15m', fullTitle: 'Under 15 mins', icon: 'speedometer-outline' as const },
   { id: 'standard', minutes: 25, title: '20–30m', fullTitle: '20 to 30 mins', icon: 'time-outline' as const },
   { id: 'no_rush', minutes: 45, title: 'No Rush', fullTitle: 'No rush', icon: 'cafe-outline' as const },
 ];
 
 const FLAVOR_OPTIONS = [
-  { id: 'african_caribbean', title: 'African & Caribbean', icon: 'flame-outline' as const },
-  { id: 'weeknight_comfort', title: 'Everyday Comfort', icon: 'nutrition-outline' as const },
-  { id: 'global', title: 'Surprise Me', icon: 'shuffle-outline' as const },
+  { id: 'african_caribbean', title: 'Afro-Carib', fullTitle: 'African & Caribbean', icon: 'flame-outline' as const },
+  { id: 'weeknight_comfort', title: 'Comfort', fullTitle: 'Everyday Comfort', icon: 'nutrition-outline' as const },
+  { id: 'global', title: 'Surprise', fullTitle: 'Surprise Me', icon: 'shuffle-outline' as const },
 ];
 
 const DIETARY_OPTIONS = [
-  { id: 'none', title: 'Eat Everything' },
+  { id: 'none', title: 'Everything' },
   { id: 'vegetarian', title: 'Vegetarian' },
   { id: 'vegan', title: 'Vegan' },
   { id: 'halal', title: 'Halal' },
@@ -72,15 +93,22 @@ const BODY_GOAL_OPTIONS: {
   title: string;
   icon: 'body-outline' | 'leaf-outline' | 'restaurant-outline' | 'fitness-outline';
 }[] = [
-  { id: 'curves_glutes', title: 'Curves & Glutes', icon: 'body-outline' },
+  { id: 'balanced', title: 'Balanced', icon: 'fitness-outline' },
   { id: 'reduce_weight', title: 'Lose Weight', icon: 'leaf-outline' },
   { id: 'add_weight', title: 'Gain Weight', icon: 'restaurant-outline' },
-  { id: 'balanced', title: 'Balanced', icon: 'fitness-outline' },
+  { id: 'curves_glutes', title: 'Curves & Glutes', icon: 'body-outline' },
+];
+
+const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'account', label: 'Account' },
+  { id: 'budget', label: 'Budget' },
+  { id: 'taste', label: 'Taste' },
 ];
 
 export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
   visible,
   onClose,
+  initialTab,
 }) => {
   const { user, isLoggedIn, kitchenPass: currentPass } = useUserDataBank();
   const navigation = useNavigation<any>();
@@ -89,6 +117,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
   const matchedCountry = SUPPORTED_COUNTRIES.find((c) => c.id === currentPass.country);
   const fallbackBudget = matchedCountry?.defaultWeeklyBudget ?? currentPass.weeklyBudget ?? 50;
 
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => mapInitialTab(initialTab));
   const [selectedCountryId, setSelectedCountryId] = useState<string>(currentPass.country || 'NG');
   const [selectedCurrencyCode, setSelectedCurrencyCode] = useState<string>(currentPass.currencyCode || 'NGN');
   const [weeklyBudgetString, setWeeklyBudgetString] = useState<string>(
@@ -112,6 +141,9 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
   const [shakeEnabled, setShakeEnabled] = useState<boolean>(
     currentPass.shakeToRollEnabled !== false
   );
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(
+    Boolean(currentPass.notificationsEnabled)
+  );
 
   useEffect(() => {
     const unsub = subscriptionService.subscribe((isPro) => {
@@ -126,6 +158,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
       const countryMatch = SUPPORTED_COUNTRIES.find((c) => c.id === pass.country);
       const defaultBudget = countryMatch?.defaultWeeklyBudget ?? pass.weeklyBudget ?? 50;
       // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveTab(mapInitialTab(initialTab));
       setSelectedCountryId(pass.country || 'NG');
       setSelectedCurrencyCode(pass.currencyCode || 'NGN');
       setWeeklyBudgetString(String(pass.weeklyBudget || defaultBudget));
@@ -142,9 +175,10 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
       setHiddenDishes(pass.neverShowDishes || []);
       setIsPlusActive(pass.planTier === 'plus');
       setShakeEnabled(pass.shakeToRollEnabled !== false);
+      setNotificationsEnabled(Boolean(pass.notificationsEnabled));
       setShowPaywall(false);
     }
-  }, [visible]);
+  }, [visible, initialTab]);
 
   const handleSelectCountry = (country: SupportedCountry) => {
     Haptics.selectionAsync().catch(() => {});
@@ -177,7 +211,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
   };
 
   const handleLogout = () => {
-    mamaAlert.alert('Log Out', 'Are you sure you want to log out of Mama Dish?', [
+    mamaAlert.alert('Log Out', 'Log out of Mama Dish on this device?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Log Out',
@@ -197,7 +231,7 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
   const handleDeleteAccount = () => {
     mamaAlert.alert(
       'Delete Account',
-      'Are you sure you want to permanently delete your account and all associated data? This action cannot be undone.',
+      "Permanently delete your account and saved data? This can't be undone.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -256,14 +290,36 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
       timeLimitMinutes: chosenTime.minutes,
       timeLimitLabel: chosenTime.fullTitle,
       cuisineAnchor: selectedFlavorId,
-      cuisineLabel: chosenFlavor ? chosenFlavor.title : 'African & Caribbean',
+      cuisineLabel: chosenFlavor ? chosenFlavor.fullTitle : 'African & Caribbean',
       dietaryRestrictions: finalDiets,
       bodyGoal: selectedGoal,
       bodyGoalLabel: chosenGoal ? chosenGoal.title : 'Balanced',
       shakeToRollEnabled: shakeEnabled,
     });
 
+    // Refresh upcoming Mama Nudges with updated country / currency / budget
+    notificationService.syncScheduleIfEnabled().catch(() => {});
+
     onClose();
+  };
+
+  const handleToggleNotifications = async () => {
+    Haptics.selectionAsync().catch(() => {});
+    if (notificationsEnabled) {
+      setNotificationsEnabled(false);
+      await notificationService.disableNotifications();
+      return;
+    }
+    const status = await notificationService.enableNotifications();
+    if (status === 'granted') {
+      setNotificationsEnabled(true);
+    } else {
+      setNotificationsEnabled(false);
+      mamaAlert.alert(
+        'Notifications Off',
+        'Enable notifications for Mama in your phone settings so Mama can send dinner nudges.'
+      );
+    }
   };
 
   /** Upgrade (paywall) when Free, Manage / cancel (Customer Center) when Pro */
@@ -271,7 +327,6 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
     if (isPlusActive) {
-      // Native RevenueCat Customer Center: manage, cancel, restore, refunds
       const openedCustomerCenter = await subscriptionService.presentCustomerCenter();
       if (openedCustomerCenter) {
         const stillPro = await subscriptionService.checkProEntitlement();
@@ -281,16 +336,16 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
 
       const isLive = subscriptionService.isLive();
       mamaAlert.alert(
-        'Mama Dish Pro Active',
+        'Mama Pro Active',
         isLive
-          ? "You have Unlimited Daily Rolls, Free Healthy Remixes, and 2x XP. Manage or cancel anytime in your phone's App Store / Play Store subscriptions."
-          : 'You have Unlimited Daily Rolls, Free Instant Healthy Remixes, and 2x XP (+100 XP per home meal).',
+          ? 'Unlimited rolls, free healthy remixes, and 2x XP. Manage anytime in your store subscriptions.'
+          : 'Unlimited rolls, free healthy remixes, and 2x XP.',
         isLive
           ? [{ text: 'OK', style: 'cancel' }]
           : [
               { text: 'Keep Pro', style: 'cancel' },
               {
-                text: 'Cancel Subscription',
+                text: 'Cancel Plan',
                 style: 'destructive',
                 onPress: () => {
                   subscriptionService.cancelPreview();
@@ -302,7 +357,6 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
       return;
     }
 
-    // Try native RevenueCat Paywall if running with native StoreKit/Play Billing
     if (subscriptionService.isLive()) {
       const paywallOutcome = await subscriptionService.presentPaywall();
       if (paywallOutcome === 'purchased' || paywallOutcome === 'restored') {
@@ -313,7 +367,6 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
       if (paywallOutcome === 'cancelled') return;
     }
 
-    // Present full in-app Mama Paywall UI (works seamlessly in Expo Go & dev builds)
     setShowPaywall(true);
   };
 
@@ -324,6 +377,10 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
     };
   const parsedWeeklyBudget = parseFloat(weeklyBudgetString.replace(/[^0-9.]/g, '')) || fallbackBudget;
   const remainingWeeklyBudget = Math.max(0, parsedWeeklyBudget - spentThisWeek);
+  const displayName =
+    (isLoggedIn && user) || user
+      ? user?.name?.trim() || user?.email?.split('@')[0] || "Mama's Child"
+      : 'Guest';
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -348,9 +405,9 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
               <View style={styles.dragHandle} />
             </View>
 
-            {/* Sheet Header */}
+            {/* Clean Sheet Header */}
             <View style={styles.header}>
-              <Text style={styles.sheetTitle}>Profile &amp; Settings</Text>
+              <Text style={styles.sheetTitle}>Settings</Text>
               <TouchableOpacity
                 style={styles.closeBtn}
                 onPress={onClose}
@@ -360,454 +417,549 @@ export const KitchenPassModal: React.FC<KitchenPassModalProps> = ({
               </TouchableOpacity>
             </View>
 
+            {/* Calm 3-Tab Segmented Control */}
+            <View style={styles.segmentWrap}>
+              <View style={styles.segmentTrack}>
+                {SETTINGS_TABS.map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <TouchableOpacity
+                      key={tab.id}
+                      style={[styles.segmentBtn, isActive && styles.segmentBtnActive]}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        setActiveTab(tab.id);
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>
+                        {tab.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
             <ScrollView
               style={styles.scrollArea}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {/* Clean Warm Profile Card: Name, Email, XP Earned & Perks */}
-              <View style={styles.profileCard}>
-                <View style={styles.profileRow}>
-                  <View style={styles.profileLeft}>
-                    <View style={styles.avatarCircle}>
-                      <Ionicons name="person" size={18} color={colors.primary} />
-                    </View>
-                    <View style={styles.profileTextWrap}>
-                      <Text style={styles.profileName} numberOfLines={1}>
-                        {(isLoggedIn && user) || user
-                          ? user?.name?.trim() || user?.email?.split('@')[0] || "Mama's Child"
-                          : 'Guest'}
-                      </Text>
-                      <Text style={styles.profileEmail} numberOfLines={1}>
-                        {user?.email || 'Not signed in'}
-                      </Text>
+              {/* ===================== TAB 1: ACCOUNT ===================== */}
+              {activeTab === 'account' && (
+                <>
+                  {/* Clean Identity Card */}
+                  <View style={styles.groupCard}>
+                    <View style={styles.profileRow}>
+                      <View style={styles.profileLeft}>
+                        <View style={styles.bowlAvatarBadge}>
+                          <MamaCharacter pose="welcoming" size={44} isSpeaking={false} hideArms />
+                        </View>
+                        <View style={styles.profileTextWrap}>
+                          <Text style={styles.profileName} numberOfLines={1}>
+                            {displayName}
+                          </Text>
+                          <Text style={styles.profileEmail} numberOfLines={1}>
+                            {user?.email ||
+                              (isPlusActive
+                                ? 'Mama Pro'
+                                : `${preferencesStore.getRemainingDailyRolls()}/${FREE_DAILY_ROLL_LIMIT} rolls left today`)}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.xpPill}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          mamaAlert.alert(
+                            'Your Mama XP',
+                            'Earn +50 XP per home meal (up to 2/day). Spend 50 XP for a Healthy Swap or 100 XP for 1 daily bonus roll.'
+                          );
+                        }}
+                      >
+                        <Ionicons name="flame" size={14} color={colors.primary} />
+                        <Text style={styles.xpPillText}>
+                          {preferencesStore.getXpBalance()} XP
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.xpPill}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      mamaAlert.alert(
-                        'Your Mama XP',
-                        'Earn +50 XP every time you eat at home.\n\n• Spend 50 XP on any dish to unlock a "Make It Healthy" remix.\n• Keep stacking your XP for upcoming Partner Grocery & Food Discounts (Coming Soon)!'
-                      );
-                    }}
-                  >
-                    <Ionicons name="flame" size={14} color={colors.primary} />
-                    <Text style={styles.xpPillText}>
-                      {preferencesStore.getXpBalance()} XP
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.xpPerkHintRow}>
-                  <View style={styles.xpPerkLeftWrap}>
-                    <Ionicons name="leaf-outline" size={13} color={colors.primary} />
-                    <Text style={styles.xpPerkHintText} numberOfLines={1}>
-                      {isPlusActive
-                        ? 'Mama Dish Pro • Unlimited Rolls & 2x XP'
-                        : `Free Plan • ${preferencesStore.getRemainingDailyRolls()}/${FREE_DAILY_ROLL_LIMIT} Rolls left today`}
-                    </Text>
+                  {/* Crisp Plan Card */}
+                  <View style={[styles.planCard, isPlusActive && styles.planCardActive]}>
+                    <View style={styles.planCardTextWrap}>
+                      <Text style={[styles.planCardTitle, isPlusActive && styles.planCardTitleActive]}>
+                        {isPlusActive ? 'Mama Pro' : 'Upgrade to Pro'}
+                      </Text>
+                      <Text style={[styles.planCardSub, isPlusActive && styles.planCardSubActive]}>
+                        {isPlusActive
+                          ? 'Unlimited rolls · 2x XP'
+                          : `Unlimited rolls · ${preferencesStore.getLocalizedPlusPrice()}`}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.planCardBtn, isPlusActive && styles.planCardBtnActive]}
+                      onPress={handlePlanPress}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityLabel={isPlusActive ? 'Manage subscription' : 'Upgrade to Mama Pro'}
+                    >
+                      <Text style={[styles.planCardBtnText, isPlusActive && styles.planCardBtnTextActive]}>
+                        {isPlusActive ? 'Manage' : 'Upgrade'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                </View>
-              </View>
 
-            {/* Mama Pro Plan Card: clear Upgrade / Manage subscription button */}
-            <View style={[styles.planCard, isPlusActive && styles.planCardActive]}>
-              <View style={styles.planCardTextWrap}>
-                <Text style={[styles.planCardTitle, isPlusActive && styles.planCardTitleActive]}>
-                  {isPlusActive ? 'Mama Dish Pro' : 'Upgrade to Mama Pro'}
-                </Text>
-                <Text style={[styles.planCardSub, isPlusActive && styles.planCardSubActive]}>
-                  {isPlusActive
-                    ? 'Unlimited rolls · Free healthy remix · 2x XP'
-                    : `Unlimited rolls, free healthy remix & 2x XP · ${preferencesStore.getLocalizedPlusPrice()}`}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.planCardBtn, isPlusActive && styles.planCardBtnActive]}
-                onPress={handlePlanPress}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel={isPlusActive ? 'Manage or cancel subscription' : 'Upgrade to Mama Pro'}
-              >
-                <Text style={[styles.planCardBtnText, isPlusActive && styles.planCardBtnTextActive]}>
-                  {isPlusActive ? 'Manage' : 'Upgrade'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Weekly Food Budget & Country/Currency inside Profile */}
-            <View style={styles.sectionBlock}>
-              <View style={styles.budgetSectionHeader}>
-                <Text style={styles.sectionLabel}>WEEKLY BUDGET</Text>
-                {spentThisWeek > 0 ? (
-                  <TouchableOpacity
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      preferencesStore.updateKitchenPass({ spentThisWeek: 0 });
-                      setSpentThisWeek(0);
-                    }}
-                    style={styles.resetWeekBtn}
-                    activeOpacity={0.75}
-                  >
-                    <Ionicons name="refresh-outline" size={14} color={colors.primary} />
-                    <Text style={styles.resetWeekText}>Reset Week</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-
-              <View style={styles.budgetCard}>
-                <Text style={styles.budgetStatusText}>
-                  {formatCurrency(remainingWeeklyBudget, activeCurrency.symbol, activeCurrency.code)} left of{' '}
-                  {formatCurrency(parsedWeeklyBudget, activeCurrency.symbol, activeCurrency.code)}
-                </Text>
-                <View style={styles.budgetInputRow}>
-                  <Text style={styles.budgetCurrencyPrefix}>{activeCurrency.symbol}</Text>
-                  <TextInput
-                    style={styles.budgetInputField}
-                    value={weeklyBudgetString}
-                    onChangeText={setWeeklyBudgetString}
-                    keyboardType="numeric"
-                    placeholder={String(fallbackBudget)}
-                    placeholderTextColor={colors.text.muted}
-                  />
-                  <Text style={styles.budgetPerWeekText}>/ week</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.sectionBlock}>
-              <Text style={styles.sectionLabel}>COUNTRY &amp; CURRENCY</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.horizontalScrollRow}
-              >
-                {SUPPORTED_COUNTRIES.map((country) => {
-                  const active = selectedCountryId === country.id;
-                  return (
+                  {/* Grouped iOS-style Controls & Account Rows */}
+                  <View style={styles.listCard}>
                     <TouchableOpacity
-                      key={country.id}
-                      style={[styles.pillCompact, active && styles.pillButtonActive]}
-                      onPress={() => handleSelectCountry(country)}
-                      activeOpacity={0.82}
-                    >
-                      <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                        {country.name} · {country.currencySymbol}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.horizontalScrollRow}
-              >
-                {SUPPORTED_CURRENCIES.map((curr) => {
-                  const active = selectedCurrencyCode === curr.code;
-                  return (
-                    <TouchableOpacity
-                      key={curr.code}
-                      style={[styles.pillCompact, active && styles.pillButtonActive]}
+                      style={styles.listRow}
                       onPress={() => {
                         Haptics.selectionAsync().catch(() => {});
-                        setSelectedCurrencyCode(curr.code);
+                        setShakeEnabled((prev) => !prev);
                       }}
-                      activeOpacity={0.82}
+                      activeOpacity={0.75}
                     >
-                      <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                        {curr.symbol} {curr.code}
-                      </Text>
+                      <View style={styles.listRowLeft}>
+                        <View style={styles.listIconCircle}>
+                          <Ionicons name="phone-portrait-outline" size={17} color={colors.primary} />
+                        </View>
+                        <Text style={styles.listRowLabel}>Shake to Roll</Text>
+                      </View>
+                      <View style={[styles.switchTrack, shakeEnabled && styles.switchTrackOn]}>
+                        <View style={[styles.switchThumb, shakeEnabled && styles.switchThumbOn]} />
+                      </View>
                     </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
 
-            {/* Body Goal */}
-            <View style={styles.sectionBlock}>
-              <Text style={styles.sectionLabel}>BODY GOAL</Text>
-              <View style={styles.pillGrid}>
-                {BODY_GOAL_OPTIONS.map((goal) => {
-                  const active = selectedGoal === goal.id;
-                  return (
+                    <View style={styles.listDivider} />
+
                     <TouchableOpacity
-                      key={goal.id}
-                      style={[styles.pillButton, active && styles.pillButtonActive]}
+                      style={styles.listRow}
+                      onPress={handleToggleNotifications}
+                      activeOpacity={0.75}
+                    >
+                      <View style={styles.listRowLeft}>
+                        <View style={styles.listIconCircle}>
+                          <Ionicons name="notifications-outline" size={17} color={colors.primary} />
+                        </View>
+                        <Text style={styles.listRowLabel}>Mama Dinner Nudges</Text>
+                      </View>
+                      <View style={[styles.switchTrack, notificationsEnabled && styles.switchTrackOn]}>
+                        <View
+                          style={[styles.switchThumb, notificationsEnabled && styles.switchThumbOn]}
+                        />
+                      </View>
+                    </TouchableOpacity>
+
+                    <View style={styles.listDivider} />
+
+                    <TouchableOpacity
+                      style={styles.listRow}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
-                        setSelectedGoal(goal.id);
+                        onClose();
+                        navigation.navigate('MamaKitchenSplash', { previewOnboarding: true });
                       }}
-                      activeOpacity={0.82}
+                      activeOpacity={0.75}
                     >
-                      <Ionicons
-                        name={goal.icon}
-                        size={15}
-                        color={active ? '#FFFFFF' : colors.primary}
-                      />
-                      <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                        {goal.title}
-                      </Text>
+                      <View style={styles.listRowLeft}>
+                        <View style={styles.listIconCircle}>
+                          <Ionicons name="refresh-outline" size={17} color={colors.primary} />
+                        </View>
+                        <Text style={styles.listRowLabel}>Replay Welcome Setup</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={17} color={colors.text.muted} />
                     </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
 
-            {/* Max Cooking Time */}
-            <View style={styles.sectionBlock}>
-              <Text style={styles.sectionLabel}>PACE &amp; TIME</Text>
-              <View style={styles.pillRow}>
-                {TIME_OPTIONS.map((opt) => {
-                  const active = selectedTimeMinutes === opt.minutes;
-                  return (
-                    <TouchableOpacity
-                      key={opt.id}
-                      style={[styles.pillEqual, active && styles.pillButtonActive]}
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
-                        setSelectedTimeMinutes(opt.minutes);
-                      }}
-                      activeOpacity={0.82}
-                    >
-                      <Ionicons
-                        name={opt.icon}
-                        size={14}
-                        color={active ? '#FFFFFF' : colors.primary}
-                      />
-                      <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                        {opt.title}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
+                    <View style={styles.listDivider} />
 
-            {/* Kitchen Setup */}
-            <View style={styles.sectionBlock}>
-              <Text style={styles.sectionLabel}>KITCHEN SETUP</Text>
-              <View style={styles.pillRow}>
-                {GEAR_OPTIONS.map((gear) => {
-                  const active = selectedGearId === gear.id;
-                  return (
-                    <TouchableOpacity
-                      key={gear.id}
-                      style={[styles.pillEqual, active && styles.pillButtonActive]}
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
-                        setSelectedGearId(gear.id);
-                      }}
-                      activeOpacity={0.82}
-                    >
-                      <Ionicons
-                        name={gear.icon}
-                        size={14}
-                        color={active ? '#FFFFFF' : colors.primary}
-                      />
-                      <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                        {gear.title}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
+                    {!isLoggedIn && !user ? (
+                      <TouchableOpacity
+                        style={styles.listRow}
+                        onPress={() => {
+                          onClose();
+                          navigation.navigate('MamaKitchenSignIn');
+                        }}
+                        activeOpacity={0.75}
+                      >
+                        <View style={styles.listRowLeft}>
+                          <View style={styles.listIconCircle}>
+                            <Ionicons name="log-in-outline" size={17} color={colors.primary} />
+                          </View>
+                          <Text style={[styles.listRowLabel, { color: colors.primary }]}>
+                            Sign In
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={17} color={colors.text.muted} />
+                      </TouchableOpacity>
+                    ) : (
+                      <>
+                        <TouchableOpacity
+                          style={styles.listRow}
+                          onPress={handleLogout}
+                          activeOpacity={0.75}
+                        >
+                          <View style={styles.listRowLeft}>
+                            <View style={styles.listIconCircle}>
+                              <Ionicons name="log-out-outline" size={17} color={colors.text.secondary} />
+                            </View>
+                            <Text style={styles.listRowLabel}>Log Out</Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={17} color={colors.text.muted} />
+                        </TouchableOpacity>
 
-            {/* Flavor Vibe */}
-            <View style={styles.sectionBlock}>
-              <Text style={styles.sectionLabel}>CRAVING VIBE</Text>
-              <View style={styles.pillGrid}>
-                {FLAVOR_OPTIONS.map((flav) => {
-                  const active = selectedFlavorId === flav.id;
-                  return (
-                    <TouchableOpacity
-                      key={flav.id}
-                      style={[styles.pillButton, active && styles.pillButtonActive]}
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
-                        setSelectedFlavorId(flav.id);
-                      }}
-                      activeOpacity={0.82}
-                    >
-                      <Ionicons
-                        name={flav.icon}
-                        size={14}
-                        color={active ? '#FFFFFF' : colors.primary}
-                      />
-                      <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                        {flav.title}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
+                        <View style={styles.listDivider} />
 
-            {/* Dietary Rules & Custom Exclusions */}
-            <View style={styles.sectionBlock}>
-              <Text style={styles.sectionLabel}>DIET &amp; EXCLUSIONS</Text>
-              <View style={styles.pillGrid}>
-                {DIETARY_OPTIONS.map((diet) => {
-                  const active = selectedDiets.includes(diet.id);
-                  return (
-                    <TouchableOpacity
-                      key={diet.id}
-                      style={[styles.pillCompact, active && styles.pillButtonActive]}
-                      onPress={() => handleToggleDiet(diet.id)}
-                      activeOpacity={0.82}
-                    >
-                      <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                        {diet.title}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-                {selectedDiets
-                  .filter((d) => !DIETARY_OPTIONS.some((opt) => opt.id === d))
-                  .map((customRule) => (
-                    <TouchableOpacity
-                      key={customRule}
-                      style={[styles.pillCompact, styles.pillButtonActive]}
-                      onPress={() => handleToggleDiet(customRule)}
-                      activeOpacity={0.82}
-                    >
-                      <Text style={[styles.pillText, styles.pillTextActive]}>{customRule}</Text>
-                      <Ionicons name="close-circle" size={14} color="#FFFFFF" />
-                    </TouchableOpacity>
-                  ))}
-              </View>
-
-              <View style={styles.customDietInputRow}>
-                <TextInput
-                  value={customDietInput}
-                  onChangeText={setCustomDietInput}
-                  placeholder="Never give me... (e.g. No okra, No peanuts)"
-                  placeholderTextColor={colors.text.muted}
-                  onSubmitEditing={() => {
-                    const trimmed = customDietInput.trim();
-                    if (trimmed) {
-                      handleToggleDiet(trimmed);
-                      setCustomDietInput('');
-                    }
-                  }}
-                  style={styles.customDietInput}
-                />
-                {customDietInput.trim().length > 0 && (
-                  <TouchableOpacity
-                    onPress={() => {
-                      const trimmed = customDietInput.trim();
-                      if (trimmed) {
-                        handleToggleDiet(trimmed);
-                        setCustomDietInput('');
-                      }
-                    }}
-                    style={styles.customDietAddBtn}
-                  >
-                    <Text style={styles.customDietAddText}>Add</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {hiddenDishes.length > 0 && (
-                <View style={styles.hiddenDishesWrap}>
-                  {hiddenDishes.map((dish) => (
-                    <TouchableOpacity
-                      key={dish}
-                      style={styles.hiddenDishChip}
-                      onPress={() => handleUnhideDish(dish)}
-                    >
-                      <Text style={styles.hiddenDishText}>{dish}</Text>
-                      <Text style={styles.unhideLabel}>Unhide</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                        <TouchableOpacity
+                          style={styles.listRow}
+                          onPress={handleDeleteAccount}
+                          activeOpacity={0.75}
+                        >
+                          <View style={styles.listRowLeft}>
+                            <View style={[styles.listIconCircle, styles.listIconCircleDanger]}>
+                              <Ionicons name="trash-outline" size={16} color="#C93B2B" />
+                            </View>
+                            <Text style={[styles.listRowLabel, { color: '#C93B2B' }]}>
+                              Delete Account
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+                </>
               )}
-            </View>
 
-            {/* Shake to Roll Preference */}
-            <View style={styles.sectionBlock}>
-              <Text style={styles.sectionLabel}>MOTION &amp; CONTROLS</Text>
-              <TouchableOpacity
-                style={[styles.pillButton, shakeEnabled && styles.pillButtonActive]}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  setShakeEnabled((prev) => !prev);
-                }}
-                activeOpacity={0.82}
-              >
-                <Ionicons
-                  name="phone-portrait-outline"
-                  size={15}
-                  color={shakeEnabled ? '#FFFFFF' : colors.primary}
-                />
-                <Text style={[styles.pillText, shakeEnabled && styles.pillTextActive]}>
-                  {shakeEnabled ? 'Shake Phone to Roll: ON' : 'Shake Phone to Roll: OFF'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+              {/* ===================== TAB 2: BUDGET ===================== */}
+              {activeTab === 'budget' && (
+                <>
+                  {/* Weekly Food Budget Card */}
+                  <View style={styles.groupCard}>
+                    <View style={styles.cardHeaderRow}>
+                      <Text style={styles.cardLabel}>WEEKLY BUDGET</Text>
+                      {spentThisWeek > 0 ? (
+                        <TouchableOpacity
+                          onPress={() => {
+                            Haptics.selectionAsync().catch(() => {});
+                            preferencesStore.updateKitchenPass({ spentThisWeek: 0 });
+                            setSpentThisWeek(0);
+                          }}
+                          style={styles.resetWeekBtn}
+                          activeOpacity={0.75}
+                        >
+                          <Ionicons name="refresh-outline" size={13} color={colors.primary} />
+                          <Text style={styles.resetWeekText}>Reset</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
 
-            {/* Compact Account Footer */}
-            <View style={styles.accountFooter}>
-              <TouchableOpacity
-                style={styles.accountLinkBtn}
-                onPress={() => {
-                  onClose();
-                  navigation.navigate('MamaKitchenSplash', { previewOnboarding: true });
-                }}
-              >
-                <Ionicons name="refresh-outline" size={15} color={colors.primary} />
-                <Text style={styles.accountLinkText}>Preview Welcome Setup</Text>
-              </TouchableOpacity>
+                    <View style={styles.budgetBalanceRow}>
+                      <Text style={styles.budgetHeroRemaining}>
+                        {formatCurrency(remainingWeeklyBudget, activeCurrency.symbol, activeCurrency.code)}
+                      </Text>
+                      <Text style={styles.budgetHeroSub}>
+                        left of {formatCurrency(parsedWeeklyBudget, activeCurrency.symbol, activeCurrency.code)}
+                      </Text>
+                    </View>
 
-              {!isLoggedIn && !user ? (
-                <TouchableOpacity
-                  style={styles.accountLinkBtn}
-                  onPress={() => {
-                    onClose();
-                    navigation.navigate('MamaKitchenSignIn');
-                  }}
-                >
-                  <Ionicons name="log-in-outline" size={16} color={colors.primary} />
-                  <Text style={styles.accountLinkText}>Sign In / Sync Pass</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.accountActionsRow}>
-                  <TouchableOpacity style={styles.accountLinkBtn} onPress={handleLogout}>
-                    <Ionicons name="log-out-outline" size={16} color={colors.text.secondary} />
-                    <Text style={styles.accountSecondaryText}>Log Out</Text>
-                  </TouchableOpacity>
+                    <View style={styles.budgetInputRow}>
+                      <Text style={styles.budgetCurrencyPrefix}>{activeCurrency.symbol}</Text>
+                      <TextInput
+                        style={styles.budgetInputField}
+                        value={weeklyBudgetString}
+                        onChangeText={setWeeklyBudgetString}
+                        keyboardType="numeric"
+                        placeholder={String(fallbackBudget)}
+                        placeholderTextColor={colors.text.muted}
+                      />
+                      <Text style={styles.budgetPerWeekText}>/ week</Text>
+                    </View>
+                  </View>
 
-                  <TouchableOpacity style={styles.accountLinkBtn} onPress={handleDeleteAccount}>
-                    <Ionicons name="trash-outline" size={15} color="#D32F2F" />
-                    <Text style={[styles.accountSecondaryText, { color: '#D32F2F' }]}>
-                      Delete Account
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                  {/* Country & Currency Grouped Card */}
+                  <View style={styles.groupCard}>
+                    <View style={styles.subSection}>
+                      <Text style={styles.cardLabel}>COUNTRY</Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.horizontalScrollRow}
+                      >
+                        {SUPPORTED_COUNTRIES.map((country) => {
+                          const active = selectedCountryId === country.id;
+                          return (
+                            <TouchableOpacity
+                              key={country.id}
+                              style={[styles.chip, active && styles.chipActive]}
+                              onPress={() => handleSelectCountry(country)}
+                              activeOpacity={0.82}
+                            >
+                              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                                {country.name}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+
+                    <View style={styles.cardDivider} />
+
+                    <View style={styles.subSection}>
+                      <Text style={styles.cardLabel}>CURRENCY</Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.horizontalScrollRow}
+                      >
+                        {SUPPORTED_CURRENCIES.map((curr) => {
+                          const active = selectedCurrencyCode === curr.code;
+                          return (
+                            <TouchableOpacity
+                              key={curr.code}
+                              style={[styles.chip, active && styles.chipActive]}
+                              onPress={() => {
+                                Haptics.selectionAsync().catch(() => {});
+                                setSelectedCurrencyCode(curr.code);
+                              }}
+                              activeOpacity={0.82}
+                            >
+                              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                                {curr.symbol} {curr.code}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  </View>
+                </>
               )}
-            </View>
-          </ScrollView>
 
-          {/* Sticky Primary Save CTA */}
-          <View style={styles.footerBar}>
-            <TouchableOpacity
-              style={styles.saveBtn}
-              onPress={handleSave}
-              activeOpacity={0.88}
-            >
-              <Text style={styles.saveBtnText}>Save</Text>
-              <Ionicons name="checkmark" size={18} color="#FFFFFF" />
-            </TouchableOpacity>
+              {/* ===================== TAB 3: TASTE ===================== */}
+              {activeTab === 'taste' && (
+                <>
+                  {/* Body Goal 2x2 Grid */}
+                  <View style={styles.groupCard}>
+                    <Text style={styles.cardLabel}>GOAL</Text>
+                    <View style={styles.twoColGrid}>
+                      {BODY_GOAL_OPTIONS.map((goal) => {
+                        const active = selectedGoal === goal.id;
+                        return (
+                          <TouchableOpacity
+                            key={goal.id}
+                            style={[styles.gridTile, active && styles.chipActive]}
+                            onPress={() => {
+                              Haptics.selectionAsync().catch(() => {});
+                              setSelectedGoal(goal.id);
+                            }}
+                            activeOpacity={0.82}
+                          >
+                            <Ionicons
+                              name={goal.icon}
+                              size={15}
+                              color={active ? '#FFFFFF' : colors.primary}
+                            />
+                            <Text
+                              style={[styles.chipText, active && styles.chipTextActive]}
+                              numberOfLines={1}
+                            >
+                              {goal.title}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {/* Time, Gear & Vibe in ONE Calm Grouped Card */}
+                  <View style={styles.groupCard}>
+                    <View style={styles.subSection}>
+                      <Text style={styles.cardLabel}>COOK TIME</Text>
+                      <View style={styles.threeUpRow}>
+                        {TIME_OPTIONS.map((opt) => {
+                          const active = selectedTimeMinutes === opt.minutes;
+                          return (
+                            <TouchableOpacity
+                              key={opt.id}
+                              style={[styles.threeUpPill, active && styles.chipActive]}
+                              onPress={() => {
+                                Haptics.selectionAsync().catch(() => {});
+                                setSelectedTimeMinutes(opt.minutes);
+                              }}
+                              activeOpacity={0.82}
+                            >
+                              <Text
+                                style={[styles.chipText, active && styles.chipTextActive]}
+                                numberOfLines={1}
+                              >
+                                {opt.title}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+
+                    <View style={styles.cardDivider} />
+
+                    <View style={styles.subSection}>
+                      <Text style={styles.cardLabel}>KITCHEN GEAR</Text>
+                      <View style={styles.threeUpRow}>
+                        {GEAR_OPTIONS.map((gear) => {
+                          const active = selectedGearId === gear.id;
+                          return (
+                            <TouchableOpacity
+                              key={gear.id}
+                              style={[styles.threeUpPill, active && styles.chipActive]}
+                              onPress={() => {
+                                Haptics.selectionAsync().catch(() => {});
+                                setSelectedGearId(gear.id);
+                              }}
+                              activeOpacity={0.82}
+                            >
+                              <Text
+                                style={[styles.chipText, active && styles.chipTextActive]}
+                                numberOfLines={1}
+                              >
+                                {gear.title}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+
+                    <View style={styles.cardDivider} />
+
+                    <View style={styles.subSection}>
+                      <Text style={styles.cardLabel}>VIBE</Text>
+                      <View style={styles.threeUpRow}>
+                        {FLAVOR_OPTIONS.map((flav) => {
+                          const active = selectedFlavorId === flav.id;
+                          return (
+                            <TouchableOpacity
+                              key={flav.id}
+                              style={[styles.threeUpPill, active && styles.chipActive]}
+                              onPress={() => {
+                                Haptics.selectionAsync().catch(() => {});
+                                setSelectedFlavorId(flav.id);
+                              }}
+                              activeOpacity={0.82}
+                            >
+                              <Text
+                                style={[styles.chipText, active && styles.chipTextActive]}
+                                numberOfLines={1}
+                              >
+                                {flav.title}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Diet & Exclusions Card */}
+                  <View style={styles.groupCard}>
+                    <Text style={styles.cardLabel}>DIET &amp; EXCLUSIONS</Text>
+                    <View style={styles.chipWrap}>
+                      {DIETARY_OPTIONS.map((diet) => {
+                        const active = selectedDiets.includes(diet.id);
+                        return (
+                          <TouchableOpacity
+                            key={diet.id}
+                            style={[styles.chip, active && styles.chipActive]}
+                            onPress={() => handleToggleDiet(diet.id)}
+                            activeOpacity={0.82}
+                          >
+                            <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                              {diet.title}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                      {selectedDiets
+                        .filter((d) => !DIETARY_OPTIONS.some((opt) => opt.id === d))
+                        .map((customRule) => (
+                          <TouchableOpacity
+                            key={customRule}
+                            style={[styles.chip, styles.chipActive]}
+                            onPress={() => handleToggleDiet(customRule)}
+                            activeOpacity={0.82}
+                          >
+                            <Text style={[styles.chipText, styles.chipTextActive]}>{customRule}</Text>
+                            <Ionicons name="close-circle" size={14} color="#FFFFFF" />
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <View style={styles.customDietInputRow}>
+                      <TextInput
+                        value={customDietInput}
+                        onChangeText={setCustomDietInput}
+                        placeholder="Avoid ingredient (e.g. peanuts)"
+                        placeholderTextColor={colors.text.muted}
+                        onSubmitEditing={() => {
+                          const trimmed = customDietInput.trim();
+                          if (trimmed) {
+                            handleToggleDiet(trimmed);
+                            setCustomDietInput('');
+                          }
+                        }}
+                        style={styles.customDietInput}
+                      />
+                      {customDietInput.trim().length > 0 && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            const trimmed = customDietInput.trim();
+                            if (trimmed) {
+                              handleToggleDiet(trimmed);
+                              setCustomDietInput('');
+                            }
+                          }}
+                          style={styles.customDietAddBtn}
+                        >
+                          <Text style={styles.customDietAddText}>Add</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    {hiddenDishes.length > 0 && (
+                      <View style={styles.hiddenDishesWrap}>
+                        {hiddenDishes.map((dish) => (
+                          <TouchableOpacity
+                            key={dish}
+                            style={styles.hiddenDishChip}
+                            onPress={() => handleUnhideDish(dish)}
+                          >
+                            <Text style={styles.hiddenDishText}>{dish}</Text>
+                            <Text style={styles.unhideLabel}>Unhide</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                </>
+              )}
+            </ScrollView>
+
+            {/* Sticky Save CTA */}
+            <View style={styles.footerBar}>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={handleSave}
+                activeOpacity={0.88}
+              >
+                <Text style={styles.saveBtnText}>Save</Text>
+                <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
       )}
       {visible ? <MamaAlertHost inline /> : null}
     </Modal>
@@ -818,7 +970,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(18, 20, 16, 0.52)',
+    backgroundColor: 'rgba(18, 20, 16, 0.5)',
   },
   backdropArea: {
     flex: 1,
@@ -827,7 +979,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF7F2',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    maxHeight: '86%',
+    maxHeight: '84%',
     paddingBottom: 24,
   },
   dragHandleWrap: {
@@ -846,7 +998,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 22,
-    paddingVertical: 10,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   sheetTitle: {
     fontSize: 23,
@@ -862,65 +1015,122 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  segmentWrap: {
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+  },
+  segmentTrack: {
+    flexDirection: 'row',
+    backgroundColor: '#EFEAE1',
+    borderRadius: 14,
+    padding: 4,
+    gap: 4,
+  },
+  segmentBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: 11,
+  },
+  segmentBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#1E2419',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  segmentText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: colors.text.secondary,
+  },
+  segmentTextActive: {
+    color: colors.primary,
+  },
   scrollArea: {
     paddingHorizontal: 20,
   },
   scrollContent: {
-    paddingTop: 4,
+    paddingTop: 2,
     paddingBottom: 24,
-    gap: 18,
+    gap: 14,
   },
-  profileCard: {
+  groupCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.07)',
+    borderColor: 'rgba(36, 40, 32, 0.06)',
+    gap: 12,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardLabel: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: colors.text.secondary,
+    letterSpacing: 0.9,
+  },
+  subSection: {
     gap: 10,
+  },
+  cardDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(36, 40, 32, 0.08)',
   },
   profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  xpPerkHintRow: {
+  profileLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(36, 40, 32, 0.08)',
-  },
-  xpPerkLeftWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    gap: 12,
     flex: 1,
+    marginRight: 10,
   },
-  xpPerkHintText: {
+  bowlAvatarBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#58673A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  profileTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  profileName: {
+    fontSize: 17,
+    fontFamily: typography.fontFamily.serif,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  profileEmail: {
     fontSize: 13,
-    fontWeight: '600',
     color: colors.text.secondary,
-    flexShrink: 1,
   },
-  plusTogglePill: {
-    backgroundColor: 'rgba(217, 85, 36, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
+  xpPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(102, 112, 74, 0.1)',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
-  plusTogglePillActive: {
-    backgroundColor: colors.primary,
-  },
-  plusTogglePillText: {
+  xpPillText: {
     fontSize: 13,
     fontWeight: '800',
     color: colors.primary,
-  },
-  plusTogglePillTextActive: {
-    color: '#FFFFFF',
   },
   planCard: {
     flexDirection: 'row',
@@ -928,10 +1138,10 @@ const styles = StyleSheet.create({
     gap: 12,
     backgroundColor: 'rgba(102, 112, 74, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(102, 112, 74, 0.28)',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 4,
+    borderColor: 'rgba(102, 112, 74, 0.24)',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   planCardActive: {
     backgroundColor: colors.primary,
@@ -939,7 +1149,7 @@ const styles = StyleSheet.create({
   },
   planCardTextWrap: {
     flex: 1,
-    gap: 3,
+    gap: 2,
   },
   planCardTitle: {
     fontSize: 16,
@@ -950,9 +1160,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   planCardSub: {
-    fontSize: 13.5,
-    lineHeight: 18,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.text.secondary,
   },
   planCardSubActive: {
@@ -960,25 +1169,81 @@ const styles = StyleSheet.create({
   },
   planCardBtn: {
     backgroundColor: colors.primary,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
     borderRadius: 12,
   },
   planCardBtnActive: {
     backgroundColor: '#FFFFFF',
   },
   planCardBtnText: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '800',
     color: '#FFFFFF',
   },
   planCardBtnTextActive: {
     color: colors.primary,
   },
-  budgetSectionHeader: {
+  listCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(36, 40, 32, 0.06)',
+    overflow: 'hidden',
+  },
+  listRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  listRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  listIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(102, 112, 74, 0.09)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listIconCircleDanger: {
+    backgroundColor: 'rgba(201, 59, 43, 0.09)',
+  },
+  listRowLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  listDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(36, 40, 32, 0.08)',
+    marginLeft: 60,
+  },
+  switchTrack: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(36, 40, 32, 0.16)',
+    padding: 3,
+    justifyContent: 'center',
+  },
+  switchTrackOn: {
+    backgroundColor: colors.primary,
+  },
+  switchThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    alignSelf: 'flex-start',
+  },
+  switchThumbOn: {
+    alignSelf: 'flex-end',
   },
   resetWeekBtn: {
     flexDirection: 'row',
@@ -990,35 +1255,38 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(102, 112, 74, 0.1)',
   },
   resetWeekText: {
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.primary,
   },
-  budgetCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
+  budgetBalanceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
   },
-  budgetStatusText: {
-    fontSize: 14,
+  budgetHeroRemaining: {
+    fontSize: 26,
+    fontFamily: typography.fontFamily.serif,
     fontWeight: '700',
     color: colors.primary,
+  },
+  budgetHeroSub: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: colors.text.secondary,
   },
   budgetInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FAF7F2',
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 11,
     borderWidth: 1,
     borderColor: 'rgba(36, 40, 32, 0.08)',
   },
   budgetCurrencyPrefix: {
-    fontSize: 21,
+    fontSize: 20,
     fontFamily: typography.fontFamily.serif,
     fontWeight: '700',
     color: colors.text.primary,
@@ -1033,162 +1301,112 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   budgetPerWeekText: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '600',
     color: colors.text.secondary,
   },
   horizontalScrollRow: {
     flexDirection: 'row',
     gap: 8,
-    paddingVertical: 2,
   },
-  profileLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-    marginRight: 10,
-  },
-  avatarCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: 'rgba(217, 85, 36, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profileTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  profileName: {
-    fontSize: 17,
-    fontFamily: typography.fontFamily.serif,
-    fontWeight: '700',
-    color: colors.text.primary,
-  },
-  profileEmail: {
-    fontSize: 13.5,
-    color: colors.text.secondary,
-  },
-  xpPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(217, 85, 36, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
-  },
-  xpPillText: {
-    fontSize: 13.5,
-    fontWeight: '800',
-    color: colors.primary,
-  },
-  sectionBlock: {
-    gap: 8,
-  },
-  sectionLabel: {
-    fontSize: 12.5,
-    fontWeight: '800',
-    color: colors.text.secondary,
-    letterSpacing: 0.8,
-  },
-  pillGrid: {
+  twoColGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  pillRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  pillButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
-  },
-  pillEqual: {
-    flex: 1,
+  gridTile: {
+    width: '48.5%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 11,
-    paddingHorizontal: 8,
+    backgroundColor: '#FAF7F2',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
+    borderColor: 'rgba(36, 40, 32, 0.06)',
   },
-  pillCompact: {
+  threeUpRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  threeUpPill: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FAF7F2',
+    paddingVertical: 11,
+    paddingHorizontal: 8,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: 'rgba(36, 40, 32, 0.06)',
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF7F2',
     paddingHorizontal: 13,
     paddingVertical: 9,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
+    borderColor: 'rgba(36, 40, 32, 0.06)',
   },
-  pillButtonActive: {
+  chipActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  pillText: {
-    fontSize: 14,
+  chipText: {
+    fontSize: 13.5,
     fontWeight: '700',
     color: colors.text.primary,
   },
-  pillTextActive: {
+  chipTextActive: {
     color: '#FFFFFF',
   },
   customDietInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 4,
   },
   customDietInput: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF7F2',
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    fontSize: 14.5,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    fontSize: 14,
     color: colors.text.primary,
     borderWidth: 1,
-    borderColor: 'rgba(36, 40, 32, 0.08)',
+    borderColor: 'rgba(36, 40, 32, 0.07)',
   },
   customDietAddBtn: {
     backgroundColor: colors.primary,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingVertical: 10,
   },
   customDietAddText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '700',
   },
   hiddenDishesWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginTop: 4,
   },
   hiddenDishChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(36, 40, 32, 0.06)',
+    backgroundColor: '#FAF7F2',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
@@ -1199,35 +1417,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   unhideLabel: {
-    fontSize: 11,
+    fontSize: 11.5,
     color: colors.primary,
     fontWeight: '800',
-  },
-  accountFooter: {
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(36, 40, 32, 0.1)',
-  },
-  accountActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  accountLinkBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-  },
-  accountLinkText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  accountSecondaryText: {
-    fontSize: 13.5,
-    fontWeight: '600',
-    color: colors.text.secondary,
   },
   footerBar: {
     paddingHorizontal: 20,
@@ -1243,7 +1435,7 @@ const styles = StyleSheet.create({
     gap: 8,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.22,
     shadowRadius: 12,
     elevation: 4,
   },

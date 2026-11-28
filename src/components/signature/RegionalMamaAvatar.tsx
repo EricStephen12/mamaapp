@@ -1,14 +1,16 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Image,
   StyleSheet,
   TouchableOpacity,
   Animated,
+  Easing,
+  Image,
   ImageSourcePropType,
   StyleProp,
   ViewStyle,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { MamaCharacter, MamaPose } from '../common/MamaCharacter';
 
 const MAMA_AFRICA = require('../../../assets/mamas/mama-africa.png');
 const MAMA_ASIA = require('../../../assets/mamas/mama-asia.png');
@@ -19,88 +21,19 @@ const MAMA_AMERICAS = require('../../../assets/mamas/mama-americas.png');
 export type MamaRegionKey = 'africa' | 'asia' | 'island' | 'europe' | 'americas';
 
 const REGION_BY_COUNTRY: Record<string, MamaRegionKey> = {
-  // Africa
-  NG: 'africa',
-  GH: 'africa',
-  KE: 'africa',
-  ZA: 'africa',
-  SN: 'africa',
-  CM: 'africa',
-  CI: 'africa',
-  ET: 'africa',
-  UG: 'africa',
-  TZ: 'africa',
-  RW: 'africa',
-  ZW: 'africa',
-  BJ: 'africa',
-  TG: 'africa',
-  SL: 'africa',
-  LR: 'africa',
-  EG: 'africa',
-  MA: 'africa',
-
-  // North America
-  US: 'americas',
-  CA: 'americas',
-
-  // Europe & UK
-  GB: 'europe',
-  UK: 'europe',
-  EU: 'europe',
-  FR: 'europe',
-  IT: 'europe',
-  DE: 'europe',
-  ES: 'europe',
-  NL: 'europe',
-  IE: 'europe',
-  PT: 'europe',
-  BE: 'europe',
-  CH: 'europe',
-  AT: 'europe',
-  SE: 'europe',
-  NO: 'europe',
-  DK: 'europe',
-  PL: 'europe',
-  GR: 'europe',
-
-  // Australia, Pacific, Caribbean & Latin America
-  AU: 'island',
-  NZ: 'island',
-  JM: 'island',
-  TT: 'island',
-  BB: 'island',
-  BS: 'island',
-  GD: 'island',
-  LC: 'island',
-  PR: 'island',
-  DO: 'island',
-  HT: 'island',
-  BR: 'island',
-  MX: 'island',
-  CO: 'island',
-  PE: 'island',
-  AR: 'island',
-  CL: 'island',
-  FJ: 'island',
-
-  // Asia & Middle East
-  CN: 'asia',
-  JP: 'asia',
-  KR: 'asia',
-  IN: 'asia',
-  PH: 'asia',
-  SG: 'asia',
-  MY: 'asia',
-  TH: 'asia',
-  VN: 'asia',
-  ID: 'asia',
-  PK: 'asia',
-  BD: 'asia',
-  LK: 'asia',
-  TW: 'asia',
-  HK: 'asia',
-  AE: 'asia',
-  SA: 'asia',
+  NG: 'africa', GH: 'africa', KE: 'africa', ZA: 'africa', SN: 'africa', CM: 'africa',
+  CI: 'africa', ET: 'africa', UG: 'africa', TZ: 'africa', RW: 'africa', ZW: 'africa',
+  BJ: 'africa', TG: 'africa', SL: 'africa', LR: 'africa', EG: 'africa', MA: 'africa',
+  US: 'americas', CA: 'americas',
+  GB: 'europe', UK: 'europe', EU: 'europe', FR: 'europe', IT: 'europe', DE: 'europe',
+  ES: 'europe', NL: 'europe', IE: 'europe', PT: 'europe', BE: 'europe', CH: 'europe',
+  AT: 'europe', SE: 'europe', NO: 'europe', DK: 'europe', PL: 'europe', GR: 'europe',
+  AU: 'island', NZ: 'island', JM: 'island', TT: 'island', BB: 'island', BS: 'island',
+  GD: 'island', LC: 'island', PR: 'island', DO: 'island', HT: 'island', BR: 'island',
+  MX: 'island', CO: 'island', PE: 'island', AR: 'island', CL: 'island', FJ: 'island',
+  CN: 'asia', JP: 'asia', KR: 'asia', IN: 'asia', PH: 'asia', SG: 'asia', MY: 'asia',
+  TH: 'asia', VN: 'asia', ID: 'asia', PK: 'asia', BD: 'asia', LK: 'asia', TW: 'asia',
+  HK: 'asia', AE: 'asia', SA: 'asia',
 };
 
 const MAMA_IMAGE_BY_REGION: Record<MamaRegionKey, ImageSourcePropType> = {
@@ -136,72 +69,146 @@ interface RegionalMamaAvatarProps {
   countryCode?: string;
   cuisineAnchor?: string;
   size?: number;
+  pose?: MamaPose;
+  /** Smoothly coin-flips to the Living Mama Bowl mascot every few seconds, then back */
+  alternateWithMascot?: boolean;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 }
 
 /**
- * Country-matched illustrated Mama medallion displayed beside the "Mama" brand header.
- * Automatically updates with a gentle pop whenever the user switches countries.
+ * Header Medallion: shows the real Country Mama portrait matching the user's selected
+ * country, and occasionally coin-flips to the Living Mama Bowl mascot before flipping back.
  */
 export const RegionalMamaAvatar: React.FC<RegionalMamaAvatarProps> = ({
   countryCode,
   cuisineAnchor,
-  size = 38,
+  size = 40,
+  pose = 'welcoming',
+  alternateWithMascot = true,
   onPress,
   style,
 }) => {
   const region = resolveMamaRegion(countryCode, cuisineAnchor);
-  const source = MAMA_IMAGE_BY_REGION[region];
+  const mamaImage = MAMA_IMAGE_BY_REGION[region];
+
+  const [showingMascot, setShowingMascot] = useState(false);
+  const flipDeg = useRef(new Animated.Value(0)).current;
   const popScale = useRef(new Animated.Value(1)).current;
   const prevRegionRef = useRef<MamaRegionKey>(region);
+  const isMountedRef = useRef(true);
 
-  // Tactile pop whenever the user switches to a country with a different regional Mama
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const runCoinFlip = useRef((toMascot: boolean) => {
+    Animated.parallel([
+      Animated.timing(flipDeg, {
+        toValue: 90,
+        duration: 190,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(popScale, {
+        toValue: 0.9,
+        duration: 190,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (!finished || !isMountedRef.current) return;
+      setShowingMascot(toMascot);
+      flipDeg.setValue(-90);
+      Animated.parallel([
+        Animated.timing(flipDeg, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.out(Easing.back(1.35)),
+          useNativeDriver: true,
+        }),
+        Animated.spring(popScale, {
+          toValue: 1,
+          friction: 5.5,
+          tension: 140,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  }).current;
+
+  // When user changes country, immediately coin-flip to reveal the new country's Mama
   useEffect(() => {
     if (prevRegionRef.current === region) return;
     prevRegionRef.current = region;
-    popScale.setValue(0.82);
-    Animated.spring(popScale, {
-      toValue: 1,
-      friction: 5,
-      tension: 150,
-      useNativeDriver: true,
-    }).start();
-  }, [region, popScale]);
+    runCoinFlip(false);
+  }, [region, runCoinFlip]);
+
+  // Occasional gentle coin-flip: Country Mama (~8.5s) -> Living Mama Bowl (~3.2s) -> Country Mama
+  useEffect(() => {
+    if (!alternateWithMascot) return;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let nextShowMascot = true;
+
+    const scheduleNext = () => {
+      const waitMs = nextShowMascot ? 8500 : 3200;
+      timer = setTimeout(() => {
+        if (!isMountedRef.current) return;
+        const target = nextShowMascot;
+        nextShowMascot = !nextShowMascot;
+        runCoinFlip(target);
+        scheduleNext();
+      }, waitMs);
+    };
+
+    scheduleNext();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [alternateWithMascot, region, runCoinFlip]);
 
   const handlePress = () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {}
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     Animated.sequence([
-      Animated.timing(popScale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
+      Animated.timing(popScale, { toValue: 0.9, duration: 75, useNativeDriver: true }),
       Animated.spring(popScale, { toValue: 1, friction: 5, tension: 160, useNativeDriver: true }),
     ]).start();
     onPress?.();
   };
 
-  const content = (
+  const rotateY = flipDeg.interpolate({
+    inputRange: [-90, 0, 90],
+    outputRange: ['-90deg', '0deg', '90deg'],
+  });
+
+  const innerSize = Math.round(size * 0.96);
+
+  const badge = (
     <Animated.View
       style={[
-        styles.shadowWrap,
+        styles.badgeWrap,
         {
           width: size,
           height: size,
           borderRadius: size / 2,
-          transform: [{ scale: popScale }],
+          backgroundColor: showingMascot ? '#58673A' : '#F3EDE2',
+          transform: [{ perspective: 600 }, { rotateY }, { scale: popScale }],
         },
         style,
       ]}
     >
-      <Image
-        source={source}
-        style={{ width: size, height: size, borderRadius: size / 2 }}
-        resizeMode="cover"
-      />
+      {showingMascot ? (
+        <MamaCharacter pose={pose} size={innerSize} isSpeaking={false} hideArms />
+      ) : (
+        <Image source={mamaImage} style={styles.mamaPhoto} resizeMode="cover" />
+      )}
     </Animated.View>
   );
 
-  if (!onPress) return content;
+  if (!onPress) return badge;
 
   return (
     <TouchableOpacity
@@ -209,20 +216,28 @@ export const RegionalMamaAvatar: React.FC<RegionalMamaAvatarProps> = ({
       activeOpacity={0.88}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       accessibilityRole="button"
-      accessibilityLabel="Switch country and regional Mama"
+      accessibilityLabel="Open Mama Dish settings"
     >
-      {content}
+      {badge}
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  shadowWrap: {
+  badgeWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(205, 162, 88, 0.72)',
     shadowColor: '#242820',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.16,
+    shadowOpacity: 0.14,
     shadowRadius: 5,
-    elevation: 4,
+    elevation: 3,
+  },
+  mamaPhoto: {
+    width: '100%',
+    height: '100%',
   },
 });
-

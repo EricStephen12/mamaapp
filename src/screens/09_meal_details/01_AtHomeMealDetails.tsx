@@ -138,6 +138,10 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
   const [cookModalVisible, setCookModalVisible] = useState(false);
   const [activeCookStepIdx, setActiveCookStepIdx] = useState(0);
   const [rewardModalVisible, setRewardModalVisible] = useState(false);
+  const [lastXpAward, setLastXpAward] = useState<{
+    awarded: number;
+    reason?: 'daily_cap' | 'cooldown' | 'duplicate_dish';
+  }>({ awarded: 50 });
   const [mamaPose, setMamaPose] = useState<MamaPose>('cooking');
   const [mamaNote, setMamaNote] = useState<string>(() => {
     if (initialTip) {
@@ -304,7 +308,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
             No Recipe Selected
           </Text>
           <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', lineHeight: 20 }}>
-            Choose a meal from Your Daily Edit, Discover, or Your Collection to see full cooking instructions.
+            Pick a meal from Home or Discover to view steps.
           </Text>
           <TouchableOpacity
             style={[styles.cookedButton, { marginTop: 12, paddingHorizontal: 24 }]}
@@ -479,8 +483,9 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
     }
     setCookModalVisible(false);
     const effectiveCost = costNumeric * portions;
-    // 1. Update local preference store with human-readable dish title
+    // 1. Update local preference store with human-readable dish title (anti-spam XP rules applied)
     preferencesStore.recordMealDecision(title, 'cooked', effectiveCost);
+    setLastXpAward(preferencesStore.getLastCookXpOutcome());
     // 2. Persist decision to Neon DB
     decisionsService.log(mealId, title, 'cooked', effectiveCost);
 
@@ -628,8 +633,8 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
     } catch {}
 
     mamaAlert.alert(
-      `Never suggest ${title}?`,
-      `Mama won't suggest this dish again. You can unhide it anytime in your Kitchen Pass under Diet.`,
+      `Hide ${title}?`,
+      `We won't suggest this again. Unhide anytime in Settings → Taste.`,
       [
         { text: 'Keep it', style: 'cancel' },
         {
@@ -782,18 +787,18 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
                       setHealthyUnlocked(true);
                       setIsHealthyRemix(nextVal);
                       if (nextVal && preferencesStore.isMamaPlus()) {
-                        setToastMessage('Mama Plus Healthy Remix applied! Low oil & fresh greens.');
+                        setToastMessage('Healthy Remix on — low oil & greens.');
                       }
                       return;
                     }
                     const spent = preferencesStore.spendXp(50);
                     if (!spent) {
-                      setToastMessage('Need 50 XP! Cook a meal at home (+50 XP) or unlock Mama Plus.');
+                      setToastMessage('Need 50 XP — cook a meal (+50 XP) or unlock Pro.');
                       return;
                     }
                     setHealthyUnlocked(true);
                     setIsHealthyRemix(true);
-                    setToastMessage('Healthy Remix unlocked (-50 XP)! Low oil & fresh greens.');
+                    setToastMessage('Healthy Remix unlocked (-50 XP).');
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   style={{
@@ -1033,8 +1038,8 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
               />
               <Text style={styles.cookedButtonText}>
                 {resolvedSteps.length > 0
-                  ? `Start Cooking Guide (${resolvedSteps.length} Steps)`
-                  : `Serve & Feed Mama (+${currentPass.planTier === 'plus' ? 100 : 50} XP)`}
+                  ? `Start Cooking (${resolvedSteps.length} steps)`
+                  : `I Cooked This (+${currentPass.planTier === 'plus' ? 100 : 50} XP)`}
               </Text>
             </TouchableOpacity>
 
@@ -1062,7 +1067,7 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
                     color: colors.primary,
                   }}
                 >
-                  Serve &amp; Feed Mama (+{currentPass.planTier === 'plus' ? 100 : 50} XP)
+                  I Cooked This (+{currentPass.planTier === 'plus' ? 100 : 50} XP)
                 </Text>
               </TouchableOpacity>
             )}
@@ -1099,6 +1104,8 @@ export const AtHomeMealDetails: React.FC<Props> = ({ navigation, route }) => {
           currentPass.currencySymbol
         )}
         mealsCookedCount={currentPass.likedDishes.length + 1}
+        xpAwarded={lastXpAward.awarded}
+        xpSkipReason={lastXpAward.reason}
         onClaimReward={handleClaimRewardAndExit}
       />
 

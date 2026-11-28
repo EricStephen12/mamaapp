@@ -28,6 +28,7 @@ import { pantryService } from '../../services/api/pantryService';
 import { getCurrentTimeOfDay } from '../../services/api/rollService';
 import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
 import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
+import { MamaCharacter } from '../../components/common/MamaCharacter';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WhatsInYourKitchen'>;
 
@@ -67,7 +68,7 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [passModalVisible, setPassModalVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const pass = preferencesStore.getKitchenPass();
+  const [pass, setPass] = useState(() => preferencesStore.getKitchenPass());
 
   const contentFade = useRef(new Animated.Value(0)).current;
   const contentY = useRef(new Animated.Value(15)).current;
@@ -81,6 +82,9 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
     const unsub = pantryService.subscribe((items) => {
       setKitchenItems(items.map((i) => i.name));
     });
+    const unsubPass = preferencesStore.subscribe((updatedPass) => {
+      setPass(updatedPass);
+    });
 
     pantryService
       .fetchAll()
@@ -91,7 +95,10 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
       })
       .catch(() => {});
 
-    return unsub;
+    return () => {
+      unsub();
+      unsubPass();
+    };
   }, [contentFade, contentY]);
 
   const toggleItem = (item: string) => {
@@ -203,11 +210,18 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
           >
             {/* UNIFIED KITCHEN INGREDIENTS STUDIO */}
             <View style={styles.pantryCard}>
-              <View style={styles.cardHeaderRow}>
-                <Text style={styles.cardHeaderHint}>
-                  Tap what you have at home
-                </Text>
-                {kitchenItems.length > 0 && (
+              {kitchenItems.length === 0 ? (
+                <View style={styles.hungryEmptyRow}>
+                  <MamaCharacter pose="hungry" size={54} isSpeaking={false} />
+                  <Text style={styles.hungryEmptyText}>
+                    Fridge looking empty... tap what you have at home.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.cardHeaderRow}>
+                  <Text style={styles.cardHeaderHint}>
+                    Tap what you have at home
+                  </Text>
                   <TouchableOpacity
                     style={styles.clearBtn}
                     onPress={handleClearKitchen}
@@ -216,8 +230,8 @@ export const WhatsInYourKitchen: React.FC<Props> = ({ navigation }) => {
                   >
                     <Text style={styles.clearBtnText}>Clear all ({kitchenItems.length})</Text>
                   </TouchableOpacity>
-                )}
-              </View>
+                </View>
+              )}
 
               {/* Quick Add Input */}
               <View style={styles.inputRow}>
@@ -391,6 +405,22 @@ const styles = StyleSheet.create({
   },
   cardHeaderHint: {
     fontSize: 13.5,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  hungryEmptyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FAF7F2',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  hungryEmptyText: {
+    flex: 1,
+    fontSize: 13.5,
+    lineHeight: 18,
     fontWeight: '600',
     color: colors.text.secondary,
   },

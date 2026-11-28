@@ -1,22 +1,34 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  View,
   StyleSheet,
   Animated,
-  ViewStyle,
+  Easing,
   TouchableOpacity,
+  ViewStyle,
 } from 'react-native';
 import Svg, {
   Circle,
-  Path,
-  G,
-  Rect,
   Ellipse,
+  G,
+  Path,
+  Rect,
   Defs,
   LinearGradient,
+  RadialGradient,
   Stop,
 } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 
-export type MamaPose = 'welcoming' | 'thinking' | 'writing' | 'delighted' | 'cooking';
+export type MamaPose =
+  | 'welcoming'
+  | 'thinking'
+  | 'writing'
+  | 'delighted'
+  | 'cooking'
+  | 'judging'
+  | 'hungry'
+  | 'shaking';
 
 interface MamaCharacterProps {
   pose?: MamaPose;
@@ -24,465 +36,755 @@ interface MamaCharacterProps {
   style?: ViewStyle;
   isSpeaking?: boolean;
   reactionKey?: string | number;
+  hideStaticDice?: boolean;
+  hideArms?: boolean;
   onPress?: () => void;
 }
 
+/**
+ * The Living Mama Bowl — faithful 60fps React Native port of our approved
+ * Pixar/Duolingo mascot rig:
+ * - Warm 3D-shaded cream ceramic bowl + matte-gold foot + floating golden "M" steam
+ * - Independently articulated stubby ceramic arms (flailing in Shake, waving in Happy,
+ *   shaking the wooden spoon in Judge side-eye, cheering in Cooked/Delighted!)
+ * - Grounded contact shadow that shrinks as Mama leaps into the air
+ * - Jelly squash-and-stretch + fast comedy shimmy + organic blinking + tap-to-poke squish
+ */
 export const MamaCharacter: React.FC<MamaCharacterProps> = ({
   pose = 'welcoming',
-  size = 140,
+  size = 110,
   style,
   isSpeaking = true,
   reactionKey,
+  hideStaticDice = false,
+  hideArms = false,
   onPress,
 }) => {
-  // 1. Idle breathing
+  // Independent native-driver motion channels for fluid cartoon physics
   const breathAnim = useRef(new Animated.Value(0)).current;
-  const reactTilt = useRef(new Animated.Value(0)).current;
-  const isFirstReactionRef = useRef(true);
-
-  // 2. Blinking eyes
-  const blinkAnim = useRef(new Animated.Value(1)).current;
-
-  // 3. Speaking mouth
-  const mouthAnim = useRef(new Animated.Value(0)).current;
-
-  // 4. Pose-specific distinct animations:
-  // - Waving hand for 'welcoming'
-  const waveAnim = useRef(new Animated.Value(0)).current;
-  // - Tapping finger for 'thinking'
-  const thinkTapAnim = useRef(new Animated.Value(0)).current;
-  // - Scribbling pencil for 'writing'
-  const writeScribbleAnim = useRef(new Animated.Value(0)).current;
-  // - Clapping / heart pulse for 'delighted'
-  const heartPulseAnim = useRef(new Animated.Value(1)).current;
-  // - Stirring pan for 'cooking'
-  const stirAnim = useRef(new Animated.Value(0)).current;
   const steamAnim = useRef(new Animated.Value(0)).current;
+  const shimmyX = useRef(new Animated.Value(0)).current;
+  const hopY = useRef(new Animated.Value(0)).current;
+  const rockRot = useRef(new Animated.Value(0)).current;
+  const jellySquash = useRef(new Animated.Value(0)).current;
+  const leftArmAnim = useRef(new Animated.Value(0)).current;
+  const rightArmAnim = useRef(new Animated.Value(0)).current;
+  const tapSquish = useRef(new Animated.Value(1)).current;
+  const reactTilt = useRef(new Animated.Value(0)).current;
 
-  // 5. Interactive tap bounce
-  const tapScale = useRef(new Animated.Value(1)).current;
+  const isFirstReactionRef = useRef(true);
+  const [isBlinking, setIsBlinking] = useState(false);
 
+  const isShaking = pose === 'shaking';
+  const isJudging = pose === 'judging';
+  const isDelighted = pose === 'delighted';
+  const isHungry = pose === 'hungry';
+  const isHappyIdle = !isShaking && !isJudging && !isDelighted && !isHungry;
+
+  // 1. Natural organic eye blink timer
   useEffect(() => {
-    // Continuous gentle breath loop
-    const breathLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breathAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
-        Animated.timing(breathAnim, { toValue: 0, duration: 1500, useNativeDriver: true }),
-      ])
-    );
-    breathLoop.start();
+    let blinkTimeout: ReturnType<typeof setTimeout> | null = null;
+    let unblinkTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    // Natural eye blink loop
-    const blinkLoop = Animated.loop(
-      Animated.sequence([
-        Animated.delay(2800),
-        Animated.timing(blinkAnim, { toValue: 0.1, duration: 100, useNativeDriver: true }),
-        Animated.timing(blinkAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
-        Animated.delay(150),
-        Animated.timing(blinkAnim, { toValue: 0.1, duration: 80, useNativeDriver: true }),
-        Animated.timing(blinkAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
-      ])
-    );
-    blinkLoop.start();
-
-    return () => {
-      breathLoop.stop();
-      blinkLoop.stop();
+    const scheduleBlink = () => {
+      const waitMs = 2400 + Math.floor(Math.random() * 2600);
+      blinkTimeout = setTimeout(() => {
+        setIsBlinking(true);
+        unblinkTimeout = setTimeout(() => {
+          setIsBlinking(false);
+          scheduleBlink();
+        }, 135);
+      }, waitMs);
     };
-  }, [breathAnim, blinkAnim]);
 
-  // Distinct Pose Animations triggered when pose changes
+    scheduleBlink();
+    return () => {
+      if (blinkTimeout) clearTimeout(blinkTimeout);
+      if (unblinkTimeout) clearTimeout(unblinkTimeout);
+    };
+  }, []);
+
+  // 2. Mood-driven 60fps multi-channel cartoon kinematics (matches mama_bowl_mascot_demo.html!)
   useEffect(() => {
-    let activeLoop: Animated.CompositeAnimation | null = null;
+    breathAnim.setValue(0);
+    steamAnim.setValue(0);
+    shimmyX.setValue(0);
+    hopY.setValue(0);
+    rockRot.setValue(0);
+    jellySquash.setValue(0);
+    leftArmAnim.setValue(0);
+    rightArmAnim.setValue(0);
 
-    if (pose === 'welcoming') {
-      // Active hand waving loop back and forth
-      activeLoop = Animated.loop(
+    const loops: Animated.CompositeAnimation[] = [];
+
+    const startLoop = (anim: Animated.CompositeAnimation) => {
+      const l = Animated.loop(anim);
+      loops.push(l);
+      l.start();
+    };
+
+    if (isShaking) {
+      // EXACT DEMO SHAKE: fast hilarious side-to-side shimmy + bouncing air hops + ±15° rock + jelly squash + wildly flailing arms!
+      startLoop(
         Animated.sequence([
-          Animated.timing(waveAnim, { toValue: 1, duration: 450, useNativeDriver: true }),
-          Animated.timing(waveAnim, { toValue: -1, duration: 450, useNativeDriver: true }),
+          Animated.timing(shimmyX, { toValue: 1, duration: 75, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(shimmyX, { toValue: -1, duration: 75, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
         ])
       );
-      activeLoop.start();
-    } else if (pose === 'thinking') {
-      // Finger tapping chin
-      activeLoop = Animated.loop(
+      startLoop(
         Animated.sequence([
-          Animated.timing(thinkTapAnim, { toValue: -4, duration: 320, useNativeDriver: true }),
-          Animated.timing(thinkTapAnim, { toValue: 0, duration: 320, useNativeDriver: true }),
-          Animated.delay(400),
+          Animated.timing(hopY, { toValue: 1, duration: 155, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(hopY, { toValue: 0, duration: 155, easing: Easing.in(Easing.quad), useNativeDriver: true }),
         ])
       );
-      activeLoop.start();
-    } else if (pose === 'writing') {
-      // Pencil rapid scribble across recipe book
-      activeLoop = Animated.loop(
+      startLoop(
         Animated.sequence([
-          Animated.timing(writeScribbleAnim, { toValue: 6, duration: 180, useNativeDriver: true }),
-          Animated.timing(writeScribbleAnim, { toValue: -6, duration: 180, useNativeDriver: true }),
-          Animated.timing(writeScribbleAnim, { toValue: 4, duration: 150, useNativeDriver: true }),
-          Animated.timing(writeScribbleAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
-          Animated.delay(350),
+          Animated.timing(rockRot, { toValue: 1, duration: 95, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(rockRot, { toValue: -1, duration: 95, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
         ])
       );
-      activeLoop.start();
-    } else if (pose === 'delighted') {
-      // Warm pulsing heart and clapping hands
-      activeLoop = Animated.loop(
+      startLoop(
         Animated.sequence([
-          Animated.timing(heartPulseAnim, { toValue: 1.25, duration: 400, useNativeDriver: true }),
-          Animated.timing(heartPulseAnim, { toValue: 0.95, duration: 350, useNativeDriver: true }),
-          Animated.timing(heartPulseAnim, { toValue: 1.15, duration: 300, useNativeDriver: true }),
-          Animated.timing(heartPulseAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-          Animated.delay(600),
+          Animated.timing(jellySquash, { toValue: 1, duration: 120, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(jellySquash, { toValue: -1, duration: 120, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
         ])
       );
-      activeLoop.start();
-    } else if (pose === 'cooking') {
-      // Stirring pan loop
-      const stirLoop = Animated.loop(
+      startLoop(
         Animated.sequence([
-          Animated.timing(stirAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
-          Animated.timing(stirAnim, { toValue: -1, duration: 700, useNativeDriver: true }),
+          Animated.timing(steamAnim, { toValue: 1, duration: 125, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(steamAnim, { toValue: -1, duration: 125, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
         ])
       );
-      const steamLoop = Animated.loop(
+      startLoop(
         Animated.sequence([
-          Animated.timing(steamAnim, { toValue: 1, duration: 1400, useNativeDriver: true }),
-          Animated.timing(steamAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
+          Animated.timing(leftArmAnim, { toValue: 1, duration: 110, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(leftArmAnim, { toValue: -1, duration: 110, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
         ])
       );
-      activeLoop = Animated.parallel([stirLoop, steamLoop]);
-      activeLoop.start();
+      startLoop(
+        Animated.sequence([
+          Animated.timing(rightArmAnim, { toValue: -1, duration: 110, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(rightArmAnim, { toValue: 1, duration: 110, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+    } else if (isDelighted) {
+      // EXACT DEMO COOKED!: Joyful bouncing celebration hop + arms cheering + golden steam glow!
+      startLoop(
+        Animated.sequence([
+          Animated.timing(hopY, { toValue: 1, duration: 240, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(hopY, { toValue: 0, duration: 240, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        ])
+      );
+      startLoop(
+        Animated.sequence([
+          Animated.timing(jellySquash, { toValue: -1, duration: 240, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(jellySquash, { toValue: 1, duration: 240, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        ])
+      );
+      startLoop(
+        Animated.sequence([
+          Animated.timing(steamAnim, { toValue: 1, duration: 240, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(steamAnim, { toValue: 0, duration: 240, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        ])
+      );
+      startLoop(
+        Animated.sequence([
+          Animated.timing(leftArmAnim, { toValue: 1, duration: 240, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(leftArmAnim, { toValue: 0, duration: 240, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        ])
+      );
+      startLoop(
+        Animated.sequence([
+          Animated.timing(rightArmAnim, { toValue: 1, duration: 240, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(rightArmAnim, { toValue: 0, duration: 240, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        ])
+      );
+    } else if (isJudging) {
+      // EXACT DEMO JUDGE: Subtle breathing, tilted -4deg, right arm rapidly shaking the wooden spoon!
+      startLoop(
+        Animated.sequence([
+          Animated.timing(breathAnim, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(breathAnim, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+      startLoop(
+        Animated.sequence([
+          Animated.timing(steamAnim, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(steamAnim, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+      // Shaking wooden spoon rhythm!
+      startLoop(
+        Animated.sequence([
+          Animated.timing(rightArmAnim, { toValue: 1, duration: 150, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(rightArmAnim, { toValue: -1, duration: 150, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+    } else if (isHungry) {
+      // EXACT DEMO HUNGRY: Dramatic 7 PM starving melt + gentle sad wobble
+      startLoop(
+        Animated.sequence([
+          Animated.timing(breathAnim, { toValue: 1, duration: 600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(breathAnim, { toValue: 0, duration: 600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+      startLoop(
+        Animated.sequence([
+          Animated.timing(rockRot, { toValue: 1, duration: 820, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(rockRot, { toValue: -1, duration: 820, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+      startLoop(
+        Animated.sequence([
+          Animated.timing(steamAnim, { toValue: 1, duration: 1300, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(steamAnim, { toValue: 0, duration: 1300, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+    } else {
+      // EXACT DEMO HAPPY IDLE: Soft joyful breathing bounce + gentle jelly squash + friendly left-arm wave!
+      startLoop(
+        Animated.sequence([
+          Animated.timing(breathAnim, { toValue: 1, duration: 950, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(breathAnim, { toValue: 0, duration: 950, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+      startLoop(
+        Animated.sequence([
+          Animated.timing(steamAnim, { toValue: 1, duration: 750, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(steamAnim, { toValue: 0, duration: 750, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+      startLoop(
+        Animated.sequence([
+          Animated.timing(leftArmAnim, { toValue: 1, duration: 480, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(leftArmAnim, { toValue: -1, duration: 480, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
     }
 
     return () => {
-      if (activeLoop) activeLoop.stop();
+      loops.forEach((l) => l.stop());
     };
-  }, [pose, waveAnim, thinkTapAnim, writeScribbleAnim, heartPulseAnim, stirAnim, steamAnim]);
+  }, [
+    isShaking,
+    isDelighted,
+    isJudging,
+    isHungry,
+    breathAnim,
+    steamAnim,
+    shimmyX,
+    hopY,
+    rockRot,
+    jellySquash,
+    leftArmAnim,
+    rightArmAnim,
+  ]);
 
-  // Speaking mouth loop
+  // 3. Cute tactile tilt bounce whenever reactionKey changes
   useEffect(() => {
-    if (!isSpeaking) {
-      mouthAnim.setValue(0);
-      return;
-    }
-    const talkLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(mouthAnim, { toValue: 1, duration: 160, useNativeDriver: true }),
-        Animated.timing(mouthAnim, { toValue: 0.2, duration: 160, useNativeDriver: true }),
-        Animated.timing(mouthAnim, { toValue: 0.8, duration: 140, useNativeDriver: true }),
-        Animated.timing(mouthAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
-        Animated.delay(400),
-      ])
-    );
-    talkLoop.start();
-    return () => talkLoop.stop();
-  }, [isSpeaking, pose, mouthAnim]);
-
-  const handlePress = () => {
-    Animated.sequence([
-      Animated.spring(tapScale, { toValue: 1.12, friction: 3, tension: 160, useNativeDriver: true }),
-      Animated.spring(tapScale, { toValue: 1, friction: 4, tension: 120, useNativeDriver: true }),
-    ]).start();
-    onPress?.();
-  };
-
-  // Interpolations
-  const breathY = breathAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -3],
-  });
-
-  // Living reaction tilt & nod whenever user swipes a card or locks in a meal
-  useEffect(() => {
-    if (reactionKey === undefined) return;
     if (isFirstReactionRef.current) {
       isFirstReactionRef.current = false;
       return;
     }
-    Animated.parallel([
-      Animated.sequence([
-        Animated.timing(reactTilt, { toValue: -1, duration: 130, useNativeDriver: true }),
-        Animated.timing(reactTilt, { toValue: 0.7, duration: 150, useNativeDriver: true }),
-        Animated.spring(reactTilt, { toValue: 0, friction: 6, tension: 120, useNativeDriver: true }),
-      ]),
-      Animated.sequence([
-        Animated.timing(tapScale, { toValue: 1.07, duration: 120, useNativeDriver: true }),
-        Animated.spring(tapScale, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }),
-      ]),
+    Animated.sequence([
+      Animated.timing(reactTilt, { toValue: 1, duration: 100, useNativeDriver: true }),
+      Animated.timing(reactTilt, { toValue: -0.7, duration: 110, useNativeDriver: true }),
+      Animated.spring(reactTilt, { toValue: 0, friction: 5, tension: 140, useNativeDriver: true }),
     ]).start();
-  }, [reactionKey, reactTilt, tapScale]);
+  }, [reactionKey, reactTilt]);
 
-  const reactRotate = reactTilt.interpolate({
-    inputRange: [-1, 0, 1],
-    outputRange: ['-5deg', '0deg', '5deg'],
-  });
+  // 4. Tap-to-poke rubbery spring squish + haptic feedback
+  const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    Animated.sequence([
+      Animated.timing(tapSquish, { toValue: 0.84, duration: 75, useNativeDriver: true }),
+      Animated.spring(tapSquish, {
+        toValue: 1.09,
+        friction: 4,
+        tension: 220,
+        useNativeDriver: true,
+      }),
+      Animated.spring(tapSquish, {
+        toValue: 1,
+        friction: 5,
+        tension: 160,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    onPress?.();
+  };
 
-  const waveDeg = waveAnim.interpolate({
-    inputRange: [-1, 0, 1],
-    outputRange: ['-18deg', '0deg', '22deg'],
-  });
+  // Scale-proportional displacements so 44px badges & 210px hero stages both look perfect!
+  const k = size / 260;
 
-  const stirDeg = stirAnim.interpolate({
-    inputRange: [-1, 0, 1],
-    outputRange: ['-12deg', '0deg', '15deg'],
-  });
+  const bodyTranslateX = isShaking
+    ? shimmyX.interpolate({ inputRange: [-1, 1], outputRange: [-13 * k, 13 * k] })
+    : 0;
 
-  const steamY = steamAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -22],
-  });
-  const steamOpacity = steamAnim.interpolate({
-    inputRange: [0, 0.3, 0.8, 1],
-    outputRange: [0, 0.8, 0.3, 0],
-  });
+  const bodyTranslateY = isShaking
+    ? hopY.interpolate({ inputRange: [0, 1], outputRange: [2 * k, -19 * k] })
+    : isDelighted
+      ? hopY.interpolate({ inputRange: [0, 1], outputRange: [2 * k, -22 * k] })
+      : isHungry
+        ? breathAnim.interpolate({ inputRange: [0, 1], outputRange: [8 * k, 11 * k] })
+        : isJudging
+          ? breathAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 2.5 * k] })
+          : breathAnim.interpolate({ inputRange: [0, 1], outputRange: [1 * k, -6 * k] });
 
-  return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={handlePress}
-      style={[styles.touchWrap, { width: size, height: size }, style]}
-    >
+  const bodyRotate = isShaking
+    ? rockRot.interpolate({ inputRange: [-1, 1], outputRange: ['-15deg', '15deg'] })
+    : isHungry
+      ? rockRot.interpolate({ inputRange: [-1, 1], outputRange: ['-16deg', '-8deg'] })
+      : isJudging
+        ? '-4deg'
+        : reactTilt.interpolate({ inputRange: [-1, 0, 1], outputRange: ['-8deg', '0deg', '8deg'] });
+
+  const bodyScaleX = isShaking
+    ? jellySquash.interpolate({ inputRange: [-1, 1], outputRange: [0.92, 1.09] })
+    : isDelighted
+      ? jellySquash.interpolate({ inputRange: [-1, 1], outputRange: [0.94, 1.06] })
+      : isHungry
+        ? 1.09
+        : isHappyIdle
+          ? breathAnim.interpolate({ inputRange: [0, 1], outputRange: [1.03, 0.97] })
+          : 1;
+
+  const bodyScaleY = isShaking
+    ? jellySquash.interpolate({ inputRange: [-1, 1], outputRange: [1.09, 0.92] })
+    : isDelighted
+      ? jellySquash.interpolate({ inputRange: [-1, 1], outputRange: [1.07, 0.94] })
+      : isHungry
+        ? 0.89
+        : isHappyIdle
+          ? breathAnim.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1.03] })
+          : 1;
+
+  // Ground contact shadow stays anchored on the floor and shrinks as Mama jumps!
+  const shadowScaleX =
+    isShaking || isDelighted
+      ? hopY.interpolate({ inputRange: [0, 1], outputRange: [1, 0.62] })
+      : isHappyIdle
+        ? breathAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.88] })
+        : 1;
+
+  // Independently floating & scaling golden "M" steam hair
+  const steamTranslateY = isShaking
+    ? steamAnim.interpolate({ inputRange: [-1, 1], outputRange: [-12 * k, 4 * k] })
+    : isDelighted
+      ? steamAnim.interpolate({ inputRange: [0, 1], outputRange: [-4 * k, -14 * k] })
+      : isHungry
+        ? steamAnim.interpolate({ inputRange: [0, 1], outputRange: [8 * k, 11 * k] })
+        : steamAnim.interpolate({ inputRange: [0, 1], outputRange: [2 * k, -6 * k] });
+
+  const steamRotate = isHungry
+    ? '-18deg'
+    : isHappyIdle
+      ? steamAnim.interpolate({ inputRange: [0, 1], outputRange: ['-5deg', '5deg'] })
+      : '0deg';
+
+  const steamScale = isShaking ? 1.15 : isDelighted ? 1.12 : isHungry ? 0.85 : 1;
+
+  // Independent arm rotation around shoulder sockets (exact HTML demo angles!)
+  const leftArmRotate = isShaking
+    ? leftArmAnim.interpolate({ inputRange: [-1, 1], outputRange: ['-58deg', '-8deg'] })
+    : isDelighted
+      ? leftArmAnim.interpolate({ inputRange: [0, 1], outputRange: ['-22deg', '-44deg'] })
+      : isJudging
+        ? '24deg'
+        : isHungry
+          ? '44deg'
+          : leftArmAnim.interpolate({ inputRange: [-1, 1], outputRange: ['-28deg', '8deg'] });
+
+  const rightArmRotate = isShaking
+    ? rightArmAnim.interpolate({ inputRange: [-1, 1], outputRange: ['8deg', '58deg'] })
+    : isDelighted
+      ? rightArmAnim.interpolate({ inputRange: [0, 1], outputRange: ['22deg', '44deg'] })
+      : isJudging
+        ? rightArmAnim.interpolate({ inputRange: [-1, 1], outputRange: ['-34deg', '-14deg'] })
+        : isHungry
+          ? '-44deg'
+          : '8deg';
+
+  // Exact arm layer geometry pinned to left & right shoulder sockets
+  const armBoxPx = size * (150 / 260);
+  const leftShoulderX = size * (62 / 260);
+  const rightShoulderX = size * (198 / 260);
+  const shoulderY = size * (146 / 260);
+
+  const showSpoon = isJudging || isDelighted || pose === 'cooking';
+  const showAura = isDelighted || isShaking;
+  const showStaticDice = isShaking && !hideStaticDice;
+
+  const content = (
+    <View style={[styles.wrap, { width: size, height: size }, style]}>
+      {/* Layer 1: Golden Aura Glow */}
+      {showAura ? (
+        <View style={styles.layerFill} pointerEvents="none">
+          <Svg width={size} height={size} viewBox="0 0 260 260">
+            <Defs>
+              <RadialGradient id="mamaHaloGrad" cx="50%" cy="50%" r="50%">
+                <Stop offset="0%" stopColor="#F4C95D" stopOpacity={isDelighted ? '0.62' : '0.52'} />
+                <Stop offset="100%" stopColor="#F4C95D" stopOpacity="0" />
+              </RadialGradient>
+            </Defs>
+            <Circle cx="130" cy="142" r="106" fill="url(#mamaHaloGrad)" />
+          </Svg>
+        </View>
+      ) : null}
+
+      {/* Layer 2: Grounded Contact Shadow (stays on floor & shrinks as Mama jumps!) */}
       <Animated.View
+        pointerEvents="none"
         style={[
-          styles.innerWrap,
+          styles.layerFill,
           {
-            width: size,
-            height: size,
-            transform: [{ translateY: breathY }, { scale: tapScale }, { rotate: reactRotate }],
+            transform: [{ scaleX: shadowScaleX }],
           },
         ]}
       >
-        {/* Layer 1: Base Character Body, Apron, Halo */}
-        <Svg viewBox="0 0 160 160" width={size} height={size} style={StyleSheet.absoluteFill}>
-          <Defs>
-            <LinearGradient id="haloGrad2" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor="#F9F6EE" />
-              <Stop offset="100%" stopColor="#EDE5D4" />
-            </LinearGradient>
-            <LinearGradient id="apronGrad2" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor="#4A5C38" />
-              <Stop offset="100%" stopColor="#354425" />
-            </LinearGradient>
-          </Defs>
-
-          {/* Halo Background */}
-          <Circle cx="80" cy="80" r="76" fill="url(#haloGrad2)" />
-          <Circle cx="80" cy="80" r="74" stroke="#E2D4BD" strokeWidth="1.5" strokeDasharray="3 3" />
-
-          {/* Torso & Green Dress */}
-          <Path d="M 34 150 Q 80 120 126 150 L 126 160 L 34 160 Z" fill="url(#apronGrad2)" />
-
-          {/* Crispy Linen Apron */}
-          <Path d="M 54 130 L 106 130 L 102 160 L 58 160 Z" fill="#FAF7EE" stroke="#DDD5C1" strokeWidth="1.5" />
-
-          {/* Red Kitchen Towel in Apron */}
-          <Path d="M 58 136 Q 64 150 62 160 L 56 160 Z" fill="#C45A45" />
-
-          {/* Head & Hair Wrap Base */}
-          <Ellipse cx="80" cy="42" rx="27" ry="24" fill="#3D2111" />
-          <Circle cx="80" cy="22" r="13" fill="#4D2A16" />
-          <Path d="M 64 30 Q 80 23 96 30 Q 80 34 64 30 Z" fill="#D47343" />
-          <Circle cx="80" cy="27" r="2.5" fill="#F4D35E" />
-
-          {/* Face */}
-          <Ellipse cx="80" cy="66" rx="23" ry="24" fill="#E8C39E" />
-          {/* Rosy Cheeks */}
-          <Circle cx="66" cy="72" r="4.5" fill="#EAA18E" opacity={0.65} />
-          <Circle cx="94" cy="72" r="4.5" fill="#EAA18E" opacity={0.65} />
-          {/* Gold Earrings */}
-          <Circle cx="56" cy="68" r="3" stroke="#D4AF37" strokeWidth="1.6" fill="none" />
-          <Circle cx="104" cy="68" r="3" stroke="#D4AF37" strokeWidth="1.6" fill="none" />
-          {/* Eyebrows */}
-          <Path d="M 67 55 Q 72 52 77 55" stroke="#3D2111" strokeWidth="1.8" strokeLinecap="round" fill="none" />
-          <Path d="M 83 55 Q 88 52 93 55" stroke="#3D2111" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+        <Svg width={size} height={size} viewBox="0 0 260 260">
+          <Ellipse cx="130" cy="224" rx="60" ry="10.5" fill="#242820" fillOpacity="0.16" />
         </Svg>
+      </Animated.View>
 
-        {/* Layer 2: Animated Blinking Eyes */}
-        <Animated.View
-          style={[
-            styles.partLayer,
-            { transform: [{ scaleY: blinkAnim }] },
-          ]}
-        >
-          <Svg viewBox="0 0 160 160" width={size} height={size}>
-            {pose === 'thinking' ? (
-              // Thinking Eyes Looking Upward
-              <G>
-                <Circle cx="72" cy="59" r="3" fill="#242820" />
-                <Circle cx="73" cy="58" r="1" fill="#FFFFFF" />
-                <Circle cx="88" cy="59" r="3" fill="#242820" />
-                <Circle cx="89" cy="58" r="1" fill="#FFFFFF" />
-              </G>
-            ) : (
-              // Warm Smiling Crescent Eyes
-              <G>
-                <Path d="M 68 62 Q 72 58 76 62" stroke="#242820" strokeWidth="2.5" strokeLinecap="round" fill="none" />
-                <Path d="M 84 62 Q 88 58 92 62" stroke="#242820" strokeWidth="2.5" strokeLinecap="round" fill="none" />
-              </G>
-            )}
-          </Svg>
-        </Animated.View>
+      {/* Layer 3: Full Living Mama Bowl Rig (shimmy + air hops + jelly squash + poke squish!) */}
+      <Animated.View
+        style={[
+          styles.layerFill,
+          {
+            transform: [
+              { translateX: bodyTranslateX },
+              { translateY: bodyTranslateY },
+              { rotate: bodyRotate },
+              { scaleX: bodyScaleX },
+              { scaleY: bodyScaleY },
+              { scale: tapSquish },
+            ],
+          },
+        ]}
+      >
+        {/* 3A. Left Stubby Ceramic Arm (pivots cleanly at left shoulder behind bowl!) */}
+        {!hideArms ? (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: armBoxPx,
+              height: armBoxPx,
+              left: leftShoulderX - armBoxPx / 2,
+              top: shoulderY - armBoxPx / 2,
+              zIndex: 1,
+              transform: [{ rotate: leftArmRotate }],
+            }}
+          >
+            <Svg width={armBoxPx} height={armBoxPx} viewBox="0 0 150 150">
+              <Path
+                d="M 79 75 Q 51 63 47 47"
+                fill="none"
+                stroke="#F4EFE4"
+                strokeWidth="17"
+                strokeLinecap="round"
+              />
+              <Path
+                d="M 79 75 Q 51 63 47 47"
+                fill="none"
+                stroke="#CEC6B6"
+                strokeWidth="17"
+                strokeOpacity="0.22"
+                strokeLinecap="round"
+              />
+            </Svg>
+          </Animated.View>
+        ) : null}
 
-        {/* Layer 3: Animated Speaking Mouth */}
+        {/* 3B. Right Stubby Ceramic Arm + Shaking Wooden Spoon (pivots cleanly at right shoulder!) */}
+        {!hideArms ? (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: armBoxPx,
+              height: armBoxPx,
+              left: rightShoulderX - armBoxPx / 2,
+              top: shoulderY - armBoxPx / 2,
+              zIndex: 1,
+              transform: [{ rotate: rightArmRotate }],
+            }}
+          >
+            <Svg width={armBoxPx} height={armBoxPx} viewBox="0 0 150 150">
+              {showSpoon ? (
+                <G transform="translate(99, 49) rotate(12)">
+                  <Rect
+                    x="-3.5"
+                    y="-32"
+                    width="7"
+                    height="56"
+                    rx="3.5"
+                    fill="#B57B44"
+                    stroke="#6E441E"
+                    strokeWidth="1.6"
+                  />
+                  <Ellipse
+                    cx="0"
+                    cy="-40"
+                    rx="11.5"
+                    ry="15.5"
+                    fill="#C98D54"
+                    stroke="#6E441E"
+                    strokeWidth="1.8"
+                  />
+                  <Ellipse cx="-2" cy="-42" rx="4.8" ry="7.5" fill="#DFAA74" fillOpacity="0.55" />
+                </G>
+              ) : null}
+              <Path
+                d="M 71 75 Q 99 65 103 49"
+                fill="none"
+                stroke="#F4EFE4"
+                strokeWidth="17"
+                strokeLinecap="round"
+              />
+              <Path
+                d="M 71 75 Q 99 65 103 49"
+                fill="none"
+                stroke="#CEC6B6"
+                strokeWidth="17"
+                strokeOpacity="0.22"
+                strokeLinecap="round"
+              />
+            </Svg>
+          </Animated.View>
+        ) : null}
+
+        {/* 3C. Independently Bouncing Golden "M" Steam Hair */}
         <Animated.View
+          pointerEvents="none"
           style={[
-            styles.partLayer,
+            styles.layerFill,
             {
+              zIndex: 2,
               transform: [
-                {
-                  scaleY: mouthAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [1, 1.7],
-                  }),
-                },
+                { translateY: steamTranslateY },
+                { rotate: steamRotate },
+                { scale: steamScale },
               ],
             },
           ]}
         >
-          <Svg viewBox="0 0 160 160" width={size} height={size}>
-            <Path d="M 73 74 Q 80 83 87 74" stroke="#68341D" strokeWidth="2.4" strokeLinecap="round" fill="#C45A45" />
-            <Path d="M 75 75 Q 80 77 85 75" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+          <Svg width={size} height={size} viewBox="0 0 260 260">
+            <Defs>
+              <LinearGradient id="mamaSteamHairGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <Stop offset="0%" stopColor="#FFE699" />
+                <Stop offset="55%" stopColor="#F2BD4B" />
+                <Stop offset="100%" stopColor="#D99426" />
+              </LinearGradient>
+            </Defs>
+            <G transform="translate(130, 82)">
+              <Path
+                d="M -32 10 L -32 -12 C -32 -29 -13 -31 -7 -14 L 0 4 L 7 -14 C 13 -31 32 -29 32 -12 L 32 10"
+                fill="none"
+                stroke="url(#mamaSteamHairGrad)"
+                strokeWidth="14"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <Path
+                d="M -32 10 L -32 -12 C -32 -29 -13 -31 -7 -14 L 0 4 L 7 -14 C 13 -31 32 -29 32 -12 L 32 10"
+                fill="none"
+                stroke="#FFF6D6"
+                strokeWidth="4"
+                strokeOpacity="0.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </G>
           </Svg>
         </Animated.View>
 
-        {/* Layer 4: POSE 1 - WELCOMING: Articulated Waving Hand */}
-        {pose === 'welcoming' && (
-          <Animated.View
-            style={[
-              styles.partLayer,
-              { transform: [{ rotate: waveDeg }] },
-            ]}
-          >
-            <Svg viewBox="0 0 160 160" width={size} height={size}>
-              {/* Left hand gently waving up high */}
-              <Path d="M 42 128 Q 28 116 32 100" stroke="#E8C39E" strokeWidth="7" strokeLinecap="round" fill="none" />
-              <Circle cx="32" cy="98" r="7" fill="#E8C39E" />
-              {/* Fingers waving */}
-              <Path d="M 28 94 Q 24 88 30 86 Q 34 90 32 96 Z" fill="#E8C39E" />
-              <Path d="M 33 93 Q 32 85 37 85 Q 39 89 36 95 Z" fill="#E8C39E" />
-              {/* Right Hand resting peacefully on hip */}
-              <Circle cx="122" cy="132" r="7" fill="#E8C39E" />
-            </Svg>
-          </Animated.View>
-        )}
+        {/* 3D. Main Chubby Cream Ceramic Bowl + Golden Foot + Exact Demo Face */}
+        <View style={[styles.layerFill, { zIndex: 3 }]} pointerEvents="none">
+          <Svg width={size} height={size} viewBox="0 0 260 260">
+            <Defs>
+              <RadialGradient id="mamaCeramicGrad" cx="38%" cy="28%" r="72%">
+                <Stop offset="0%" stopColor="#FFFFFF" />
+                <Stop offset="68%" stopColor="#F7F2E7" />
+                <Stop offset="100%" stopColor="#DDD5C5" />
+              </RadialGradient>
+              <LinearGradient id="mamaBaseGold" x1="0%" y1="0%" x2="100%" y2="100%">
+                <Stop offset="0%" stopColor="#FFE699" />
+                <Stop offset="55%" stopColor="#F2BD4B" />
+                <Stop offset="100%" stopColor="#D99426" />
+              </LinearGradient>
+            </Defs>
 
-        {/* Layer 5: POSE 2 - THINKING: Tapping Finger & Thought Bubbles */}
-        {pose === 'thinking' && (
-          <Animated.View
-            style={[
-              styles.partLayer,
-              { transform: [{ translateY: thinkTapAnim }] },
-            ]}
-          >
-            <Svg viewBox="0 0 160 160" width={size} height={size}>
-              {/* Hand at chin tapping */}
-              <Path d="M 44 130 Q 54 110 68 92" stroke="#E8C39E" strokeWidth="7" strokeLinecap="round" fill="none" />
-              <Circle cx="70" cy="90" r="6.5" fill="#E8C39E" />
-              {/* Index finger tapping chin */}
-              <Path d="M 70 90 L 76 80" stroke="#E8C39E" strokeWidth="3.5" strokeLinecap="round" />
-              {/* Animated thought bubbles */}
-              <Circle cx="112" cy="40" r="3.5" fill="#D47343" opacity={0.7} />
-              <Circle cx="122" cy="30" r="5.5" fill="#D47343" opacity={0.7} />
-              <Circle cx="134" cy="18" r="8" fill="#F4D35E" opacity={0.8} />
-              {/* Question mark in thought bubble */}
-              <Path d="M 132 15 Q 134 13 136 15 Q 136 18 134 19 L 134 21" stroke="#3D2111" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-              <Circle cx="134" cy="23" r="0.8" fill="#3D2111" />
-            </Svg>
-          </Animated.View>
-        )}
+            {/* Optional small die if MamaCharacter(pose='shaking') is rendered standalone */}
+            {showStaticDice ? (
+              <G transform="translate(226, 98) rotate(18)">
+                <Rect
+                  x="-16"
+                  y="-16"
+                  width="32"
+                  height="32"
+                  rx="8"
+                  fill="#F2C14E"
+                  stroke="#9C6B16"
+                  strokeWidth="2.5"
+                />
+                <Circle cx="-6" cy="-6" r="2.8" fill="#5A3C08" />
+                <Circle cx="6" cy="6" r="2.8" fill="#5A3C08" />
+                <Circle cx="6" cy="-6" r="2.8" fill="#5A3C08" />
+                <Circle cx="-6" cy="6" r="2.8" fill="#5A3C08" />
+                <Circle cx="0" cy="0" r="2.8" fill="#5A3C08" />
+              </G>
+            ) : null}
 
-        {/* Layer 6: POSE 3 - WRITING: Scribbling Pencil & Recipe Pad */}
-        {pose === 'writing' && (
-          <Animated.View
-            style={[
-              styles.partLayer,
-              { transform: [{ translateX: writeScribbleAnim }] },
-            ]}
-          >
-            <Svg viewBox="0 0 160 160" width={size} height={size}>
-              {/* Wooden Recipe Notebook */}
-              <Rect x="42" y="112" width="40" height="30" rx="4" fill="#E0D2B4" stroke="#8C6D46" strokeWidth="1.5" />
-              <Path d="M 48 118 L 76 118" stroke="#7A613E" strokeWidth="1.5" strokeLinecap="round" />
-              <Path d="M 48 124 L 72 124" stroke="#7A613E" strokeWidth="1.5" strokeLinecap="round" />
-              <Path d="M 48 130 L 66 130" stroke="#7A613E" strokeWidth="1.5" strokeLinecap="round" />
-              {/* Hand Scribbling with Wooden Pencil */}
-              <Circle cx="84" cy="118" r="6" fill="#E8C39E" />
-              <Path d="M 86 110 L 92 122 L 82 120 Z" fill="#D47343" />
-              <Path d="M 92 122 L 95 125" stroke="#242820" strokeWidth="1.5" strokeLinecap="round" />
-            </Svg>
-          </Animated.View>
-        )}
+            {/* Golden Ceramic Base Foot */}
+            <Rect x="102" y="201" width="56" height="12" rx="6" fill="url(#mamaBaseGold)" />
 
-        {/* Layer 7: POSE 4 - DELIGHTED: Pulsing Heart & Clasped Hands */}
-        {pose === 'delighted' && (
-          <Animated.View
-            style={[
-              styles.partLayer,
-              { transform: [{ scale: heartPulseAnim }] },
-            ]}
-          >
-            <Svg viewBox="0 0 160 160" width={size} height={size}>
-              {/* Clasped Happy Hands */}
-              <Circle cx="74" cy="122" r="7" fill="#E8C39E" />
-              <Circle cx="86" cy="122" r="7" fill="#E8C39E" />
-              {/* Warm Pulsing Love Heart Above */}
-              <Path
-                d="M 80 14 Q 75 7 70 10 Q 65 14 80 24 Q 95 14 90 10 Q 85 7 80 14 Z"
-                fill="#C45A45"
-              />
-            </Svg>
-          </Animated.View>
-        )}
+            {/* Chubby Warm Cream Ceramic Bowl Body (exact demo silhouette!) */}
+            <Path
+              d="M 52 118 L 208 118 C 208 176 176 204 130 204 C 84 204 52 176 52 118 Z"
+              fill="url(#mamaCeramicGrad)"
+              stroke="#D4CCB9"
+              strokeWidth="2.5"
+              strokeLinejoin="round"
+            />
+            {/* Soft ceramic rim lip + warm inner shadow */}
+            <Ellipse cx="130" cy="118" rx="78" ry="12" fill="#EDE5D4" stroke="#D4CCB9" strokeWidth="2" />
+            <Ellipse cx="130" cy="117" rx="66" ry="7" fill="#D5C8AF" fillOpacity="0.65" />
 
-        {/* Layer 8: POSE 5 - COOKING: Stirring Pan with Rising Steam */}
-        {pose === 'cooking' && (
-          <G>
-            {/* Copper Skillet in front */}
-            <Svg viewBox="0 0 160 160" width={size} height={size} style={StyleSheet.absoluteFill}>
-              <Ellipse cx="116" cy="142" rx="22" ry="10" fill="#B36B47" stroke="#5E2C1A" strokeWidth="1.5" />
-              <Ellipse cx="116" cy="141" rx="18" ry="7" fill="#E8A938" />
-              <Circle cx="112" cy="140" r="3" fill="#FAF5E8" />
-              <Circle cx="120" cy="141" r="2.5" fill="#FAF5E8" />
-              <Path d="M 136 142 L 154 138" stroke="#3D1D11" strokeWidth="3.5" strokeLinecap="round" />
-            </Svg>
+            {/* EXPRESSIVE FACE LAYER (exact mama_bowl_mascot_demo.html coordinates!) */}
+            <G transform="translate(130, 156)">
+              {/* Rosy warm cheeks */}
+              <Ellipse cx="-42" cy="8" rx="11" ry="6.5" fill="#F29B7E" fillOpacity="0.52" />
+              <Ellipse cx="42" cy="8" rx="11" ry="6.5" fill="#F29B7E" fillOpacity="0.52" />
 
-            {/* Rising Steam */}
-            <Animated.View style={[styles.partLayer, { transform: [{ translateY: steamY }], opacity: steamOpacity }]}>
-              <Svg viewBox="0 0 160 160" width={size} height={size}>
-                <Path d="M 112 132 Q 110 122 114 114 Q 118 106 114 98" stroke="#A89F91" strokeWidth="2" strokeLinecap="round" fill="none" />
-                <Path d="M 120 132 Q 124 120 120 110 Q 116 100 120 92" stroke="#A89F91" strokeWidth="2" strokeLinecap="round" fill="none" />
-              </Svg>
-            </Animated.View>
+              {isDelighted ? (
+                /* Happy closed crescent eyes (Cooked! celebration) */
+                <G>
+                  <Path
+                    d="M -37 -4 Q -26 -17 -15 -4"
+                    fill="none"
+                    stroke="#1E2219"
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                  />
+                  <Path
+                    d="M 15 -4 Q 26 -17 37 -4"
+                    fill="none"
+                    stroke="#1E2219"
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                  />
+                </G>
+              ) : isBlinking && !isShaking ? (
+                /* Natural organic blink */
+                <G>
+                  <Ellipse cx="-26" cy="-6" rx="12.5" ry="2" fill="#1E2219" />
+                  <Ellipse cx="26" cy="-6" rx="12.5" ry="2" fill="#1E2219" />
+                </G>
+              ) : (
+                /* Big glossy adorable Duolingo-style eyes (for Happy, Shake, Judge, Hungry!) */
+                <G>
+                  {/* Left Eye */}
+                  <G transform="translate(-26, -6)">
+                    <Ellipse cx="0" cy="0" rx="12.5" ry="14" fill="#1E2219" />
+                    <Circle cx={isJudging ? 3 : -3.5} cy={isJudging ? -5 : -4.5} r="4.5" fill="#FFFFFF" />
+                    <Circle cx={isJudging ? 7.5 : 4} cy={isJudging ? 3 : 4} r="2" fill="#FFFFFF" fillOpacity="0.85" />
+                    {isJudging ? (
+                      <Rect x="-15" y="-17" width="30" height="11" rx="3" fill="#F7F2E7" />
+                    ) : null}
+                  </G>
 
-            {/* Stirring Arm */}
-            <Animated.View style={[styles.partLayer, { transform: [{ rotate: stirDeg }] }]}>
-              <Svg viewBox="0 0 160 160" width={size} height={size}>
-                <Path d="M 102 124 Q 112 120 114 130" stroke="#E8C39E" strokeWidth="7" strokeLinecap="round" fill="none" />
-                <Path d="M 112 114 L 118 140" stroke="#8C5C38" strokeWidth="3" strokeLinecap="round" />
-                <Ellipse cx="118" cy="140" rx="3" ry="4" fill="#8C5C38" />
-                <Circle cx="113" cy="122" r="5.5" fill="#E8C39E" />
-              </Svg>
-            </Animated.View>
-          </G>
-        )}
+                  {/* Right Eye */}
+                  <G transform="translate(26, -6)">
+                    <Ellipse cx="0" cy="0" rx="12.5" ry="14" fill="#1E2219" />
+                    <Circle cx={isJudging ? 3 : -3.5} cy={isJudging ? -5 : -4.5} r="4.5" fill="#FFFFFF" />
+                    <Circle cx={isJudging ? 7.5 : 4} cy={isJudging ? 3 : 4} r="2" fill="#FFFFFF" fillOpacity="0.85" />
+                    {isJudging ? (
+                      <Rect x="-15" y="-17" width="30" height="11" rx="3" fill="#F7F2E7" />
+                    ) : null}
+                  </G>
+
+                  {/* Expressive Eyebrows */}
+                  {isJudging ? (
+                    <>
+                      <Path d="M -39 -22 L -14 -20" fill="none" stroke="#58673A" strokeWidth="4" strokeLinecap="round" />
+                      <Path d="M 14 -25 Q 26 -35 38 -24" fill="none" stroke="#58673A" strokeWidth="4" strokeLinecap="round" />
+                    </>
+                  ) : isHungry ? (
+                    <>
+                      <Path d="M -38 -20 L -15 -28" fill="none" stroke="#58673A" strokeWidth="4" strokeLinecap="round" />
+                      <Path d="M 15 -28 L 38 -20" fill="none" stroke="#58673A" strokeWidth="4" strokeLinecap="round" />
+                    </>
+                  ) : pose === 'thinking' ? (
+                    <Path d="M 14 -25 Q 26 -32 38 -24" fill="none" stroke="#58673A" strokeWidth="3.8" strokeLinecap="round" />
+                  ) : null}
+                </G>
+              )}
+
+              {/* Dynamic Mouth (exact HTML demo shapes!) */}
+              {isShaking ? (
+                <Path
+                  d="M -15 8 Q 0 28 15 8 Z"
+                  fill="#8C2D23"
+                  stroke="#1E2219"
+                  strokeWidth="3.2"
+                  strokeLinejoin="round"
+                />
+              ) : isJudging ? (
+                <Path d="M -12 14 Q 2 12 14 15" fill="none" stroke="#1E2219" strokeWidth="4.5" strokeLinecap="round" />
+              ) : isHungry ? (
+                <Path
+                  d="M -13 18 Q -6 12 0 18 Q 6 24 13 16"
+                  fill="none"
+                  stroke="#1E2219"
+                  strokeWidth="4.5"
+                  strokeLinecap="round"
+                />
+              ) : isDelighted ? (
+                <Path d="M -14 10 Q 0 26 14 10" fill="none" stroke="#1E2219" strokeWidth="4.5" strokeLinecap="round" />
+              ) : isSpeaking && (pose === 'welcoming' || pose === 'cooking') ? (
+                <Path d="M -12 10 Q 0 24 12 10" fill="none" stroke="#1E2219" strokeWidth="4.5" strokeLinecap="round" />
+              ) : (
+                <Path d="M -12 10 Q 0 22 12 10" fill="none" stroke="#1E2219" strokeWidth="4.5" strokeLinecap="round" />
+              )}
+            </G>
+          </Svg>
+        </View>
       </Animated.View>
+    </View>
+  );
+
+  if (!onPress) {
+    return content;
+  }
+
+  return (
+    <TouchableOpacity
+      onPress={handlePress}
+      activeOpacity={0.92}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      accessibilityRole="button"
+      accessibilityLabel="Poke Mama Dish mascot"
+    >
+      {content}
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  touchWrap: {
-    justifyContent: 'center',
+  wrap: {
     alignItems: 'center',
-  },
-  innerWrap: {
     justifyContent: 'center',
-    alignItems: 'center',
     position: 'relative',
   },
-  partLayer: {
-    ...StyleSheet.absoluteFill,
+  layerFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

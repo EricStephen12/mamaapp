@@ -6,17 +6,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
-import { RegionalMamaAvatar } from '../signature/RegionalMamaAvatar';
-import { preferencesStore } from '../../services/preferencesStore';
+import { MamaCharacter, MamaPose } from './MamaCharacter';
 import { useModalBottomInset } from '../../hooks/useBottomNavInset';
-
-const MAMA_OVERFED = require('../../../assets/family/mama-overfed.jpg');
-const AUNTIE_PULLING = require('../../../assets/family/auntie-pulling.jpg');
 
 export interface MamaMomentAction {
   label: string;
@@ -30,7 +25,7 @@ export interface MamaMomentModalProps {
   eyebrow?: string;
   title: string;
   message: string;
-  mood?: 'mama' | 'overfed' | 'auntie';
+  mood?: 'mama' | 'overfed' | 'auntie' | 'judging' | 'hungry' | 'shaking' | 'delighted';
   actions: MamaMomentAction[];
   onClose: () => void;
   /** Render inline as an absolute overlay inside an already-open Modal (prevents iOS nested modal conflicts) */
@@ -52,8 +47,16 @@ export const MamaMomentModal: React.FC<MamaMomentModalProps> = ({
 }) => {
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.88)).current;
-  const pass = preferencesStore.getKitchenPass();
   const modalBottomInset = useModalBottomInset(22);
+
+  const bowlPose: MamaPose =
+    mood === 'judging' || mood === 'auntie'
+      ? 'judging'
+      : mood === 'overfed' || mood === 'delighted'
+        ? 'delighted'
+        : mood === 'hungry' || mood === 'shaking'
+          ? mood
+          : 'welcoming';
 
   useEffect(() => {
     if (!visible) {
@@ -89,19 +92,9 @@ export const MamaMomentModal: React.FC<MamaMomentModalProps> = ({
     >
       <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
       <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
-        {/* Illustrated Character Badge */}
+        {/* Single Unified Living Mama Bowl */}
         <View style={styles.avatarStage}>
-          {mood === 'overfed' ? (
-            <Image source={MAMA_OVERFED} style={styles.customCharImg} resizeMode="cover" />
-          ) : mood === 'auntie' ? (
-            <Image source={AUNTIE_PULLING} style={styles.customCharImg} resizeMode="cover" />
-          ) : (
-            <RegionalMamaAvatar
-              countryCode={pass.country}
-              cuisineAnchor={pass.cuisineAnchor}
-              size={76}
-            />
-          )}
+          <MamaCharacter pose={bowlPose} size={90} isSpeaking={false} />
         </View>
 
         <View style={styles.eyebrowPill}>
@@ -209,14 +202,6 @@ const styles = StyleSheet.create({
   },
   avatarStage: {
     marginBottom: 12,
-  },
-  customCharImg: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    borderWidth: 2.5,
-    borderColor: '#D4A548',
-    backgroundColor: '#F8F5EF',
   },
   eyebrowPill: {
     backgroundColor: 'rgba(102, 112, 74, 0.12)',

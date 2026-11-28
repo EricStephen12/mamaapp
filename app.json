@@ -19,7 +19,13 @@
     },
     "android": {
       "package": "com.mamakitchen.app",
-      "versionCode": 2,
+      "versionCode": 3,
+      "permissions": [
+        "com.android.vending.BILLING"
+      ],
+      "blockedPermissions": [
+        "android.permission.ACTIVITY_RECOGNITION"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#58673A",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -45,7 +51,14 @@
       "expo-status-bar",
       "expo-secure-store",
       "expo-updates",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#58673A"
+        }
+      ]
     ],
     "extra": {
       "eas": {

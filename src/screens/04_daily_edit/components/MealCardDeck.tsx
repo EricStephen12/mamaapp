@@ -24,6 +24,7 @@ import { MealVideoPlayer } from '../../../components/MealVideoPlayer';
 import { SteamWisps } from '../../../components/signature/SteamWisps';
 import { MamaSealStamp } from '../../../components/signature/MamaSealStamp';
 import { MamaPlatePlaceholder } from '../../../components/common/MamaPlatePlaceholder';
+import { MamaCharacter } from '../../../components/common/MamaCharacter';
 import { playCardSnapHaptics } from '../../../utils/mamaHaptics';
 
 interface MealCardDeckProps {
@@ -367,20 +368,17 @@ export const MealCardDeck: React.FC<MealCardDeckProps> = ({
               <>
                 <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={styles.emptyPosterTitle}>
-                  Setting up {kitchenPass.countryName}&apos;s kitchen
-                </Text>
-                <Text style={styles.emptyPosterSub}>
-                  Picking fresh everyday home dishes for you...
+                  Picking {kitchenPass.countryName} dishes...
                 </Text>
               </>
             ) : (
               <>
-                <Ionicons name="restaurant-outline" size={32} color={colors.primary} />
+                <MamaCharacter pose="hungry" size={88} isSpeaking={false} />
                 <Text style={styles.emptyPosterTitle}>
-                  Couldn&apos;t load {kitchenPass.countryName} dishes
+                  Couldn&apos;t load dishes
                 </Text>
                 <Text style={styles.emptyPosterSub}>
-                  Check your connection and tap below to try again.
+                  Check your connection and retry.
                 </Text>
                 {onRetryDeck ? (
                   <TouchableOpacity

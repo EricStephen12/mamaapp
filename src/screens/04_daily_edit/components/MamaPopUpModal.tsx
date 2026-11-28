@@ -73,11 +73,11 @@ export const MamaPopUpModal: React.FC<MamaPopUpModalProps> = ({
 
   let displayedDialogue = quote;
   if (selectedMode === 'shortcut') {
-    displayedDialogue = `Want ${dishName} on the table even faster? Prep ${mainIngredient.toLowerCase()} in smaller pieces and keep the pan covered so steam cuts your cooking time by a third.`;
+    displayedDialogue = `Cut ${mainIngredient.toLowerCase()} smaller and cover the pan — cuts cook time by a third.`;
   } else if (selectedMode === 'flavor') {
     displayedDialogue = activeMeal?.mamaTip
       ? activeMeal.mamaTip
-      : `To make ${dishName} taste like a weekend feast, toast your aromatics in warm oil for 45 seconds before adding anything else.`;
+      : `Toast your aromatics in warm oil for 45 seconds first for deeper flavor.`;
   }
 
   const handleSelectChip = (mode: 'default' | 'shortcut' | 'flavor') => {
@@ -114,7 +114,7 @@ export const MamaPopUpModal: React.FC<MamaPopUpModalProps> = ({
           <View style={styles.headerRow}>
             <View style={styles.mamaBadge}>
               <Ionicons name="flame" size={13} color="#FFFFFF" />
-              <Text style={styles.mamaBadgeText}>MAMA’S KITCHEN SECRET</Text>
+              <Text style={styles.mamaBadgeText}>MAMA’S TIP</Text>
             </View>
             <TouchableOpacity
               style={styles.closeBtn}
@@ -145,7 +145,7 @@ export const MamaPopUpModal: React.FC<MamaPopUpModalProps> = ({
 
           {/* Interactive 1-Tap Prompt Chips */}
           <View style={styles.promptSection}>
-            <Text style={styles.promptHeading}>TAP TO ASK MAMA:</Text>
+            <Text style={styles.promptHeading}>QUICK TIPS</Text>
             <View style={styles.chipsWrap}>
               <TouchableOpacity
                 style={[

@@ -1,25 +1,20 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import {
   Modal,
   View,
   Text,
-  Image,
   StyleSheet,
   TouchableOpacity,
   Animated,
   Easing,
 } from 'react-native';
-import Svg, { Circle, Path, Ellipse, Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
 import { preferencesStore } from '../../services/preferencesStore';
 import { SteamWisps } from '../signature/SteamWisps';
-import { MamaSealStamp } from '../signature/MamaSealStamp';
+import { MamaCharacter } from './MamaCharacter';
 import { useModalBottomInset } from '../../hooks/useBottomNavInset';
-
-const MAMA_OVERFED = require('../../../assets/family/mama-overfed.jpg');
-const AUNTIE_PULLING = require('../../../assets/family/auntie-pulling.jpg');
 
 export interface MamaFamilyCelebrationProps {
   visible: boolean;
@@ -27,353 +22,108 @@ export interface MamaFamilyCelebrationProps {
   homeCostFormatted: string;
   savedVsTakeoutFormatted: string;
   mealsCookedCount: number;
+  xpAwarded?: number;
+  xpSkipReason?: 'daily_cap' | 'cooldown' | 'duplicate_dish';
   onClaimReward: () => void;
 }
 
-interface FamilyAchievement {
+interface CookAchievement {
   badge: string;
   headline: string;
   mamaLine: string;
-  auntieLine: string;
-  cousinLine: string;
 }
 
-function getFamilyAchievement(mealsCookedCount: number): FamilyAchievement {
+function getCookAchievement(mealsCookedCount: number): CookAchievement {
   if (mealsCookedCount <= 1) {
     return {
-      badge: 'FIRST POT SEASONED',
-      headline: 'Mama Is Over the Moon!',
-      mamaLine: '“My child really cooked! Even Mama overate…”',
-      auntieLine: '“Mama, leave some!”',
-      cousinLine: '“Save me a plate!”',
+      badge: 'FIRST PLATE COOKED',
+      headline: 'Plate Served!',
+      mamaLine: '“First pot seasoned — Mama is proud!”',
     };
   }
-  if (mealsCookedCount === 2) {
+  if (mealsCookedCount <= 3) {
     return {
       badge: 'HOME KITCHEN RHYTHM',
-      headline: 'Two Plates Strong!',
-      mamaLine: '“My belly is SO full… carry me to the couch!”',
-      auntieLine: '“Come on, Mama!”',
-      cousinLine: '“Push from behind!”',
-    };
-  }
-  if (mealsCookedCount <= 4) {
-    return {
-      badge: 'MAMA OVERATE!',
-      headline: 'The Whole Family Ate Well!',
-      mamaLine: '“Ooh my child… you cooked too well tonight!”',
-      auntieLine: '“Up you go, Mama!”',
-      cousinLine: '“I got the spoon!”',
+      headline: 'Cooked at Home!',
+      mamaLine: '“Way better than takeout.”',
     };
   }
   if (mealsCookedCount <= 7) {
     return {
-      badge: 'DELIVERY APPS DEFEATED',
-      headline: 'Takeout Didn’t Stand a Chance!',
-      mamaLine: '“Heavy wallet, full belly… Mama is resting now!”',
-      auntieLine: '“Let’s wheel her out!”',
-      cousinLine: '“Next plate is mine!”',
+      badge: 'DELIVERY DEFEATED',
+      headline: 'Wallet Saved!',
+      mamaLine: '“Full belly, heavy wallet.”',
     };
   }
   return {
-    badge: 'HEAD CHEF OF THE HOUSE',
-    headline: 'Certified Family Legend!',
-    mamaLine: '“Take my wooden spoon—you run this kitchen now!”',
-    auntieLine: '“Mama, go nap!”',
-    cousinLine: '“Best cook ever!”',
+    badge: 'HEAD CHEF',
+    headline: 'Kitchen Legend!',
+    mamaLine: '“You run this kitchen now.”',
   };
 }
-
-/**
- * Playful hand-inked SVG Little Cousin character leaning right to push Mama
- * while sneaking a taste with his wooden spoon!
- */
-const LittleCousinPushing: React.FC<{ size?: number }> = ({ size = 84 }) => (
-  <Svg width={size} height={size} viewBox="0 0 110 110" fill="none">
-    {/* Soft warm glow */}
-    <Circle cx="55" cy="58" r="44" fill="#F4E6C8" opacity={0.65} />
-    {/* Afro curls */}
-    <Circle cx="44" cy="30" r="14" fill="#3B2416" stroke="#2A180E" strokeWidth="2.5" />
-    <Circle cx="58" cy="26" r="14" fill="#3B2416" stroke="#2A180E" strokeWidth="2.5" />
-    <Circle cx="36" cy="40" r="11" fill="#3B2416" stroke="#2A180E" strokeWidth="2.5" />
-    <Circle cx="68" cy="35" r="11" fill="#3B2416" stroke="#2A180E" strokeWidth="2.5" />
-    {/* Olive tee body leaning right */}
-    <Path
-      d="M32 70 C36 60, 62 58, 72 70 L78 96 L30 96 Z"
-      fill="#66704A"
-      stroke="#2A180E"
-      strokeWidth="2.8"
-      strokeLinejoin="round"
-    />
-    {/* Collar accent */}
-    <Path d="M44 65 Q54 71 63 65" stroke="#E8B960" strokeWidth="2.6" strokeLinecap="round" />
-    {/* Head */}
-    <Circle cx="54" cy="46" r="17" fill="#A86538" stroke="#2A180E" strokeWidth="2.8" />
-    {/* Rosy cheeks */}
-    <Ellipse cx="45" cy="50" rx="3.4" ry="2.2" fill="#D96B52" opacity={0.55} />
-    <Ellipse cx="64" cy="49" rx="3.4" ry="2.2" fill="#D96B52" opacity={0.55} />
-    {/* Mischievous happy eyes */}
-    <Path d="M45 43 Q48 40 51 43" stroke="#2A180E" strokeWidth="2.4" strokeLinecap="round" />
-    <Path d="M58 43 Q61 40 64 43" stroke="#2A180E" strokeWidth="2.4" strokeLinecap="round" />
-    {/* Big cheeky grin */}
-    <Path
-      d="M47 52 Q55 60 64 51 Z"
-      fill="#FFFFFF"
-      stroke="#2A180E"
-      strokeWidth="2.2"
-      strokeLinejoin="round"
-    />
-    {/* Right arm pushing forward to the right */}
-    <Path
-      d="M68 72 L94 66"
-      stroke="#A86538"
-      strokeWidth="9"
-      strokeLinecap="round"
-    />
-    <Path
-      d="M68 72 L94 66"
-      stroke="#2A180E"
-      strokeWidth="2.6"
-      strokeLinecap="round"
-    />
-    <Circle cx="95" cy="65" r="5.5" fill="#A86538" stroke="#2A180E" strokeWidth="2.4" />
-    {/* Left hand holding sneaky wooden tasting spoon */}
-    <Rect
-      x="15"
-      y="46"
-      width="4.5"
-      height="28"
-      rx="2.2"
-      transform="rotate(-24 17 60)"
-      fill="#C98947"
-      stroke="#2A180E"
-      strokeWidth="2"
-    />
-    <Ellipse
-      cx="13"
-      cy="44"
-      rx="6"
-      ry="8.5"
-      transform="rotate(-24 13 44)"
-      fill="#DDA15E"
-      stroke="#2A180E"
-      strokeWidth="2.2"
-    />
-    <Circle cx="26" cy="70" r="5.5" fill="#A86538" stroke="#2A180E" strokeWidth="2.4" />
-  </Svg>
-);
 
 export const MamaFamilyCelebrationModal: React.FC<MamaFamilyCelebrationProps> = ({
   visible,
   dishTitle,
   savedVsTakeoutFormatted,
   mealsCookedCount,
+  xpAwarded,
+  xpSkipReason,
   onClaimReward,
 }) => {
-  const achievement = getFamilyAchievement(mealsCookedCount);
-  const xpAmount = preferencesStore.isMamaPlus() ? 100 : 50;
+  const achievement = getCookAchievement(mealsCookedCount);
+  const xpAmount =
+    typeof xpAwarded === 'number'
+      ? xpAwarded
+      : preferencesStore.isMamaPlus()
+        ? 100
+        : 50;
   const modalBottomInset = useModalBottomInset(22);
 
   const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const cardScale = useRef(new Animated.Value(0.84)).current;
+  const cardScale = useRef(new Animated.Value(0.88)).current;
+  const bowlBounce = useRef(new Animated.Value(0)).current;
+  const bowlScale = useRef(new Animated.Value(0.75)).current;
 
-  // 3-character comedy stage animated values
-  const mamaScale = useRef(new Animated.Value(0.6)).current;
-  const mamaTilt = useRef(new Animated.Value(0)).current;
-  const auntieX = useRef(new Animated.Value(170)).current;
-  const auntieOpacity = useRef(new Animated.Value(0)).current;
-  const cousinX = useRef(new Animated.Value(-160)).current;
-  const cousinOpacity = useRef(new Animated.Value(0)).current;
-  const groupDragX = useRef(new Animated.Value(0)).current;
-  const badgeScale = useRef(new Animated.Value(0)).current;
-  const badgeOpacity = useRef(new Animated.Value(0)).current;
+  const runJoyDance = useCallback(() => {
+    bowlScale.setValue(0.75);
+    bowlBounce.setValue(0);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
-  const [scenePhase, setScenePhase] = useState<'belly' | 'family' | 'dragged'>('belly');
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-
-  const clearTimers = useCallback(() => {
-    timersRef.current.forEach((t) => clearTimeout(t));
-    timersRef.current = [];
-  }, []);
-
-  const runComedySequence = useCallback(() => {
-    clearTimers();
-    setScenePhase('belly');
-
-    mamaScale.setValue(0.6);
-    mamaTilt.setValue(0);
-    auntieX.setValue(170);
-    auntieOpacity.setValue(0);
-    cousinX.setValue(-160);
-    cousinOpacity.setValue(0);
-    groupDragX.setValue(0);
-    badgeScale.setValue(0.4);
-    badgeOpacity.setValue(0);
-
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-
-    // Beat 1: Overfed Mama pops in & happily rubs her belly with a gentle sway
     Animated.parallel([
-      Animated.spring(mamaScale, {
+      Animated.spring(bowlScale, {
         toValue: 1,
         friction: 5,
-        tension: 95,
+        tension: 100,
         useNativeDriver: true,
       }),
       Animated.sequence([
-        Animated.timing(mamaTilt, {
-          toValue: -1,
-          duration: 280,
-          easing: Easing.inOut(Easing.ease),
+        Animated.timing(bowlBounce, {
+          toValue: -12,
+          duration: 240,
+          easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.timing(mamaTilt, {
-          toValue: 1,
-          duration: 320,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(mamaTilt, {
+        Animated.spring(bowlBounce, {
           toValue: 0,
-          duration: 260,
-          easing: Easing.inOut(Easing.ease),
+          friction: 4,
+          tension: 120,
           useNativeDriver: true,
         }),
       ]),
     ]).start();
-
-    // Beat 2 (1.05s): Auntie rushes in from the right + Little Cousin jumps in from the left!
-    const t1 = setTimeout(() => {
-      setScenePhase('family');
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      Animated.parallel([
-        Animated.spring(auntieX, {
-          toValue: 0,
-          friction: 6,
-          tension: 90,
-          useNativeDriver: true,
-        }),
-        Animated.timing(auntieOpacity, {
-          toValue: 1,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-        Animated.spring(cousinX, {
-          toValue: 0,
-          friction: 6,
-          tension: 90,
-          useNativeDriver: true,
-        }),
-        Animated.timing(cousinOpacity, {
-          toValue: 1,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }, 1050);
-
-    // Beat 3 (1.75s): Tug #1, Tug #2, then Auntie + Cousin playfully drag sleepy Mama off-screen!
-    const t2 = setTimeout(() => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      Animated.sequence([
-        // Tug 1
-        Animated.parallel([
-          Animated.timing(groupDragX, {
-            toValue: 22,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-          Animated.timing(mamaTilt, {
-            toValue: -1.4,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.timing(groupDragX, {
-          toValue: 12,
-          duration: 110,
-          useNativeDriver: true,
-        }),
-        // Tug 2
-        Animated.parallel([
-          Animated.timing(groupDragX, {
-            toValue: 48,
-            duration: 160,
-            useNativeDriver: true,
-          }),
-          Animated.timing(mamaTilt, {
-            toValue: -2.2,
-            duration: 160,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.timing(groupDragX, {
-          toValue: 36,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-        // Whoosh — dragged right off stage!
-        Animated.parallel([
-          Animated.timing(groupDragX, {
-            toValue: 340,
-            duration: 460,
-            easing: Easing.in(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.timing(mamaTilt, {
-            toValue: -3.2,
-            duration: 420,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]).start(() => {
-        setScenePhase('dragged');
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        Animated.parallel([
-          Animated.timing(badgeOpacity, {
-            toValue: 1,
-            duration: 220,
-            useNativeDriver: true,
-          }),
-          Animated.spring(badgeScale, {
-            toValue: 1,
-            friction: 5,
-            tension: 110,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      });
-    }, 1750);
-
-    const t3 = setTimeout(() => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    }, 2020);
-
-    timersRef.current = [t1, t2, t3];
-  }, [
-    auntieOpacity,
-    auntieX,
-    badgeOpacity,
-    badgeScale,
-    clearTimers,
-    cousinOpacity,
-    cousinX,
-    groupDragX,
-    mamaScale,
-    mamaTilt,
-  ]);
+  }, [bowlBounce, bowlScale]);
 
   useEffect(() => {
     if (!visible) {
-      clearTimers();
       backdropOpacity.setValue(0);
-      cardScale.setValue(0.84);
+      cardScale.setValue(0.88);
       return;
     }
     Animated.parallel([
       Animated.timing(backdropOpacity, {
         toValue: 1,
-        duration: 220,
+        duration: 200,
         useNativeDriver: true,
       }),
       Animated.spring(cardScale, {
@@ -383,127 +133,47 @@ export const MamaFamilyCelebrationModal: React.FC<MamaFamilyCelebrationProps> = 
         useNativeDriver: true,
       }),
     ]).start();
-    const t0 = setTimeout(() => {
-      runComedySequence();
-    }, 0);
-
-    return () => {
-      clearTimeout(t0);
-      clearTimers();
-    };
-  }, [visible, backdropOpacity, cardScale, runComedySequence, clearTimers]);
+    runJoyDance();
+  }, [visible, backdropOpacity, cardScale, runJoyDance]);
 
   if (!visible) return null;
 
-  const mamaRotate = mamaTilt.interpolate({
-    inputRange: [-4, 0, 4],
-    outputRange: ['-16deg', '0deg', '16deg'],
-  });
-
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClaimReward}>
-      <Animated.View style={[styles.backdrop, { paddingBottom: modalBottomInset, opacity: backdropOpacity }]}>
+      <Animated.View
+        style={[styles.backdrop, { paddingBottom: modalBottomInset, opacity: backdropOpacity }]}
+      >
         <Animated.View style={[styles.card, { transform: [{ scale: cardScale }] }]}>
-          {/* Animated 3-Character Family Comedy Stage */}
+          {/* Single Unified Living Mama Bowl Celebration Stage */}
           <View style={styles.stage}>
-            <SteamWisps triggerKey={scenePhase} style={styles.stageSteam} />
+            <SteamWisps triggerKey={dishTitle} style={styles.stageSteam} />
 
-            {/* Live Speech Bubble */}
-            <View style={styles.speechPill}>
-              <Text style={styles.speechPillText} numberOfLines={1}>
-                {scenePhase === 'belly'
-                  ? achievement.mamaLine
-                  : scenePhase === 'family'
-                    ? `${achievement.auntieLine}  ${achievement.cousinLine}`
-                    : 'Mama went to nap — you win tonight!'}
-              </Text>
+            <View style={styles.badgePill}>
+              <Text style={styles.badgePillText}>{achievement.badge}</Text>
             </View>
 
-            {/* Sliding 3-Character Family Group */}
             <Animated.View
-              style={[
-                styles.familyRow,
-                { transform: [{ translateX: groupDragX }] },
-              ]}
+              style={{
+                transform: [{ translateY: bowlBounce }, { scale: bowlScale }],
+              }}
             >
-              {/* 1. Little Cousin pushing from the left with wooden spoon */}
-              <Animated.View
-                style={[
-                  styles.cousinWrap,
-                  {
-                    opacity: cousinOpacity,
-                    transform: [{ translateX: cousinX }],
-                  },
-                ]}
-              >
-                <LittleCousinPushing size={84} />
-              </Animated.View>
-
-              {/* 2. Overfed Mama rubbing her full belly in center */}
-              <Animated.View
-                style={[
-                  styles.mamaWrap,
-                  {
-                    transform: [{ scale: mamaScale }, { rotate: mamaRotate }],
-                  },
-                ]}
-              >
-                <Image
-                  source={MAMA_OVERFED}
-                  style={styles.mamaOverfedImg}
-                  resizeMode="contain"
-                />
-              </Animated.View>
-
-              {/* 3. Laughing Auntie pulling Mama off to the right */}
-              <Animated.View
-                style={[
-                  styles.auntieWrap,
-                  {
-                    opacity: auntieOpacity,
-                    transform: [{ translateX: auntieX }],
-                  },
-                ]}
-              >
-                <Image
-                  source={AUNTIE_PULLING}
-                  style={styles.auntieImg}
-                  resizeMode="contain"
-                />
-              </Animated.View>
+              <MamaCharacter
+                pose="delighted"
+                size={122}
+                isSpeaking={true}
+                onPress={runJoyDance}
+              />
             </Animated.View>
 
-            {/* Unlocked Achievement Reveal after Mama gets dragged off-screen */}
-            <Animated.View
-              pointerEvents={scenePhase === 'dragged' ? 'auto' : 'none'}
-              style={[
-                styles.achievementReveal,
-                {
-                  opacity: badgeOpacity,
-                  transform: [{ scale: badgeScale }],
-                },
-              ]}
-            >
-              <MamaSealStamp size={64} variant="linen" />
-              <Text style={styles.achievementStampTitle}>{achievement.badge}</Text>
-              <TouchableOpacity
-                style={styles.replayChip}
-                onPress={runComedySequence}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="refresh" size={12} color={colors.primary} />
-                <Text style={styles.replayChipText}>Replay family scene</Text>
-              </TouchableOpacity>
-            </Animated.View>
+            <Text style={styles.mamaLineText}>{achievement.mamaLine}</Text>
           </View>
 
-          {/* Calm, Airy Headline & Dish */}
           <Text style={styles.title}>{achievement.headline}</Text>
           <Text style={styles.dishName} numberOfLines={2}>
             {dishTitle}
           </Text>
 
-          {/* Single Clean Reward Summary Strip */}
+          {/* Clean Reward Strip */}
           <View style={styles.summaryStrip}>
             <View style={styles.summaryCol}>
               <Text style={styles.summaryValGreen}>+{savedVsTakeoutFormatted}</Text>
@@ -511,15 +181,21 @@ export const MamaFamilyCelebrationModal: React.FC<MamaFamilyCelebrationProps> = 
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryCol}>
-              <Text style={styles.summaryVal}>+{xpAmount} XP</Text>
+              <Text style={styles.summaryVal}>
+                {xpAmount > 0 ? `+${xpAmount} XP` : 'Logged ✓'}
+              </Text>
               <Text style={styles.summaryLabel}>
-                {Math.max(1, mealsCookedCount)}{' '}
-                {Math.max(1, mealsCookedCount) === 1 ? 'plate' : 'plates'} cooked
+                {xpAmount > 0
+                  ? `${Math.max(1, mealsCookedCount)} ${Math.max(1, mealsCookedCount) === 1 ? 'plate' : 'plates'} cooked`
+                  : xpSkipReason === 'daily_cap'
+                    ? 'Daily XP limit reached'
+                    : xpSkipReason === 'cooldown'
+                      ? 'Next XP in 3 hrs'
+                      : 'XP earned for this dish'}
               </Text>
             </View>
           </View>
 
-          {/* Primary Claim CTA */}
           <TouchableOpacity
             style={styles.claimBtn}
             onPress={() => {
@@ -540,14 +216,14 @@ export const MamaFamilyCelebrationModal: React.FC<MamaFamilyCelebrationProps> = 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(20, 24, 16, 0.76)',
+    backgroundColor: 'rgba(20, 24, 16, 0.72)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 18,
   },
   card: {
     width: '100%',
-    maxWidth: 380,
+    maxWidth: 368,
     backgroundColor: colors.background,
     borderRadius: 28,
     paddingHorizontal: 20,
@@ -555,124 +231,61 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(102, 112, 74, 0.25)',
+    borderColor: 'rgba(102, 112, 74, 0.22)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.3,
-    shadowRadius: 24,
+    shadowOpacity: 0.28,
+    shadowRadius: 22,
     elevation: 12,
   },
   stage: {
     width: '100%',
-    height: 196,
     borderRadius: 22,
     backgroundColor: '#F8F5EF',
     borderWidth: 1,
-    borderColor: 'rgba(102, 112, 74, 0.16)',
+    borderColor: 'rgba(102, 112, 74, 0.14)',
     overflow: 'hidden',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    gap: 8,
     marginBottom: 14,
   },
   stageSteam: {
     position: 'absolute',
-    top: 28,
+    top: 22,
     alignSelf: 'center',
     zIndex: 1,
   },
-  speechPill: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    right: 10,
-    backgroundColor: 'rgba(255, 252, 247, 0.94)',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(102, 112, 74, 0.18)',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  speechPillText: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: colors.text.primary,
-    textAlign: 'center',
-  },
-  familyRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    width: '100%',
-    height: 150,
-    paddingBottom: 4,
-  },
-  cousinWrap: {
-    marginRight: -22,
-    marginBottom: 4,
-    zIndex: 4,
-  },
-  mamaWrap: {
-    zIndex: 3,
-  },
-  mamaOverfedImg: {
-    width: 142,
-    height: 142,
-    borderRadius: 16,
-  },
-  auntieWrap: {
-    marginLeft: -26,
-    marginBottom: 2,
-    zIndex: 5,
-  },
-  auntieImg: {
-    width: 112,
-    height: 112,
-    borderRadius: 14,
-  },
-  achievementReveal: {
-    position: 'absolute',
-    top: 46,
-    bottom: 8,
-    left: 16,
-    right: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    zIndex: 8,
-  },
-  achievementStampTitle: {
-    fontSize: 12.5,
-    fontWeight: '900',
-    letterSpacing: 1.1,
-    color: colors.primary,
-    textAlign: 'center',
-  },
-  replayChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
+  badgePill: {
     backgroundColor: 'rgba(102, 112, 74, 0.12)',
+    paddingHorizontal: 11,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
-  replayChipText: {
-    fontSize: 11,
-    fontWeight: '700',
+  badgePillText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 1.0,
     color: colors.primary,
+  },
+  mamaLineText: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontStyle: 'italic',
+    color: colors.text.secondary,
+    textAlign: 'center',
   },
   title: {
     fontSize: 21,
     fontWeight: '900',
     color: colors.text.primary,
-    letterSpacing: -0.35,
+    letterSpacing: -0.3,
     textAlign: 'center',
-    marginTop: 2,
   },
   dishName: {
-    fontSize: 13.5,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text.secondary,
     textAlign: 'center',
@@ -683,13 +296,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    backgroundColor: 'rgba(255, 252, 247, 0.9)',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(102, 112, 74, 0.16)',
+    borderColor: 'rgba(102, 112, 74, 0.14)',
     borderRadius: 18,
     paddingVertical: 13,
     paddingHorizontal: 12,
-    marginBottom: 18,
+    marginBottom: 16,
   },
   summaryCol: {
     flex: 1,
@@ -699,7 +312,7 @@ const styles = StyleSheet.create({
   summaryDivider: {
     width: 1,
     height: 30,
-    backgroundColor: 'rgba(102, 112, 74, 0.18)',
+    backgroundColor: 'rgba(102, 112, 74, 0.16)',
   },
   summaryValGreen: {
     fontSize: 18,
@@ -727,7 +340,7 @@ const styles = StyleSheet.create({
     gap: 8,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.28,
+    shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 4,
   },

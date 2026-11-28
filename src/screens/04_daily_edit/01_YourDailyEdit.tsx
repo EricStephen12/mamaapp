@@ -27,10 +27,12 @@ import {
   PendingCookCheckIn,
   convertMealCost,
   FREE_DAILY_ROLL_LIMIT,
+  BONUS_ROLL_XP_COST,
 } from '../../services/preferencesStore';
 import { subscriptionService } from '../../services/subscriptionService';
+import { notificationService } from '../../services/notificationService';
 import { CountryCurrencyModal } from '../../components/common/CountryCurrencyModal';
-import { KitchenPassModal } from '../../components/common/KitchenPassModal';
+import { KitchenPassModal, KitchenPassInitialTab } from '../../components/common/KitchenPassModal';
 import { MamaPaywallModal } from '../../components/common/MamaPaywallModal';
 import { MamaMomentModal } from '../../components/common/MamaMomentModal';
 import { MamaFamilyCelebrationModal } from '../../components/common/MamaFamilyCelebrationModal';
@@ -65,17 +67,21 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
   const [paywallModalVisible, setPaywallModalVisible] = useState(false);
   const [rollLimitPrice, setRollLimitPrice] = useState<string | null>(null);
   const [budgetFinishedModalVisible, setBudgetFinishedModalVisible] = useState(false);
+  const [notifPromptVisible, setNotifPromptVisible] = useState(false);
   const [pendingCheckIn, setPendingCheckIn] = useState<PendingCookCheckIn | null>(() =>
     preferencesStore.getPendingCookCheckIn()
   );
-  const [celebratedCheckIn, setCelebratedCheckIn] = useState<PendingCookCheckIn | null>(null);
+  const [celebratedCheckIn, setCelebratedCheckIn] = useState<
+    (PendingCookCheckIn & {
+      xpAwarded?: number;
+      xpSkipReason?: 'daily_cap' | 'cooldown' | 'duplicate_dish';
+    }) | null
+  >(null);
   const [rollRevealVisible, setRollRevealVisible] = useState(false);
   const [pendingRolledMeal, setPendingRolledMeal] = useState<RolledMeal | null>(null);
   const [mamaModalVisible, setMamaModalVisible] = useState(false);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
-  const [passModalInitialTab, setPassModalInitialTab] = useState<
-    'gear' | 'time' | 'flavor' | 'diet' | 'goal' | 'account'
-  >('gear');
+  const [passModalInitialTab, setPassModalInitialTab] = useState<KitchenPassInitialTab>('account');
 
   // User preferences
   const [kitchenPass, setKitchenPass] = useState<UserKitchenPass>(
@@ -536,8 +542,8 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
     } catch {}
 
     mamaAlert.alert(
-      `Never suggest ${dishTitle}?`,
-      `Mama will stop suggesting this meal. You can unhide it anytime in your Kitchen Pass under Diet.`,
+      `Hide ${dishTitle}?`,
+      `We won't suggest this again. Unhide anytime in Settings → Taste.`,
       [
         { text: 'Keep it', style: 'cancel' },
         {
@@ -553,6 +559,40 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
       ]
     );
   };
+
+  // Warm, one-time 7:47 PM Mama Nudges prompt after user settles on Home
+  useEffect(() => {
+    if (
+      !isScreenFocused ||
+      !kitchenPass.hasCompletedOnboarding ||
+      kitchenPass.hasPromptedNotifications ||
+      kitchenPass.notificationsEnabled ||
+      passModalVisible ||
+      paywallModalVisible ||
+      rollRevealVisible ||
+      !!rollLimitPrice ||
+      budgetFinishedModalVisible
+    ) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      const latest = preferencesStore.getKitchenPass();
+      if (!latest.hasPromptedNotifications && !latest.notificationsEnabled) {
+        setNotifPromptVisible(true);
+      }
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [
+    isScreenFocused,
+    kitchenPass.hasCompletedOnboarding,
+    kitchenPass.hasPromptedNotifications,
+    kitchenPass.notificationsEnabled,
+    passModalVisible,
+    paywallModalVisible,
+    rollRevealVisible,
+    rollLimitPrice,
+    budgetFinishedModalVisible,
+  ]);
 
   // Accelerometer shake detection with walking & jostle filter (only active when Home tab is visible and no modal is open)
   useShake(() => {
@@ -659,6 +699,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
           <RegionalMamaAvatar
             countryCode={kitchenPass.country}
             cuisineAnchor={kitchenPass.cuisineAnchor}
+            pose={mealPeriod === 'dinner' || mealPeriod === 'late_night' ? 'hungry' : 'welcoming'}
             size={38}
             onPress={() => {
               setPassModalInitialTab('account');
@@ -721,15 +762,11 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
           {pendingCheckIn ? (
             <View style={styles.checkInCard}>
               <View style={styles.checkInTopRow}>
-                <RegionalMamaAvatar
-                  countryCode={kitchenPass.country}
-                  cuisineAnchor={kitchenPass.cuisineAnchor}
-                  size={44}
-                />
+                <MamaCharacter pose="judging" size={56} isSpeaking={false} />
                 <View style={styles.checkInTextWrap}>
-                  <Text style={styles.checkInEyebrow}>MAMA CHECKING IN</Text>
+                  <Text style={styles.checkInEyebrow}>QUICK CHECK-IN</Text>
                   <Text style={styles.checkInPrompt}>
-                    Did you actually cook <Text style={styles.checkInDish}>{pendingCheckIn.title}</Text>, or were you just peeking?
+                    Did you cook <Text style={styles.checkInDish}>{pendingCheckIn.title}</Text>?
                   </Text>
                 </View>
               </View>
@@ -742,9 +779,14 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
                     const dish = pendingCheckIn;
                     preferencesStore.clearPendingCookCheckIn();
                     preferencesStore.recordMealDecision(dish.title, 'cooked', dish.estCost);
+                    const xpOutcome = preferencesStore.getLastCookXpOutcome();
                     decisionsService.log(dish.mealId, dish.title, 'cooked', dish.estCost);
                     setPendingCheckIn(null);
-                    setCelebratedCheckIn(dish);
+                    setCelebratedCheckIn({
+                      ...dish,
+                      xpAwarded: xpOutcome.awarded,
+                      xpSkipReason: xpOutcome.reason,
+                    });
                   }}
                 >
                   <Ionicons name="restaurant" size={14} color="#FFFFFF" />
@@ -829,13 +871,7 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
               </View>
             </TouchableOpacity>
           </View>
-          {/* Preserved for future Mama placement */}
-          {false && (
-            <TouchableOpacity onPress={handleTapMama}>
-              <MamaCharacter pose={mamaPose} size={36} />
-              <Text>{mamaQuote}</Text>
-            </TouchableOpacity>
-          )}
+          {/* Clean single-mascot Home: no duplicate bottom character strip */}
         </Animated.View>
       </ScrollView>
 
@@ -898,64 +934,80 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
         }}
       />
 
-      {/* Custom Warm Mama Sheet for 2-Roll Daily Limit (replaces cold system Alert) */}
-      <MamaMomentModal
-        visible={!!rollLimitPrice}
-        eyebrow="PICKY TONIGHT?"
-        title={`${FREE_DAILY_ROLL_LIMIT} rolls already, my child!`}
-        message={`You used your ${FREE_DAILY_ROLL_LIMIT} free daily rolls today. Spend 50 XP for one more peek, or join Mama Pro (${rollLimitPrice || '$1/mo'}) for Unlimited Rolls, Free Healthy Remixes & 2x XP.`}
-        mood="mama"
-        onClose={() => setRollLimitPrice(null)}
-        actions={[
-          {
-            label: `Unlock Mama Pro (${rollLimitPrice || '$1/mo'})`,
-            variant: 'primary',
-            icon: 'ribbon',
-            onPress: async () => {
-              setRollLimitPrice(null);
-              const outcome = await subscriptionService.presentPaywallIfNeeded();
-              if (outcome === 'purchased' || outcome === 'restored') {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                setToastMessage('Welcome to Mama Dish Pro! Unlimited rolls unlocked.');
-                setPendingRolledMeal(null);
-                setRollRevealVisible(true);
-                executeRoll();
-              } else if (outcome === 'unavailable') {
-                setPaywallModalVisible(true);
-              }
-            },
-          },
-          {
-            label: 'Bonus Roll (-50 XP)',
-            variant: 'secondary',
-            icon: 'flame',
-            onPress: () => {
-              setRollLimitPrice(null);
-              if (preferencesStore.spendXp(50)) {
-                setToastMessage('Bonus Roll unlocked (-50 XP)!');
-                setPendingRolledMeal(null);
-                setRollRevealVisible(true);
-                executeRoll();
-              } else {
-                setToastMessage('Need 50 XP! Cook a meal at home (+50 XP) or unlock Mama Pro.');
-              }
-            },
-          },
-          {
-            label: 'Not Now',
-            variant: 'ghost',
-            onPress: () => setRollLimitPrice(null),
-          },
-        ]}
-      />
+      {/* Custom Warm Mama Sheet for 2-Roll Daily Limit (anti-spam: max 1 XP bonus roll/day at 100 XP) */}
+      {(() => {
+        const bonusCheck = preferencesStore.canRedeemXpBonusRoll();
+        const bonusAlreadyUsed = bonusCheck.reason === 'already_used';
+        return (
+          <MamaMomentModal
+            visible={!!rollLimitPrice}
+            eyebrow="PICKY TONIGHT?"
+            title={`${FREE_DAILY_ROLL_LIMIT} rolls used today`}
+            message={
+              bonusAlreadyUsed
+                ? `You've used today's free rolls & bonus roll. Unlock unlimited rolls with Mama Pro (${rollLimitPrice || '$1/mo'}).`
+                : `Unlock unlimited rolls with Mama Pro (${rollLimitPrice || '$1/mo'}), or use ${BONUS_ROLL_XP_COST} XP for 1 bonus roll today.`
+            }
+            mood="judging"
+            onClose={() => setRollLimitPrice(null)}
+            actions={[
+              {
+                label: `Unlock Mama Pro (${rollLimitPrice || '$1/mo'})`,
+                variant: 'primary',
+                icon: 'ribbon',
+                onPress: async () => {
+                  setRollLimitPrice(null);
+                  const outcome = await subscriptionService.presentPaywallIfNeeded();
+                  if (outcome === 'purchased' || outcome === 'restored') {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                    setToastMessage('Welcome to Mama Dish Pro! Unlimited rolls unlocked.');
+                    setPendingRolledMeal(null);
+                    setRollRevealVisible(true);
+                    executeRoll();
+                  } else if (outcome === 'unavailable' || outcome === 'error') {
+                    setPaywallModalVisible(true);
+                  }
+                },
+              },
+              ...(bonusAlreadyUsed
+                ? []
+                : [
+                    {
+                      label: `1 Bonus Roll (-${BONUS_ROLL_XP_COST} XP)`,
+                      variant: 'secondary' as const,
+                      icon: 'flame' as const,
+                      onPress: () => {
+                        setRollLimitPrice(null);
+                        if (preferencesStore.redeemXpBonusRoll()) {
+                          setToastMessage(`Bonus Roll unlocked (-${BONUS_ROLL_XP_COST} XP)!`);
+                          setPendingRolledMeal(null);
+                          setRollRevealVisible(true);
+                          executeRoll();
+                        } else {
+                          setToastMessage(
+                            `Need ${BONUS_ROLL_XP_COST} XP — cook 2 home meals or unlock Mama Pro.`
+                          );
+                        }
+                      },
+                    },
+                  ]),
+              {
+                label: 'Not Now',
+                variant: 'ghost',
+                onPress: () => setRollLimitPrice(null),
+              },
+            ]}
+          />
+        );
+      })()}
 
       {/* Emotional "Budget Finished!" Mama Intervention Modal */}
       <MamaMomentModal
         visible={budgetFinishedModalVisible}
-        eyebrow="BUDGET FINISHED"
-        title="Hold on—your weekly budget just hit zero!"
-        message="Don't panic, my child! Mama has stretched a pot before. Let's cook zero-spend meals from what's already in your kitchen, or top up your week."
-        mood="auntie"
+        eyebrow="BUDGET AT ZERO"
+        title="Weekly budget hit zero"
+        message="Cook free meals from your kitchen, or top up this week's budget."
+        mood="hungry"
         onClose={() => setBudgetFinishedModalVisible(false)}
         actions={[
           {
@@ -977,14 +1029,49 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
             icon: 'wallet-outline',
             onPress: () => {
               setBudgetFinishedModalVisible(false);
-              setPassModalInitialTab('account');
+              setPassModalInitialTab('budget');
               setPassModalVisible(true);
             },
           },
           {
-            label: "I'm okay, Mama",
+            label: "I'm okay",
             variant: 'ghost',
             onPress: () => setBudgetFinishedModalVisible(false),
+          },
+        ]}
+      />
+
+      {/* Warm One-Time 7:47 PM Mama Nudges Permission Prompt (stars melted Hungry mascot!) */}
+      <MamaMomentModal
+        visible={notifPromptVisible}
+        eyebrow="7:47 PM RESCUE"
+        title="Stop staring at the fridge?"
+        message="Let Mama send 1 funny dinner nudge using what's already in your kitchen — zero spam."
+        mood="hungry"
+        onClose={() => {
+          setNotifPromptVisible(false);
+          preferencesStore.markNotificationsPrompted();
+        }}
+        actions={[
+          {
+            label: 'Turn On Mama Nudges',
+            variant: 'primary',
+            icon: 'notifications',
+            onPress: async () => {
+              setNotifPromptVisible(false);
+              const res = await notificationService.enableNotifications();
+              if (res === 'granted') {
+                setToastMessage('Mama Nudges ON! See you before dinner.');
+              }
+            },
+          },
+          {
+            label: 'Not Now',
+            variant: 'ghost',
+            onPress: () => {
+              setNotifPromptVisible(false);
+              preferencesStore.markNotificationsPrompted();
+            },
           },
         ]}
       />
@@ -1004,6 +1091,8 @@ export const YourDailyEdit: React.FC<Props> = ({ navigation, route }) => {
           kitchenPass.currencySymbol
         )}
         mealsCookedCount={kitchenPass.likedDishes.length}
+        xpAwarded={celebratedCheckIn?.xpAwarded}
+        xpSkipReason={celebratedCheckIn?.xpSkipReason}
         onClaimReward={() => {
           setCelebratedCheckIn(null);
           setToastMessage('Family fed & XP added! Mama is so proud.');

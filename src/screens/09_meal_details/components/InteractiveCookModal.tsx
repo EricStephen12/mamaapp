@@ -197,8 +197,8 @@ export const InteractiveCookModal: React.FC<InteractiveCookModalProps> = ({
             />
             <Text style={styles.mamaMiniText}>
               {isLastStep
-                ? '"Almost ready to plate! Give it one final taste test."'
-                : `"You are ${progressPercent}% through. Keep the heat steady and let the aroma build."`}
+                ? '"Almost ready — give it a quick taste!"'
+                : `"${progressPercent}% done — keep the heat steady."`}
             </Text>
           </View>
 
@@ -229,7 +229,7 @@ export const InteractiveCookModal: React.FC<InteractiveCookModalProps> = ({
                 color="#FFFFFF"
               />
               <Text style={styles.nextStepBtnText}>
-                {isLastStep ? 'Finish & Claim Reward!' : 'Done • Next Step'}
+                {isLastStep ? 'Finish & Claim XP' : 'Next Step'}
               </Text>
               {!isLastStep && (
                 <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />

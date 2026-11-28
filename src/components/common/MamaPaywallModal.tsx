@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -13,15 +13,19 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
 import { preferencesStore } from '../../services/preferencesStore';
-import { subscriptionService } from '../../services/subscriptionService';
+import { subscriptionService, MamaOfferingsBundle } from '../../services/subscriptionService';
 import { mamaAlert } from '../../services/mamaAlert';
-import { RegionalMamaAvatar } from '../signature/RegionalMamaAvatar';
+import { MamaCharacter } from './MamaCharacter';
 import { KitchenAtmosphere } from '../signature/KitchenAtmosphere';
 import { MamaAlertHost } from './MamaAlertHost';
 
 export interface MamaPaywallProps {
   onClose: () => void;
   onSubscribed?: () => void;
+  /** 'onboarding' shows the soft-paywall welcome FOMO layout with a clear Free continue button */
+  context?: 'default' | 'onboarding';
+  countryName?: string;
+  budgetLabel?: string;
 }
 
 type PlanType = 'monthly' | 'yearly';
@@ -33,13 +37,29 @@ type PlanType = 'monthly' | 'yearly';
 export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
   onClose,
   onSubscribed,
+  context = 'default',
+  countryName,
+  budgetLabel,
 }) => {
+  const isOnboarding = context === 'onboarding';
   const insets = useSafeAreaInsets();
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('monthly');
   const [loading, setLoading] = useState(false);
+  const [offerings, setOfferings] = useState<MamaOfferingsBundle | null>(null);
 
-  const countryCode = preferencesStore.getKitchenPass().country || 'NG';
-  const monthlyPrice = preferencesStore.getLocalizedPlusPrice();
+  useEffect(() => {
+    let mounted = true;
+    subscriptionService.getAvailablePackages().then((bundle) => {
+      if (mounted) setOfferings(bundle);
+    }).catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const monthlyPrice = offerings?.monthly?.product?.priceString
+    ? `${offerings.monthly.product.priceString}/mo`
+    : preferencesStore.getLocalizedPlusPrice();
 
   // Currencies formatted for Yearly ($9.99 eq.)
   const currencyCode = preferencesStore.getKitchenPass().currencyCode || 'USD';
@@ -66,7 +86,15 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
     }
   };
 
-  const yearly = getYearlyPriceString();
+  const fallbackYearly = getYearlyPriceString();
+  const yearly = offerings?.yearly?.product?.priceString
+    ? {
+        total: `${offerings.yearly.product.priceString}/yr`,
+        perMonth: offerings.yearly.product.pricePerMonthString
+          ? `${offerings.yearly.product.pricePerMonthString}/mo`
+          : fallbackYearly.perMonth,
+      }
+    : fallbackYearly;
 
   const handlePurchase = async () => {
     if (loading) return;
@@ -74,14 +102,21 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
     try {
-      const outcome = await subscriptionService.purchasePlus(selectedPlan);
+      const targetPkg =
+        selectedPlan === 'yearly'
+          ? offerings?.yearly
+          : offerings?.monthly;
+      const outcome = targetPkg
+        ? await subscriptionService.purchasePackage(targetPkg)
+        : await subscriptionService.purchasePlus(selectedPlan);
       if (outcome === 'purchased' || outcome === 'preview') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         onSubscribed?.();
       } else if (outcome === 'error') {
+        const detail = subscriptionService.getLastError();
         mamaAlert.alert(
           'Purchase Not Completed',
-          'Something went wrong processing your order. You have not been charged.'
+          detail || 'Something went wrong processing your order. You have not been charged.'
         );
       }
     } catch (err) {
@@ -113,6 +148,13 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
     }
   };
 
+  const activePackage =
+    selectedPlan === 'yearly' ? offerings?.yearly : offerings?.monthly;
+  const hasFreeTrial = Boolean(
+    activePackage?.product?.introPrice &&
+      activePackage.product.introPrice.price === 0
+  );
+
   const topInset = Math.max(insets.top, 24);
   const bottomInset = Math.max(insets.bottom, 18);
 
@@ -120,17 +162,29 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
     <View style={styles.container}>
       <KitchenAtmosphere period="dinner" />
 
-      {/* Top Header bar with Safe-Area aware Close and Restore */}
+      {/* Top Header bar with Safe-Area aware Close / Skip and Restore */}
       <View style={[styles.topBar, { paddingTop: topInset + 10 }]}>
-        <TouchableOpacity
-          style={styles.closeBtn}
-          onPress={onClose}
-          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-          accessibilityRole="button"
-          accessibilityLabel="Close paywall"
-        >
-          <Ionicons name="close" size={24} color={colors.text.primary} />
-        </TouchableOpacity>
+        {isOnboarding ? (
+          <TouchableOpacity
+            style={styles.skipPillBtn}
+            onPress={onClose}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Free"
+          >
+            <Text style={styles.skipPillText}>Not now</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={onClose}
+            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+            accessibilityRole="button"
+            accessibilityLabel="Close paywall"
+          >
+            <Ionicons name="close" size={24} color={colors.text.primary} />
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.restoreBtn}
@@ -146,66 +200,111 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
 
       <ScrollView
         style={styles.scrollArea}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset + 96 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: bottomInset + (isOnboarding ? 132 : 96) },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Hero Branding */}
         <View style={styles.heroSection}>
+          {isOnboarding ? (
+            <View style={styles.welcomeEyebrow}>
+              <Text style={styles.welcomeEyebrowText}>
+                {countryName ? `${countryName.toUpperCase()} KITCHEN READY` : 'YOUR KITCHEN IS READY'}
+              </Text>
+            </View>
+          ) : null}
+
           <View style={styles.avatarWrap}>
-            <RegionalMamaAvatar countryCode={countryCode} size={76} />
+            <MamaCharacter pose="judging" size={96} isSpeaking={false} />
             <View style={styles.proBadge}>
               <Text style={styles.proBadgeText}>PRO</Text>
             </View>
           </View>
 
-          <Text style={styles.heroTitle}>Mama Dish Pro</Text>
+          <Text style={styles.heroTitle}>
+            {isOnboarding ? "Don't stop at 2 rolls a day." : 'Mama Dish Pro'}
+          </Text>
           <Text style={styles.heroSubtitle}>
-            Cook what you love, whenever you want. Complete kitchen freedom.
+            {isOnboarding
+              ? budgetLabel
+                ? `Your ${budgetLabel} week is set. Unlock unlimited rolls & instant healthy swaps.`
+                : 'Free caps at 2 rolls/day. Unlock unlimited picks & instant healthy swaps.'
+              : 'Unlimited meal decisions. Zero daily caps.'}
           </Text>
         </View>
 
-        {/* Perks Feature Box */}
-        <View style={styles.perksCard}>
-          <View style={styles.perkRow}>
-            <View style={styles.perkIconWrap}>
-              <Ionicons name="dice" size={20} color={colors.primary} />
+        {/* Crisp Free vs Pro Comparison Card on Onboarding, or Perks Card on default */}
+        {isOnboarding ? (
+          <View style={styles.compareCard}>
+            <View style={styles.compareHeaderRow}>
+              <Text style={styles.compareColFeature}>WHAT YOU GET</Text>
+              <Text style={styles.compareColFree}>FREE</Text>
+              <Text style={styles.compareColPro}>PRO</Text>
             </View>
-            <View style={styles.perkTextWrap}>
-              <Text style={styles.perkTitle}>Unlimited Daily Rolls</Text>
-              <Text style={styles.perkDesc}>
-                No 2-roll daily cap. Roll until you find the exact home meal you crave.
-              </Text>
+
+            <View style={styles.perkDivider} />
+
+            <View style={styles.compareRow}>
+              <Text style={styles.compareLabel}>Daily Dice Rolls</Text>
+              <Text style={styles.compareValFree}>2 / day</Text>
+              <Text style={styles.compareValPro}>Unlimited</Text>
+            </View>
+
+            <View style={styles.perkDivider} />
+
+            <View style={styles.compareRow}>
+              <Text style={styles.compareLabel}>Healthy Swaps</Text>
+              <Text style={styles.compareValFree}>50 XP</Text>
+              <Text style={styles.compareValPro}>Free</Text>
+            </View>
+
+            <View style={styles.perkDivider} />
+
+            <View style={styles.compareRow}>
+              <Text style={styles.compareLabel}>Home-Cook XP</Text>
+              <Text style={styles.compareValFree}>1x</Text>
+              <Text style={styles.compareValPro}>2x Faster</Text>
             </View>
           </View>
-
-          <View style={styles.perkDivider} />
-
-          <View style={styles.perkRow}>
-            <View style={styles.perkIconWrap}>
-              <Ionicons name="leaf" size={20} color={colors.primary} />
+        ) : (
+          <View style={styles.perksCard}>
+            <View style={styles.perkRow}>
+              <View style={styles.perkIconWrap}>
+                <Ionicons name="dice" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.perkTextWrap}>
+                <Text style={styles.perkTitle}>Unlimited Daily Rolls</Text>
+                <Text style={styles.perkDesc}>Roll until you land on the exact meal you want.</Text>
+              </View>
             </View>
-            <View style={styles.perkTextWrap}>
-              <Text style={styles.perkTitle}>{'Free "Make It Healthy" Remixes'}</Text>
-              <Text style={styles.perkDesc}>
-                Instant nutrient-dense & low-calorie variations on any dish without spending 50 XP.
-              </Text>
+
+            <View style={styles.perkDivider} />
+
+            <View style={styles.perkRow}>
+              <View style={styles.perkIconWrap}>
+                <Ionicons name="leaf" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.perkTextWrap}>
+                <Text style={styles.perkTitle}>Free Healthy Swaps</Text>
+                <Text style={styles.perkDesc}>Lighter variations on any dish with zero XP cost.</Text>
+              </View>
+            </View>
+
+            <View style={styles.perkDivider} />
+
+            <View style={styles.perkRow}>
+              <View style={styles.perkIconWrap}>
+                <Ionicons name="flame" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.perkTextWrap}>
+                <Text style={styles.perkTitle}>2x Kitchen XP</Text>
+                <Text style={styles.perkDesc}>Earn +100 XP every time you cook at home.</Text>
+              </View>
             </View>
           </View>
-
-          <View style={styles.perkDivider} />
-
-          <View style={styles.perkRow}>
-            <View style={styles.perkIconWrap}>
-              <Ionicons name="flame" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.perkTextWrap}>
-              <Text style={styles.perkTitle}>2x XP Multiplier</Text>
-              <Text style={styles.perkDesc}>
-                Earn +100 XP for every meal cooked at home to build your culinary streak faster.
-              </Text>
-            </View>
-          </View>
-        </View>
+        )}
 
         {/* Plan Selector */}
         <Text style={styles.sectionHeader}>CHOOSE YOUR PASS</Text>
@@ -286,7 +385,7 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
         </Text>
       </ScrollView>
 
-      {/* Floating Bottom CTA Button */}
+      {/* Floating Bottom CTA Button (+ clear soft-paywall Free option on onboarding) */}
       <View style={[styles.bottomBar, { paddingBottom: bottomInset + 12 }]}>
         <TouchableOpacity
           style={[styles.ctaButton, loading && styles.ctaButtonDisabled]}
@@ -298,12 +397,25 @@ export const MamaPaywallContent: React.FC<MamaPaywallProps> = ({
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.ctaButtonText}>
-              {selectedPlan === 'monthly'
-                ? `Unlock Monthly (${monthlyPrice})`
-                : `Unlock Yearly (${yearly.total})`}
+              {hasFreeTrial
+                ? 'Start Free Trial'
+                : selectedPlan === 'monthly'
+                  ? `Unlock Mama Pro (${monthlyPrice})`
+                  : `Unlock Yearly (${yearly.total})`}
             </Text>
           )}
         </TouchableOpacity>
+
+        {isOnboarding ? (
+          <TouchableOpacity
+            style={styles.continueFreeBtn}
+            onPress={onClose}
+            activeOpacity={0.7}
+            disabled={loading}
+          >
+            <Text style={styles.continueFreeText}>Continue free (2 rolls/day)</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </View>
   );
@@ -313,11 +425,20 @@ export const MamaPaywallModal: React.FC<MamaPaywallProps & { visible: boolean }>
   visible,
   onClose,
   onSubscribed,
+  context,
+  countryName,
+  budgetLabel,
 }) => {
   if (!visible) return null;
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <MamaPaywallContent onClose={onClose} onSubscribed={onSubscribed} />
+      <MamaPaywallContent
+        onClose={onClose}
+        onSubscribed={onSubscribed}
+        context={context}
+        countryName={countryName}
+        budgetLabel={budgetLabel}
+      />
       <MamaAlertHost inline />
     </Modal>
   );
@@ -568,5 +689,102 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.3,
+  },
+  skipPillBtn: {
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(36, 40, 32, 0.08)',
+  },
+  skipPillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text.secondary,
+  },
+  welcomeEyebrow: {
+    backgroundColor: 'rgba(102, 112, 74, 0.12)',
+    paddingHorizontal: 11,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 10,
+  },
+  welcomeEyebrowText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 1.0,
+    color: colors.primary,
+  },
+  compareCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(36, 40, 32, 0.08)',
+    marginBottom: 20,
+  },
+  compareHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: 9,
+  },
+  compareColFeature: {
+    flex: 1.35,
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: colors.text.secondary,
+  },
+  compareColFree: {
+    flex: 0.8,
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: colors.text.muted,
+    textAlign: 'center',
+  },
+  compareColPro: {
+    flex: 0.9,
+    fontSize: 10.5,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    color: colors.primary,
+    textAlign: 'center',
+  },
+  compareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 11,
+  },
+  compareLabel: {
+    flex: 1.35,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  compareValFree: {
+    flex: 0.8,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text.muted,
+    textAlign: 'center',
+  },
+  compareValPro: {
+    flex: 0.9,
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: colors.primary,
+    textAlign: 'center',
+  },
+  continueFreeBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 11,
+    paddingBottom: 2,
+  },
+  continueFreeText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: colors.text.secondary,
   },
 });

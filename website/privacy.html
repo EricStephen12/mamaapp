@@ -56,7 +56,7 @@
           <ul>
             <li><strong>Guest Mode Available:</strong> You can use Mama Dish&rsquo;s core meal recommendations, pantry matcher, and Discover feed without creating an account.</li>
             <li><strong>Zero Ad Tracking or Data Selling:</strong> We do <strong>not</strong> sell your personal data, rent your email list, or share your data with third-party advertising networks.</li>
-            <li><strong>Encrypted in Transit &amp; Securely Stored:</strong> All communication between the mobile app and our backend servers uses HTTPS/TLS encryption, and account passwords are one-way hashed using industry-standard <code>bcrypt</code>.</li>
+            <li><strong>Encrypted in Transit &amp; Securely Stored:</strong> All communication between the mobile app and our backend servers uses HTTPS/TLS encryption, and account passwords are protected with industry-standard one-way salted cryptographic hashing.</li>
             <li><strong>Full Deletion Control:</strong> If you create an account, you can permanently delete your account and all associated data at any time inside the app or via our <a href="./delete-account.html">Web Account Deletion Portal</a>.</li>
           </ul>
 
@@ -90,7 +90,7 @@
               <tr>
                 <td><strong>Subscriptions &amp; Purchases</strong></td>
                 <td>Anonymous entitlement status and purchase receipts for <em>Mama Dish Pro</em></td>
-                <td>Processed by Google Play Billing / Apple App Store and RevenueCat to unlock Pro features. We <strong>never</strong> access or store your credit/debit card numbers.</td>
+                <td>Processed by Google Play Billing, Apple App Store, and our subscription management processor to unlock Pro features. We <strong>never</strong> access or store your credit/debit card numbers.</td>
               </tr>
             </tbody>
           </table>
@@ -103,24 +103,24 @@
 
           <h2>4. How AI Meal Recommendations Work</h2>
           <p>
-            When Mama generates personalized meal ideas, Discover decks, or pantry recipes, the app sends de-identified culinary context (such as your selected country, cooking gear, dietary restrictions, and chosen pantry ingredients—<strong>never</strong> your email address or password) over HTTPS to our secure backend proxy, which routes culinary prompts through vetted language-model inference providers (via OpenRouter). Prompts are used solely to return your meal suggestions in real time and are not used to build third-party advertising profiles.
+            When Mama generates personalized meal ideas, Discover decks, or pantry recipes, the app sends de-identified culinary context (such as your selected country, cooking gear, dietary restrictions, and chosen pantry ingredients—<strong>never</strong> your email address or password) over HTTPS to our secure backend servers, which route culinary prompts through vetted third-party AI inference providers. Prompts are used solely to return your meal suggestions in real time and are not used to build third-party advertising profiles.
           </p>
 
           <h2>5. How We Share Information (Service Providers Only)</h2>
-          <p>We share data strictly with essential infrastructure processors operating on our behalf under confidentiality and security obligations:</p>
+          <p>We share data strictly with essential third-party infrastructure providers operating on our behalf under confidentiality and security obligations:</p>
           <ul>
-            <li><strong>Cloud Hosting &amp; Database:</strong> Render (API hosting) and Neon PostgreSQL (encrypted cloud database storage for registered accounts).</li>
-            <li><strong>AI Inference:</strong> OpenRouter (processing de-identified recipe and culinary text prompts).</li>
-            <li><strong>Subscription Management:</strong> Google Play Billing, Apple App Store, and RevenueCat (verifying <em>Mama Dish Pro</em> subscription entitlements).</li>
-            <li><strong>Transactional Emails:</strong> Resend (delivering account welcome and password-reset verification codes—zero third-party marketing spam).</li>
+            <li><strong>Cloud Hosting &amp; Database Infrastructure:</strong> Vetted cloud hosting and encrypted database providers used to run our API and store optional registered account data.</li>
+            <li><strong>AI Recipe Processing:</strong> Vetted language-model inference providers processing de-identified culinary prompts in real time.</li>
+            <li><strong>App Store &amp; Subscription Billing:</strong> Google Play Billing, Apple App Store, and subscription-entitlement verification services for optional <em>Mama Dish Pro</em> plans.</li>
+            <li><strong>Transactional Email Delivery:</strong> Email delivery providers used solely for account welcome messages and password-reset verification codes (zero third-party marketing spam).</li>
           </ul>
           <p>We may also disclose information if strictly required by applicable law, valid court order, or to protect the safety and security of our users and infrastructure.</p>
 
           <h2>6. Data Security</h2>
           <ul>
             <li>All network requests between the Mama Dish app and our servers are encrypted in transit via HTTPS (TLS 1.2+).</li>
-            <li>Passwords are never stored in plain text; they are salted and hashed using <code>bcrypt</code> (cost factor 12) with constant-time verification.</li>
-            <li>Session tokens and local meal caches on your mobile device are stored using platform-protected storage (<code>expo-secure-store</code> / Android Keystore / iOS Keychain).</li>
+            <li>Passwords are never stored in plain text; they are protected using salted one-way cryptographic hashing with constant-time verification.</li>
+            <li>Session tokens and local meal preferences on your mobile device are stored using platform-protected secure storage (Android Keystore / iOS Keychain).</li>
           </ul>
 
           <h2>7. Data Retention &amp; Account Deletion</h2>
@@ -130,7 +130,7 @@
             </p>
           </div>
           <p>
-            When you delete your account, your <code>User</code> record, email address, password hash, <code>TasteProfile</code>, <code>PantryItems</code>, <code>SavedMeals</code>, and <code>MealDecisions</code> are immediately and permanently deleted from our active database via cascading deletion. If you use Mama Dish without an account, uninstalling the mobile app removes all locally stored preferences from your device.
+            When you delete your account, your account profile, email address, password hash, taste and dietary preferences, pantry items, saved recipes, and meal history are immediately and permanently erased from our active database. If you use Mama Dish without an account, uninstalling the mobile app removes all locally stored preferences from your device.
           </p>
 
           <h2>8. Health &amp; Nutritional Wellness Notice</h2>

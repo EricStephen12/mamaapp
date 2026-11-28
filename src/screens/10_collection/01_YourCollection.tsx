@@ -29,6 +29,8 @@ import {
 import { savedMealsService } from '../../services/api/savedMealsService';
 import { MealImageService } from '../../services/mealImageService';
 import { SavedMealCard, SavedMealItem } from './components/SavedMealCard';
+import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
+import { MamaCharacter } from '../../components/common/MamaCharacter';
 import * as Haptics from 'expo-haptics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'YourCollection'>;
@@ -250,6 +252,12 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
       {/* 1. UNIFIED STATUS TOP BAR (Matches YourDailyEdit & Discover) */}
       <View style={styles.topBar}>
         <View style={styles.brandGroup}>
+          <RegionalMamaAvatar
+            countryCode={kitchenPass.country}
+            cuisineAnchor={kitchenPass.cuisineAnchor}
+            size={36}
+            onPress={() => setPassModalVisible(true)}
+          />
           <Text style={styles.brandTitle}>Mama</Text>
           <Text style={styles.periodPillText}>Collection</Text>
         </View>
@@ -330,10 +338,10 @@ export const YourCollection: React.FC<Props> = ({ navigation }) => {
                   ))
                 ) : (
                   <View style={styles.emptyState}>
-                    <Ionicons name="bookmark-outline" size={36} color={colors.text.muted} />
-                    <Text style={styles.emptyTitle}>No saved meals yet</Text>
+                    <MamaCharacter pose="hungry" size={96} isSpeaking={false} />
+                    <Text style={styles.emptyTitle}>Plate&apos;s empty...</Text>
                     <Text style={styles.emptySubtitle}>
-                      Roll or discover meals you love to keep them in your kitchen pass.
+                      Save meals you love so Mama remembers them.
                     </Text>
                     <TouchableOpacity
                       style={styles.rollButton}

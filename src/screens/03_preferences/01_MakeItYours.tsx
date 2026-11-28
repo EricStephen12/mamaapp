@@ -28,33 +28,33 @@ import { pantryService } from '../../services/api/pantryService';
 import { getCurrentTimeOfDay, rollService } from '../../services/api/rollService';
 import { useUserDataBank } from '../../context/UserDataBankContext';
 import { KitchenAtmosphere } from '../../components/signature/KitchenAtmosphere';
-import { RegionalMamaAvatar } from '../../components/signature/RegionalMamaAvatar';
-import { MamaSealStamp } from '../../components/signature/MamaSealStamp';
+import { MamaCharacter } from '../../components/common/MamaCharacter';
+import { MamaPaywallModal } from '../../components/common/MamaPaywallModal';
 import { SteamWisps } from '../../components/signature/SteamWisps';
 import { playRevealThudHaptics } from '../../utils/mamaHaptics';
 
 function getWelcomeHomeLine(countryId: string, budgetLabel: string): string {
   switch (countryId) {
     case 'NG':
-      return `The kitchen is warm and your ${budgetLabel} week is set. Take off your shoes—let's see what's on the stove.`;
+      return `Your ${budgetLabel} week is set. Let's pick tonight's meal.`;
     case 'GH':
-      return `Akwaaba home! Your ${budgetLabel} week is ready and the pot is warming up for you.`;
+      return `Akwaaba! Your ${budgetLabel} week is ready.`;
     case 'KE':
-      return `Karibu home! Your ${budgetLabel} week is set—come sit while Mama warms the pan.`;
+      return `Karibu! Your ${budgetLabel} week is set.`;
     case 'ZA':
-      return `Welcome home! Your ${budgetLabel} week is ready for real comfort with zero waste.`;
+      return `Your ${budgetLabel} week is ready — good food, zero waste.`;
     case 'GB':
-      return `Put the kettle on, my dear. Your ${budgetLabel} week is set and the pan is warm—come in.`;
+      return `Kettle on. Your ${budgetLabel} week is all set.`;
     case 'US':
-      return `DoorDash can wait tonight. Your ${budgetLabel} week is ready—let's cook something real in minutes.`;
+      return `Skip delivery tonight — your ${budgetLabel} week is set.`;
     case 'CA':
-      return `Come in from the cold. Your ${budgetLabel} week is set and something cozy is waiting.`;
+      return `Your ${budgetLabel} week is set. Something warm awaits.`;
     case 'EU':
-      return `Breathe easy, my dear. Your ${budgetLabel} week is ready—simple ingredients, warm table.`;
+      return `Simple ingredients, warm table. Your ${budgetLabel} week is set.`;
     case 'AU':
-      return `Welcome home! Your ${budgetLabel} week is set for fresh, effortless meals all week long.`;
+      return `Fresh, easy meals ahead — your ${budgetLabel} week is set.`;
     default:
-      return `Your kitchen is warm and your ${budgetLabel} week is set. Come see what we're cooking.`;
+      return `Your ${budgetLabel} week is set. Let's eat.`;
   }
 }
 
@@ -89,6 +89,7 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
   const { user } = useUserDataBank();
   const [step, setStep] = useState<number>(1);
   const [showWelcomeHandoff, setShowWelcomeHandoff] = useState<boolean>(false);
+  const [showWelcomePaywall, setShowWelcomePaywall] = useState<boolean>(false);
   const [welcomeBudgetLabel, setWelcomeBudgetLabel] = useState<string>('');
   const hasNavigatedRef = useRef<boolean>(false);
   const welcomeOpacity = useRef(new Animated.Value(0)).current;
@@ -221,8 +222,17 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
   const enterKitchen = useCallback(() => {
     if (hasNavigatedRef.current) return;
     hasNavigatedRef.current = true;
+    setShowWelcomePaywall(false);
     navigation.replace('YourDailyEdit');
   }, [navigation]);
+
+  const proceedFromWelcome = useCallback(() => {
+    if (preferencesStore.isMamaPlus()) {
+      enterKitchen();
+      return;
+    }
+    setShowWelcomePaywall(true);
+  }, [enterKitchen]);
 
   useEffect(() => {
     if (!showWelcomeHandoff) return;
@@ -241,10 +251,10 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
     ]).start();
 
     const autoTimer = setTimeout(() => {
-      enterKitchen();
-    }, 3400);
+      proceedFromWelcome();
+    }, 1800);
     return () => clearTimeout(autoTimer);
-  }, [showWelcomeHandoff, welcomeOpacity, welcomeScale, enterKitchen]);
+  }, [showWelcomeHandoff, welcomeOpacity, welcomeScale, proceedFromWelcome]);
 
   const handleComplete = () => {
     Keyboard.dismiss();
@@ -389,14 +399,7 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
           <View style={styles.stepContainer}>
             <View style={styles.titleSection}>
               <View style={styles.onboardingMamaStage}>
-                <RegionalMamaAvatar countryCode={selectedCountryId} size={76} />
-                <MamaSealStamp
-                  size={40}
-                  variant="linen"
-                  label="MAMA"
-                  sublabel={selectedCountry.regionCode}
-                  style={styles.onboardingSeal}
-                />
+                <MamaCharacter pose="welcoming" size={82} isSpeaking={false} reactionKey={selectedCountryId} />
               </View>
               <Text style={styles.serifTitle}>Where are you?</Text>
               <Text style={styles.countryGreeting} numberOfLines={2}>
@@ -714,8 +717,7 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
         >
           <View style={styles.welcomeAvatarStage}>
             <SteamWisps triggerKey={selectedCountry.id} style={styles.welcomeSteam} />
-            <RegionalMamaAvatar countryCode={selectedCountry.id} size={114} />
-            <MamaSealStamp size={46} variant="linen" style={styles.welcomeSeal} />
+            <MamaCharacter pose="delighted" size={118} isSpeaking={true} />
           </View>
 
           <Text style={styles.welcomeTitle}>
@@ -735,7 +737,7 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
             style={styles.welcomeCta}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              enterKitchen();
+              proceedFromWelcome();
             }}
             activeOpacity={0.88}
           >
@@ -745,6 +747,18 @@ export const MakeItYours: React.FC<Props> = ({ navigation }) => {
         </Animated.View>
       </Animated.View>
     ) : null}
+
+    {/* Soft FOMO Welcome Offer (always includes 1-tap "Continue free") */}
+    <MamaPaywallModal
+      visible={showWelcomePaywall}
+      context="onboarding"
+      countryName={selectedCountry.name}
+      budgetLabel={
+        welcomeBudgetLabel || `${selectedCountry.currencySymbol}${selectedCountry.defaultWeeklyBudget}`
+      }
+      onClose={enterKitchen}
+      onSubscribed={enterKitchen}
+    />
   </SafeAreaView>
   );
 };
